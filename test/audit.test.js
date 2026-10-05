@@ -1,4 +1,5 @@
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
@@ -56,6 +57,274 @@ function fixture() {
     ]);
   return { dir, db, file, task };
 }
+
+const manualPrice = {
+  provider: "synthetic",
+  model: "fixture",
+  category: "input",
+  currency: "USD",
+  effectiveFrom: "2026-01-01T00:00:00.000Z",
+  ratePerMillion: "1",
+};
+const manualQuery = {
+  provider: "synthetic",
+  model: "fixture",
+  currency: "USD",
+};
+
+test("manual catalogue persists versions, literal identities and append-only rates", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  assert.deepEqual(ledger.manualPrices(manualQuery), []);
+  const canonical = { ...manualPrice, ratePerMillion: "1.000000" };
+  assert.deepEqual(ledger.addManualPrice(manualPrice), canonical);
+  const other = openLedger(f.db);
+  for (const ratePerMillion of ["1.0", "1.000000"]) {
+    assert.deepEqual(
+      other.addManualPrice({ ...manualPrice, ratePerMillion }),
+      canonical,
+    );
+  }
+  assert.throws(
+    () => other.addManualPrice({ ...manualPrice, ratePerMillion: "2" }),
+    { message: "Manual price conflict" },
+  );
+  other.close();
+  for (const extra of [
+    { category: "output" },
+    { category: "cacheWrite" },
+    { category: "cacheRead" },
+    { effectiveFrom: "0001-01-01T00:00:00.000Z", ratePerMillion: "0" },
+    {
+      effectiveFrom: "9999-12-31T23:59:59.999Z",
+      ratePerMillion: "999999999999.999999",
+    },
+    { currency: "EUR" },
+    { currency: "ZZZ" },
+    { provider: "Synthetic" },
+    { model: "Fixture" },
+    { provider: "other" },
+    { model: "other" },
+    { provider: "p".repeat(512), model: "m".repeat(512) },
+    { effectiveFrom: "2024-02-29T00:00:00.000Z" },
+  ])
+    ledger.addManualPrice({ ...manualPrice, ...extra });
+  ledger.close();
+  ledger = openLedger(f.db);
+  const versions = ledger.manualPrices(manualQuery);
+  assert.deepEqual(
+    versions.map((row) => [row.category, row.effectiveFrom]),
+    [
+      ["cacheRead", manualPrice.effectiveFrom],
+      ["cacheWrite", manualPrice.effectiveFrom],
+      ["input", "0001-01-01T00:00:00.000Z"],
+      ["input", "2024-02-29T00:00:00.000Z"],
+      ["input", manualPrice.effectiveFrom],
+      ["input", "9999-12-31T23:59:59.999Z"],
+      ["output", manualPrice.effectiveFrom],
+    ],
+  );
+  assert.equal(versions[2].ratePerMillion, "0.000000");
+  assert.equal(versions[4].ratePerMillion, "1.000000");
+  for (const extra of [
+    { currency: "EUR" },
+    { currency: "ZZZ" },
+    { provider: "Synthetic" },
+    { model: "Fixture" },
+    { provider: "other" },
+    { model: "other" },
+  ]) {
+    assert.equal(ledger.manualPrices({ ...manualQuery, ...extra }).length, 1);
+  }
+  assert.deepEqual(
+    ledger.manualPrices({ ...manualQuery, currency: "GBP" }),
+    [],
+  );
+  ledger.close();
+});
+
+test("manual validation rejects malformed fields without changing storage", () => {
+  const ledger = openLedger(fixture().db);
+  ledger.addManualPrice(manualPrice);
+  const before = ledger.manualPrices(manualQuery);
+  const invalid = [
+    null,
+    [],
+    "price",
+    1,
+    {},
+    { ...manualPrice, extra: true },
+    { ...manualPrice, ratePerMillionExtra: "1" },
+    { ...manualPrice, extraRatePerMillion: "1" },
+    { ...manualPrice, [Symbol("extra")]: true },
+  ];
+  for (const key of Object.keys(manualPrice)) {
+    const missing = { ...manualPrice };
+    delete missing[key];
+    invalid.push(missing, { ...manualPrice, [key]: null });
+  }
+  const values = {
+    provider: [
+      0,
+      "",
+      " p",
+      "p ",
+      "p".repeat(513),
+      "\u0000p",
+      "p\u007f",
+      "p\u0085",
+      "p\u202e",
+    ],
+    model: [
+      "",
+      " m",
+      "m ",
+      "m".repeat(513),
+      "m\n",
+      "\tm",
+      "m\u009f",
+      "\u200bm",
+    ],
+    category: ["totalTokens", "reasoning", "cacheWrite1h", "Input", "input "],
+    currency: ["usd", "US", "USDD", " USD", "USD\n", "€UR", 123],
+    effectiveFrom: [
+      "now",
+      "2026-01-01",
+      "2026-01-01T00:00:00Z",
+      "2026-01-01T00:00:00.000+00:00",
+      "2025-02-29T00:00:00.000Z",
+      "2026-04-31T00:00:00.000Z",
+      "0000-01-01T00:00:00.000Z",
+      "10000-01-01T00:00:00.000Z",
+      "2026-01-01T24:00:00.000Z",
+      "2026-01-01T00:00:60.000Z",
+      "2026-01-01T00:00:00.000Z\n",
+    ],
+    ratePerMillion: [
+      1,
+      0,
+      -1,
+      NaN,
+      Infinity,
+      "-1",
+      "+1",
+      "01",
+      ".1",
+      "1.",
+      "1e2",
+      "1,2",
+      " 1",
+      "1 ",
+      "1\n",
+      "1.0000000",
+      "1000000000000",
+      "",
+    ],
+  };
+  for (const [key, candidates] of Object.entries(values)) {
+    for (const value of candidates)
+      invalid.push({ ...manualPrice, [key]: value });
+  }
+  for (const value of invalid) {
+    assert.throws(() => ledger.addManualPrice(value), {
+      message: "Invalid manual price",
+    });
+    assert.deepEqual(ledger.manualPrices(manualQuery), before);
+  }
+  const queries = [null, [], {}, { ...manualQuery, category: "input" }];
+  for (const key of Object.keys(manualQuery)) {
+    const missing = { ...manualQuery };
+    delete missing[key];
+    queries.push(missing);
+    for (const value of values[key])
+      queries.push({ ...manualQuery, [key]: value });
+  }
+  for (const query of queries) {
+    assert.throws(() => ledger.manualPrices(query), {
+      message: "Invalid manual price",
+    });
+  }
+  assert.deepEqual(ledger.manualPrices(manualQuery), before);
+  const columns = ledger.db.prepare("PRAGMA table_info(manual_prices)").all();
+  assert.equal(columns.length, 6);
+  assert.ok(
+    columns.every((column) => column.notnull === 1 && column.type === "TEXT"),
+  );
+  assert.deepEqual(
+    columns.filter((column) => column.pk).map((column) => column.name),
+    ["provider", "model", "category", "currency", "effectiveFrom"],
+  );
+  ledger.close();
+});
+
+test("manual additive initialization preserves pre-catalogue schema and accounting", () => {
+  const f = fixture();
+  // Exact pre-catalogue DDL; only synthetic entries/import reports are seeded.
+  const old = new DatabaseSync(f.db);
+  old.exec(`
+    CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE sources (path TEXT PRIMARY KEY, session TEXT NOT NULL, parent TEXT);
+    CREATE TABLE entries (session TEXT, entry TEXT, data TEXT NOT NULL,
+      evidence TEXT NOT NULL, conflict INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session,entry));
+    CREATE TABLE tasks (id TEXT PRIMARY KEY, path TEXT NOT NULL,
+      agent TEXT, project TEXT, feature TEXT, parent TEXT);
+    CREATE TABLE imports (id INTEGER PRIMARY KEY, report TEXT NOT NULL);
+    INSERT INTO imports VALUES (1, '{"syntheticLegacy":true}');
+  `);
+  old
+    .prepare("INSERT INTO entries VALUES (?,?,?,?,?)")
+    .run(
+      "legacy",
+      "one",
+      JSON.stringify({
+        ...usage,
+        operation: "assistant",
+        certainty: "own",
+        provider: "synthetic",
+        model: "fixture",
+        runtimeEstimate: null,
+        estimateProvenance: "runtime-estimate",
+      }),
+      "synthetic",
+      0,
+    );
+  const oldEntries = old.prepare("SELECT * FROM entries").all();
+  const oldImports = old.prepare("SELECT * FROM imports").all();
+  old.close();
+  const ledger = openLedger(f.db);
+  assert.deepEqual(
+    ledger.db.prepare("SELECT * FROM entries").all(),
+    oldEntries,
+  );
+  assert.deepEqual(
+    ledger.db.prepare("SELECT * FROM imports").all(),
+    oldImports,
+  );
+  ledger.importFiles({
+    sessions: [
+      f.file("priced.jsonl", [
+        header("priced"),
+        message("missing"),
+        message("runtime", { usage: { ...usage, cost: { total: 0.25 } } }),
+      ]),
+    ],
+  });
+  const snapshot = () => [
+    ledger.entries(),
+    ledger.ranking(),
+    ledger.accounting(),
+    ledger.coverage(),
+  ];
+  const before = snapshot();
+  ledger.addManualPrice(manualPrice);
+  ledger.addManualPrice({
+    ...manualPrice,
+    effectiveFrom: "0001-01-01T00:00:00.000Z",
+  });
+  assert.deepEqual(snapshot(), before);
+  assert.equal(ledger.ranking()[0].runtimeEstimate, 0.25);
+  ledger.close();
+});
 
 test("durable joins: interleaved projects, parents, runs and continuation", () => {
   const f = fixture();

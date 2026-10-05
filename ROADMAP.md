@@ -6,11 +6,12 @@
 
 - **Terminado:** primera base de recolector por API y SQLite, integrada en `main` mediante PR #1. Evidencia del bloque: 12 pruebas sintéticas aprobadas, verificación independiente y revisión RDD cerrada.
 - **Entregado (1A + 1B):** PR #2 integrado en `main`, comprobado en el historial tras actualizar la base: `9f4745c`, commit del bloque `a100962`. Se conserva la evidencia previa; no se reabre esa revisión.
-- **Bloque actual (2, unidad acotada):** extensión de API `accounting().breakdown` por operación × certeza × evidencia de atribución, con observaciones **no aditivas**. Implementación y verificación funcional independiente completas; entrega pendiente.
+- **Entregado (2, unidad acotada):** `accounting().breakdown`, integrado mediante PR #3: merge `76f8931`, commit `7d5fff5`. Revisión RDD `review-8bb3c81ff0de5489`, target `f817b475`, aprobada; ack consumido antes del commit, sin correcciones.
+- **Bloque actual (3, catálogo solamente):** API opt-in de tarifas manuales versionadas; implementación y verificación funcional independiente completas. Revisión nativa y entrega pendientes; sin aplicación de estimaciones.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
-- **Siguiente:** autorización de commit/PR, revisión humana e integración antes de otra unidad funcional. No ampliar automáticamente fuentes ni prometer roles o deduplicación completa.
-- **No iniciado:** dashboard, precios manuales y captura en vivo. No se han recolectado sesiones reales.
+- **Siguiente:** revisión nativa del catálogo y autorización de entrega antes de otra unidad funcional. No ampliar fuentes ni prometer roles o deduplicación completa.
+- **No iniciado:** aplicación de precios/estimaciones manuales, dashboard y captura en vivo. No se han recolectado sesiones reales.
 
 ## Lista completa del MVP
 
@@ -19,12 +20,28 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Pendiente | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 3. Precios manuales | Catálogo verificado; revisión/entrega pendientes, aplicación no iniciada | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 2 — evidencia de metadatos, no roles
+## Bloque actual: 3 — catálogo manual, no estimaciones
+
+- [x] Añadir `addManualPrice` y `manualPrices`, con claves explícitas y errores genéricos.
+- [x] Validar identidades literales, categorías cobrables, moneda explícita, fechas UTC reales y decimales de texto; cero no equivale a ausencia.
+- [x] Conservar versiones por categoría/fecha/moneda; duplicados canónicos idempotentes y conflictos inmutables, también entre dos handles.
+- [x] Probar persistencia, límites y rechazos sin cambios de almacenamiento; esquema anterior sintético conserva entradas/imports.
+- [x] Probar precios retrospectivos sin alterar entradas, ranking, accounting, coverage ni runtime-estimate.
+- [x] Verificación funcional independiente: 25/25 pruebas y 3/3 enfocadas, dos comprobaciones de sintaxis y LSP sin errores; probe API con 138 entradas inválidas rechazadas sin cambios del catálogo.
+- [ ] Revisión nativa y entrega autorizada.
+
+**Presupuesto:** excepción explícita del usuario de hasta 450 líneas para esta unidad; el autoformato amplió el diff inicial a 411, antes del cierre documental. No se recortaron pruebas ni se comprimió código.
+
+**Evidencia propia:** `node --test --test-name-pattern=manual test/audit.test.js`: RED 0/3, tres fallos por APIs ausentes; GREEN 3/3 tras implementación. Prueba funcional directa de API, sin CLI ni datos reales. Escritor: `npm test` 25/25; `node --check src/ledger.js` y `node --check test/audit.test.js` aprobados. El verificador independiente observó GREEN tras el autoformato, con hashes estables; no presenció el RED histórico. La verificación funcional no constituye aprobación de revisión nativa.
+
+**Alcance:** tabla aditiva en la transacción de inicialización, sin migración de versión ni conexiones nuevas. Vigencia inclusiva/límite por versión posterior sólo define aplicación futura: sin selección automática, estimaciones manuales, conversión o reescritura. API append-only no protege frente al SQL arbitrario de `ledger.db`. Rollback limitado a cuatro archivos, sin borrar bases.
+
+## Bloque 2 entregado — evidencia de metadatos, no roles
 
 - [x] Añadir desglose de todas las certezas persistidas, sin cambiar ranking, atribución ni campos contables anteriores.
 - [x] Separar `no-task`, `missing-agent`, `conflicting-agents` y `task-consensus`; conflicto precede a ausencia parcial.
@@ -32,8 +49,10 @@
 - [x] Probar operaciones auxiliares, continuaciones sin fanout, importación tardía, reinicio/idempotencia y clones explícitos de tres niveles.
 - [x] Probar snapshot contable durante commit independiente y recuperación tras excepción; salida CLI sin contenido sensible sintético.
 - [x] Verificación funcional independiente: 22/22 pruebas, 23 invocaciones CLI sintéticas, tres comprobaciones de sintaxis y hashes estables. LSP: tres archivos sin errores.
-- [x] Evaluación nativa: riesgo medio, perfil de escritor grande, revisión no exigida por estar bajo presupuesto. No se afirma aprobación ni recibo de revisión; evaluación no autoriza publicación.
-- [ ] Entrega autorizada; no hay commit/PR de esta unidad.
+- [x] Revisión RDD aprobada: `review-8bb3c81ff0de5489`, target `f817b475`; ack consumido antes del commit, sin correcciones.
+- [x] Entregado mediante PR #3: commit `7d5fff5`, merge `76f8931`.
+
+La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la cobertura general sigue parcial, sin roles confiables.
 
 **Alcance:** sólo metadatos ya importados. No prueba roles ni origen hijo; tareas eliminadas no se reconstruyen. Cada lectura API es coherente, no todos los campos CLI juntos. Sin costos nuevos, fuentes nuevas, captura, precios, UI o migraciones.
 
