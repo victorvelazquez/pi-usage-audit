@@ -63,7 +63,23 @@ All listed keys are required and unknown keys are rejected; there are no default
 - Rates are decimal **strings**, matching `^(0|[1-9]\d{0,11})(\.\d{1,6})?$`, from zero through `999999999999.999999`. Stored/returned as six-fraction-digit TEXT using string padding, never floating-point costs. Explicit zero is a known rate, unlike absence.
 - The provider/model/category/currency/date key is unique and nonnull. Same canonical rate is idempotent (`1`, `1.0`, `1.000000`); a conflicting rate throws a generic error and preserves the original. New dates/currencies are separate versions; retrospective dates are allowed.
 
-Future application would treat `effectiveFrom` as inclusive, with a later date bounding the previous version in the same series. **This unit only stores a catalogue:** no automatic selection, manual estimates, entry rewriting, cost calculations, success/quality inference or CLI changes. Entries, runtime estimates, ranking, accounting and coverage remain unchanged. Version/applied-rate provenance for future estimates is deferred.
+### Read-only manual quote
+
+```js
+const quote = ledger.quoteManual({
+  provider: 'synthetic', model: 'fixture', currency: 'USD',
+  at: '2026-01-01T00:00:00.000Z',
+  usage: { input: 1, output: 0, cacheRead: null, cacheWrite: 0 },
+});
+```
+
+All five top-level keys are required; no extras or defaults. Identity/currency rules match the catalogue; `at` uses the same canonical real UTC format. `usage` is an object with only the four core category keys, each a nonnegative safe integer or null. Omitted/null counters are unknown, never zero; aggregates, subsets, symbol keys and other types are rejected.
+
+The result copies `provider`, `model`, `currency`, `at`, with `provenance: 'manual-quote'`. `categories` has exactly four results, each `{ tokens, price, amount }`: `price` is the full selected canonical catalogue record or null. For an input rate of `0.000001`, the example's input result has `tokens: 1` and `amount: '0.000000000001'`. Amounts and `total` are exact fixed-12 decimal strings, calculated with BigInt, not floating-point money.
+
+Each category independently selects the latest `effectiveFrom <= at` in one bound SELECT. `coverage` contains `complete`, `missingCounters` and `missingPrices` (category-name arrays). An amount is null if either counter or price is unknown, even if the other is zero. `total` is null unless all four categories are covered; fully priced explicit zero counters produce `'0.000000000000'`. No partial subtotal or currency conversion is implied.
+
+**`at` is the tariff-effective instant, not historical catalogue knowledge.** Retrospective additions can change a fresh quote for the same `at`. Previously returned copied rates/keys/amounts remain self-describing and unchanged, but are not durable historical pricing. Quotes perform no writes, are not stored, and do not claim invoice truth or token ownership. Entries, runtime estimates, ranking, accounting and ledger coverage remain unchanged; no CLI integration. Future persisted price application must create a new immutable estimate with applied-rate provenance, never overwrite history.
 
 Append-only applies to these public catalogue methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds a table transactionally to existing SQLite databases without changing schema versions or deleting data.
 
@@ -73,9 +89,9 @@ Only whitelisted accounting/attribution metadata, opaque path keys and keyed cop
 
 SQLite uses WAL, a 5-second busy timeout, initialization retries, transactions and unique insert keys. Public `entries()`, `ranking()` and `accounting()` each use a deferred read transaction; the import's internal snapshot stays inside its write transaction. Separate API calls/output fields are not one combined snapshot. Tests use synthetic fixtures only and independent concurrent processes with overlapping/disjoint inputs. Tests leave synthetic artifacts under ignored `test/.runtime-*/` directories; these can be removed after verification.
 
-Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, manual price application/estimation, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
+Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, persisted manual price application/estimation, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
 
-Block 3 catalogue rollback: only `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md` form this unit. No database deletion is required; existing catalogue data can remain unused. Only synthetic ignored fixtures were used. Independent functional verification passed; native review and authorized delivery remain pending.
+Block 3 catalogue delivered in PR #4 (merge `a55c043`). The current quote unit rolls back only its changes in `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md`; no database deletion. Only synthetic ignored fixtures were used. Independent functional verification passed; native review and authorized delivery remain pending.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 

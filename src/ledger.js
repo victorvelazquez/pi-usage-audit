@@ -124,9 +124,18 @@ const manualKeys = [
   "effectiveFrom",
   "ratePerMillion",
 ];
-function validateManual(value, keys) {
+const priceCategories = ["input", "output", "cacheRead", "cacheWrite"];
+const canonicalUtc = (date) =>
+  typeof date === "string" &&
+  /^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(date) &&
+  date.length === 24 &&
+  Number.isFinite(new Date(date).getTime()) &&
+  new Date(date).toISOString() === date;
+const fixedAmount = (scaled) =>
+  `${scaled / 1000000000000n}.${(scaled % 1000000000000n).toString().padStart(12, "0")}`;
+function validateManual(value, keys, error = "Invalid manual price") {
   const invalid = () => {
-    throw new Error("Invalid manual price");
+    throw new Error(error);
   };
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
   const own = Reflect.ownKeys(value);
@@ -143,19 +152,19 @@ function validateManual(value, keys) {
     !/^[A-Z]{3}$/.test(value.currency)
   )
     invalid();
+  if (keys.includes("at")) {
+    if (!canonicalUtc(value.at)) invalid();
+    const usage = value.usage;
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) invalid();
+    for (const key of Reflect.ownKeys(usage)) {
+      if (!priceCategories.includes(key)) invalid();
+      if (usage[key] !== null && counter(usage[key]) === null) invalid();
+    }
+    return { ...value };
+  }
   if (!keys.includes("category")) return { ...value };
-  if (!["input", "output", "cacheRead", "cacheWrite"].includes(value.category))
-    invalid();
-  const date = value.effectiveFrom;
-  if (
-    typeof date !== "string" ||
-    date.length !== 24 ||
-    !/^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(date)
-  )
-    invalid();
-  const parsed = new Date(date);
-  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== date)
-    invalid();
+  if (!priceCategories.includes(value.category)) invalid();
+  if (!canonicalUtc(value.effectiveFrom)) invalid();
   const rate = value.ratePerMillion;
   if (
     typeof rate !== "string" ||
@@ -329,6 +338,58 @@ export function openLedger(path = defaultDatabasePath()) {
       } catch {
         throw new Error("Manual price operation failed");
       }
+    },
+    quoteManual: (value) => {
+      const query = validateManual(
+        value,
+        ["provider", "model", "currency", "at", "usage"],
+        "Invalid manual quote",
+      );
+      let prices;
+      try {
+        prices = db
+          .prepare(`SELECT * FROM manual_prices
+          WHERE provider=? AND model=? AND currency=? AND effectiveFrom<=?
+          ORDER BY category,effectiveFrom`)
+          .all(query.provider, query.model, query.currency, query.at);
+      } catch {
+        throw new Error("Manual quote operation failed");
+      }
+      const selected = new Map(prices.map((row) => [row.category, { ...row }]));
+      const categories = {};
+      const missingCounters = [];
+      const missingPrices = [];
+      let total = 0n;
+      for (const category of priceCategories) {
+        const tokens = Object.hasOwn(query.usage, category)
+          ? query.usage[category]
+          : null;
+        const price = selected.get(category) ?? null;
+        if (tokens === null) missingCounters.push(category);
+        if (price === null) missingPrices.push(category);
+        const scaled =
+          tokens !== null && price !== null
+            ? BigInt(price.ratePerMillion.replace(".", "")) * BigInt(tokens)
+            : null;
+        categories[category] = {
+          tokens,
+          price,
+          amount: scaled === null ? null : fixedAmount(scaled),
+        };
+        if (scaled !== null) total += scaled;
+      }
+      const complete =
+        missingCounters.length === 0 && missingPrices.length === 0;
+      return {
+        provider: query.provider,
+        model: query.model,
+        currency: query.currency,
+        at: query.at,
+        provenance: "manual-quote",
+        categories,
+        coverage: { complete, missingCounters, missingPrices },
+        total: complete ? fixedAmount(total) : null,
+      };
     },
     entries: () => readTransaction(snapshot),
     accounting: () =>

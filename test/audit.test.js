@@ -271,23 +271,21 @@ test("manual additive initialization preserves pre-catalogue schema and accounti
     CREATE TABLE imports (id INTEGER PRIMARY KEY, report TEXT NOT NULL);
     INSERT INTO imports VALUES (1, '{"syntheticLegacy":true}');
   `);
-  old
-    .prepare("INSERT INTO entries VALUES (?,?,?,?,?)")
-    .run(
-      "legacy",
-      "one",
-      JSON.stringify({
-        ...usage,
-        operation: "assistant",
-        certainty: "own",
-        provider: "synthetic",
-        model: "fixture",
-        runtimeEstimate: null,
-        estimateProvenance: "runtime-estimate",
-      }),
-      "synthetic",
-      0,
-    );
+  old.prepare("INSERT INTO entries VALUES (?,?,?,?,?)").run(
+    "legacy",
+    "one",
+    JSON.stringify({
+      ...usage,
+      operation: "assistant",
+      certainty: "own",
+      provider: "synthetic",
+      model: "fixture",
+      runtimeEstimate: null,
+      estimateProvenance: "runtime-estimate",
+    }),
+    "synthetic",
+    0,
+  );
   const oldEntries = old.prepare("SELECT * FROM entries").all();
   const oldImports = old.prepare("SELECT * FROM imports").all();
   old.close();
@@ -321,8 +319,230 @@ test("manual additive initialization preserves pre-catalogue schema and accounti
     ...manualPrice,
     effectiveFrom: "0001-01-01T00:00:00.000Z",
   });
+  ledger.quoteManual({
+    ...manualQuery,
+    at: manualPrice.effectiveFrom,
+    usage: {},
+  });
   assert.deepEqual(snapshot(), before);
   assert.equal(ledger.ranking()[0].runtimeEstimate, 0.25);
+  ledger.close();
+});
+
+const quoteRequest = {
+  ...manualQuery,
+  at: manualPrice.effectiveFrom,
+  usage: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 },
+};
+const quoteCategories = Object.keys(quoteRequest.usage);
+
+test("manual quote selects independent inclusive versions in one read without writes", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  for (const category of quoteCategories) {
+    ledger.addManualPrice({ ...manualPrice, category });
+  }
+  const later = {
+    ...manualPrice,
+    effectiveFrom: "2026-02-01T00:00:00.000Z",
+    ratePerMillion: "2",
+  };
+  ledger.addManualPrice(later);
+  ledger.addManualPrice({
+    ...later,
+    effectiveFrom: "2026-03-01T00:00:00.000Z",
+    ratePerMillion: "9",
+  });
+  const request = { ...quoteRequest, at: later.effectiveFrom };
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const changes = () => prepare("SELECT total_changes() AS n").get().n;
+  const before = changes();
+  const statements = [];
+  ledger.db.prepare = (sql) => {
+    statements.push(sql);
+    return prepare(sql);
+  };
+  const quote = ledger.quoteManual(request);
+  assert.equal(statements.length, 1);
+  assert.match(statements[0], /^SELECT/);
+  assert.equal(changes(), before);
+  ledger.db.prepare = prepare;
+  assert.deepEqual(Object.keys(quote), [
+    "provider",
+    "model",
+    "currency",
+    "at",
+    "provenance",
+    "categories",
+    "coverage",
+    "total",
+  ]);
+  assert.equal(quote.provenance, "manual-quote");
+  assert.deepEqual(Object.keys(quote.categories), quoteCategories);
+  assert.deepEqual(quote.categories.input, {
+    tokens: 1,
+    price: { ...later, ratePerMillion: "2.000000" },
+    amount: "0.000002000000",
+  });
+  assert.equal(
+    quote.categories.output.price.effectiveFrom,
+    manualPrice.effectiveFrom,
+  );
+  assert.equal(quote.total, "0.000005000000");
+  for (const key of ["provider", "model", "currency"]) {
+    const missing = ledger.quoteManual({
+      ...request,
+      [key]: key === "currency" ? "EUR" : "other",
+    });
+    assert.deepEqual(missing.coverage.missingPrices, quoteCategories);
+    assert.equal(missing.total, null);
+  }
+  const early = { ...request, at: "0001-01-01T00:00:00.000Z" };
+  assert.equal(ledger.quoteManual(early).categories.input.price, null);
+  ledger.addManualPrice({
+    ...manualPrice,
+    effectiveFrom: "2026-01-15T00:00:00.000Z",
+    category: "output",
+    ratePerMillion: "3",
+  });
+  assert.equal(ledger.quoteManual(request).total, "0.000007000000");
+  assert.equal(quote.categories.output.price.ratePerMillion, "1.000000");
+  assert.equal(quote.total, "0.000005000000");
+  quote.categories.input.price.ratePerMillion = "999.000000";
+  assert.equal(
+    ledger.quoteManual(request).categories.input.price.ratePerMillion,
+    "2.000000",
+  );
+  const fresh = ledger.quoteManual(request);
+  ledger.close();
+  ledger = openLedger(f.db);
+  assert.deepEqual(ledger.quoteManual(request), fresh);
+  ledger.close();
+});
+
+test("manual quote exact arithmetic and unknown versus explicit zero coverage", () => {
+  const ledger = openLedger(fixture().db);
+  ledger.addManualPrice({ ...manualPrice, ratePerMillion: "0.000001" });
+  const partial = ledger.quoteManual({
+    ...quoteRequest,
+    usage: { input: 1, output: 0, cacheRead: null },
+  });
+  assert.equal(partial.categories.input.amount, "0.000000000001");
+  assert.deepEqual(partial.categories.output, {
+    tokens: 0,
+    price: null,
+    amount: null,
+  });
+  assert.equal(partial.categories.cacheRead.tokens, null);
+  assert.equal(partial.categories.cacheWrite.tokens, null);
+  assert.deepEqual(partial.coverage, {
+    complete: false,
+    missingCounters: ["cacheRead", "cacheWrite"],
+    missingPrices: ["output", "cacheRead", "cacheWrite"],
+  });
+  assert.equal(partial.total, null);
+  for (const category of quoteCategories) {
+    ledger.addManualPrice({
+      ...manualPrice,
+      category,
+      effectiveFrom: "2026-02-01T00:00:00.000Z",
+      ratePerMillion: "999999999999.999999",
+    });
+  }
+  const request = { ...quoteRequest, at: "9999-12-31T23:59:59.999Z" };
+  const counters = (tokens) =>
+    Object.fromEntries(quoteCategories.map((key) => [key, tokens]));
+  const maximum = ledger.quoteManual({
+    ...request,
+    usage: counters(Number.MAX_SAFE_INTEGER),
+  });
+  assert.equal(
+    maximum.categories.input.amount,
+    "9007199254740990990992.800745259009",
+  );
+  assert.equal(maximum.total, "36028797018963963963971.202981036036");
+  assert.deepEqual(maximum.coverage, {
+    complete: true,
+    missingCounters: [],
+    missingPrices: [],
+  });
+  const zero = ledger.quoteManual({ ...request, usage: counters(0) });
+  assert.equal(zero.total, "0.000000000000");
+  const unknown = ledger.quoteManual({ ...request, usage: {} });
+  assert.equal(unknown.categories.input.amount, null);
+  ledger.addManualPrice({
+    ...manualPrice,
+    category: "output",
+    ratePerMillion: "0",
+  });
+  const zeroPrice = ledger.quoteManual({ ...quoteRequest, usage: {} });
+  assert.equal(zeroPrice.categories.output.amount, null);
+  ledger.close();
+});
+
+test("manual quote rejects malformed inputs before SQL", () => {
+  const ledger = openLedger(fixture().db);
+  const invalid = [
+    null,
+    [],
+    {},
+    { ...quoteRequest, extra: true },
+    { ...quoteRequest, [Symbol()]: 1 },
+  ];
+  for (const key of Object.keys(quoteRequest)) {
+    const missing = { ...quoteRequest };
+    delete missing[key];
+    invalid.push(missing);
+  }
+  const values = {
+    provider: ["", " p", "p ", "p\u200b", "p\n", "p".repeat(513), 1],
+    model: ["", " m", "m\u009f", "m".repeat(513), null],
+    currency: ["usd", "US", "USDD", "USD\n", 123],
+    at: [
+      "now",
+      "0000-01-01T00:00:00.000Z",
+      "2025-02-29T00:00:00.000Z",
+      "2026-04-31T00:00:00.000Z",
+      "2026-01-01T24:00:00.000Z",
+      "2026-01-01T00:00:60.000Z",
+      "2026-01-01T00:00:00Z",
+      "2026-01-01T00:00:00.000+00:00",
+    ],
+    usage: [
+      null,
+      [],
+      1,
+      { totalTokens: 1 },
+      { reasoning: 1 },
+      { cacheWrite1h: 1 },
+      { [Symbol()]: 1 },
+    ],
+  };
+  for (const [key, candidates] of Object.entries(values)) {
+    for (const value of candidates)
+      invalid.push({ ...quoteRequest, [key]: value });
+  }
+  for (const key of quoteCategories) {
+    for (const value of [
+      "1",
+      1n,
+      -1,
+      0.5,
+      NaN,
+      Infinity,
+      Number.MAX_SAFE_INTEGER + 1,
+      undefined,
+    ]) {
+      invalid.push({ ...quoteRequest, usage: { [key]: value } });
+    }
+  }
+  const prepare = ledger.db.prepare;
+  ledger.db.prepare = () => assert.fail("Invalid quote reached SQL");
+  for (const value of invalid)
+    assert.throws(() => ledger.quoteManual(value), {
+      message: "Invalid manual quote",
+    });
+  ledger.db.prepare = prepare;
   ledger.close();
 });
 
