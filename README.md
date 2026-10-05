@@ -47,7 +47,25 @@ Pass a database filename to `openLedger(filename)` to override storage. Keep it 
 - `accounting().breakdown` adds rows grouped by `operation`, `certainty` and `attributionEvidence`, covering every persisted entry (including copied and quarantined entries). Each row has `entries`, `additive: false`, `observed` token categories and `missing` category counts. All-missing categories are null; partial observations sum only known counters. Legacy accounting fields and ranking are unchanged. The CLI exposes this under `coverage.accounting.breakdown`.
 - Attribution evidence describes joined **task metadata only**: `no-task` (no joins), `conflicting-agents` (multiple distinct nonnull agents, taking precedence over missing agents), `missing-agent` (at least one null agent without conflict), or `task-consensus` (all tasks agree on one nonnull agent). Continuations do not multiply entry counts. These are not proven roles, orchestrator/subagent identities, or trustworthy child-origin evidence. Deleted/unimported task metadata cannot be reconstructed. The existing literal `unknown` label/sentinel collision remains a legacy attribution limitation.
 - `importFiles()` returns coverage counters; `coverage()` retains historical import reports, including current-ledger certainty counts at import time. Malformed lines/tails are skipped and recoverable by reimport, with no raw-line logging. An empty/unsupported source is incomplete. These are observed totals, **not complete billing totals**.
-- Runtime cost totals retain `runtime-estimate` provenance, not invoice truth. Missing estimates are null and counted separately; a partial sum does not imply complete cost coverage. No manual price tables or currency conversion.
+- Runtime cost totals retain `runtime-estimate` provenance, not invoice truth. Missing estimates are null and counted separately; a partial sum does not imply complete cost coverage. Manual catalogue rates do not change these totals; no currency conversion.
+
+## Opt-in manual price catalogue (API only)
+
+`ledger.addManualPrice({ provider, model, category, currency, effectiveFrom, ratePerMillion })`
+returns the canonical record. `ledger.manualPrices({ provider, model, currency })`
+returns every version sorted by category, then date; absent prices return `[]`, not zero.
+All listed keys are required and unknown keys are rejected; there are no defaults.
+
+- Provider/model are literal, case-sensitive strings of 1–512 characters, without edge whitespace or control/format characters. No aliases or model-name normalization.
+- Categories are exactly `input`, `output`, `cacheRead`, `cacheWrite`. `totalTokens` is an aggregate; `reasoning` and `cacheWrite1h` are subsets, not additional charges.
+- Currency must be explicit, three uppercase ASCII letters. Any conforming code is accepted without a registry, default USD or conversion.
+- `effectiveFrom` is an explicit real UTC date in `YYYY-MM-DDTHH:mm:ss.sssZ`, years 0001–9999. Offsets, invalid leap dates and implicit “now” are rejected.
+- Rates are decimal **strings**, matching `^(0|[1-9]\d{0,11})(\.\d{1,6})?$`, from zero through `999999999999.999999`. Stored/returned as six-fraction-digit TEXT using string padding, never floating-point costs. Explicit zero is a known rate, unlike absence.
+- The provider/model/category/currency/date key is unique and nonnull. Same canonical rate is idempotent (`1`, `1.0`, `1.000000`); a conflicting rate throws a generic error and preserves the original. New dates/currencies are separate versions; retrospective dates are allowed.
+
+Future application would treat `effectiveFrom` as inclusive, with a later date bounding the previous version in the same series. **This unit only stores a catalogue:** no automatic selection, manual estimates, entry rewriting, cost calculations, success/quality inference or CLI changes. Entries, runtime estimates, ranking, accounting and coverage remain unchanged. Version/applied-rate provenance for future estimates is deferred.
+
+Append-only applies to these public catalogue methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds a table transactionally to existing SQLite databases without changing schema versions or deleting data.
 
 ## Privacy and boundaries
 
@@ -55,7 +73,9 @@ Only whitelisted accounting/attribution metadata, opaque path keys and keyed cop
 
 SQLite uses WAL, a 5-second busy timeout, initialization retries, transactions and unique insert keys. Public `entries()`, `ranking()` and `accounting()` each use a deferred read transaction; the import's internal snapshot stays inside its write transaction. Separate API calls/output fields are not one combined snapshot. Tests use synthetic fixtures only and independent concurrent processes with overlapping/disjoint inputs. Tests leave synthetic artifacts under ignored `test/.runtime-*/` directories; these can be removed after verification.
 
-Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, manual pricing, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
+Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, manual price application/estimation, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
+
+Block 3 catalogue rollback: only `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md` form this unit. No database deletion is required; existing catalogue data can remain unused. Only synthetic ignored fixtures were used. Independent functional verification passed; native review and authorized delivery remain pending.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 

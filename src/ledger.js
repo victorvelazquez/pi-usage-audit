@@ -116,6 +116,56 @@ function normalize(entry, secret) {
   return { data, evidence };
 }
 
+const manualKeys = [
+  "provider",
+  "model",
+  "category",
+  "currency",
+  "effectiveFrom",
+  "ratePerMillion",
+];
+function validateManual(value, keys) {
+  const invalid = () => {
+    throw new Error("Invalid manual price");
+  };
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
+  const own = Reflect.ownKeys(value);
+  if (own.length !== keys.length || !keys.every((key) => own.includes(key)))
+    invalid();
+  for (const key of ["provider", "model"]) {
+    const id = value[key];
+    if (!text(id) || id.trim() !== id || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(id))
+      invalid();
+  }
+  if (
+    typeof value.currency !== "string" ||
+    value.currency.length !== 3 ||
+    !/^[A-Z]{3}$/.test(value.currency)
+  )
+    invalid();
+  if (!keys.includes("category")) return { ...value };
+  if (!["input", "output", "cacheRead", "cacheWrite"].includes(value.category))
+    invalid();
+  const date = value.effectiveFrom;
+  if (
+    typeof date !== "string" ||
+    date.length !== 24 ||
+    !/^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(date)
+  )
+    invalid();
+  const parsed = new Date(date);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== date)
+    invalid();
+  const rate = value.ratePerMillion;
+  if (
+    typeof rate !== "string" ||
+    rate.match(/^(0|[1-9]\d{0,11})(\.\d{1,6})?$/)?.[0] !== rate
+  )
+    invalid();
+  const [whole, fraction = ""] = rate.split(".");
+  return { ...value, ratePerMillion: `${whole}.${fraction.padEnd(6, "0")}` };
+}
+
 export function openLedger(path = defaultDatabasePath()) {
   mkdirSync(dirname(resolve(path)), { recursive: true });
   const db = new DatabaseSync(path);
@@ -131,6 +181,10 @@ export function openLedger(path = defaultDatabasePath()) {
       CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, path TEXT NOT NULL,
         agent TEXT, project TEXT, feature TEXT, parent TEXT);
       CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY, report TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS manual_prices (
+        provider TEXT NOT NULL, model TEXT NOT NULL, category TEXT NOT NULL,
+        currency TEXT NOT NULL, effectiveFrom TEXT NOT NULL, ratePerMillion TEXT NOT NULL,
+        PRIMARY KEY(provider,model,category,currency,effectiveFrom));
       COMMIT;`),
     );
     db.prepare("INSERT OR IGNORE INTO config VALUES (?,?)").run(
@@ -242,6 +296,40 @@ export function openLedger(path = defaultDatabasePath()) {
     db,
     close: () => db.close(),
     attribution,
+    addManualPrice: (value) => {
+      const price = validateManual(value, manualKeys);
+      const key = manualKeys.slice(0, -1).map((field) => price[field]);
+      let stored;
+      try {
+        // Unique-key arbitration is atomic across handles; existing rates never update.
+        db.prepare(`INSERT INTO manual_prices VALUES (?,?,?,?,?,?)
+          ON CONFLICT(provider,model,category,currency,effectiveFrom) DO NOTHING`).run(
+          ...key,
+          price.ratePerMillion,
+        );
+        stored = db
+          .prepare(`SELECT * FROM manual_prices
+          WHERE provider=? AND model=? AND category=? AND currency=? AND effectiveFrom=?`)
+          .get(...key);
+      } catch {
+        throw new Error("Manual price operation failed");
+      }
+      if (stored.ratePerMillion !== price.ratePerMillion)
+        throw new Error("Manual price conflict");
+      return { ...stored };
+    },
+    manualPrices: (value) => {
+      const query = validateManual(value, ["provider", "model", "currency"]);
+      try {
+        return db
+          .prepare(`SELECT * FROM manual_prices
+          WHERE provider=? AND model=? AND currency=? ORDER BY category,effectiveFrom`)
+          .all(query.provider, query.model, query.currency)
+          .map((row) => ({ ...row }));
+      } catch {
+        throw new Error("Manual price operation failed");
+      }
+    },
     entries: () => readTransaction(snapshot),
     accounting: () =>
       readTransaction(() => {
