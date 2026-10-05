@@ -1,0 +1,7 @@
+{
+  "name": "pi-usage-audit",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.20.0" },
+  "scripts": { "test": "node --test test/audit.test.js" }
+}

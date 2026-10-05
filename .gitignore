@@ -147,3 +147,15 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Local audit data (never publish sessions, task records, or databases)
+HANDOFF.local.md
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.jsonl
+local-data/
+test/.runtime-*/
