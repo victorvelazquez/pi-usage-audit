@@ -258,7 +258,55 @@ export function openLedger(path = defaultDatabasePath()) {
           "reasoning",
           "cacheWrite1h",
         ];
+        const agents = new Map();
+        const tasks = db
+          .prepare(`SELECT s.session,t.agent FROM tasks t
+          JOIN sources s ON s.path=t.path`)
+          .all();
+        for (const task of tasks) {
+          if (!agents.has(task.session)) agents.set(task.session, new Set());
+          agents.get(task.session).add(task.agent);
+        }
+        const evidence = (session) => {
+          const values = agents.get(session);
+          if (!values) return "no-task";
+          const known = [...values].filter((value) => value !== null);
+          if (known.length > 1) return "conflicting-agents";
+          if (values.has(null)) return "missing-agent";
+          return "task-consensus";
+        };
+        const groups = new Map();
+        for (const row of rows) {
+          const attributionEvidence = evidence(row.session);
+          const key = JSON.stringify([
+            row.operation,
+            row.certainty,
+            attributionEvidence,
+          ]);
+          if (!groups.has(key)) {
+            groups.set(key, {
+              operation: row.operation,
+              certainty: row.certainty,
+              attributionEvidence,
+              entries: 0,
+              additive: false,
+              observed: Object.fromEntries(
+                categories.map((key) => [key, null]),
+              ),
+              missing: Object.fromEntries(categories.map((key) => [key, 0])),
+            });
+          }
+          const group = groups.get(key);
+          group.entries++;
+          for (const category of categories) {
+            if (row[category] === null) group.missing[category]++;
+            else
+              group.observed[category] =
+                (group.observed[category] ?? 0) + row[category];
+          }
+        }
         return {
+          breakdown: [...groups.values()],
           certainties: Object.fromEntries(
             [...new Set(rows.map((row) => row.certainty))].map((certainty) => [
               certainty,

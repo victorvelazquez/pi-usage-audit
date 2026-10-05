@@ -95,7 +95,10 @@ test("CLI explicit sources survive reimport, restart, tasks first and late attri
   const b = f.file("b.jsonl", [header("b"), message("1")]);
   const task = (id, path, agent) =>
     f.file(`${id}.json`, [
-      { task: { id, sessionPath: path, agent, prompt: "PRIVATE_SENTINEL" } },
+      {
+        task: { id, sessionPath: path, agent, prompt: "PRIVATE_SENTINEL" },
+        thread: "PRIVATE_SENTINEL",
+      },
     ]);
   const ta = task("ta", a, "red");
   const tb = task("tb", b, "blue");
@@ -108,6 +111,15 @@ test("CLI explicit sources survive reimport, restart, tasks first and late attri
   );
   assert.equal(first.report.inserted, 2);
   assert.equal(first.report.malformed, 1);
+  assert.deepEqual(
+    first.coverage.accounting.breakdown
+      .map((r) => [r.operation, r.certainty, r.attributionEvidence, r.entries])
+      .sort(),
+    [
+      ["assistant", "own", "no-task", 1],
+      ["assistant", "own", "task-consensus", 1],
+    ],
+  );
   assert.deepEqual(
     first.ranking.map((r) => [r.agent, r.tokens]),
     [
@@ -128,6 +140,14 @@ test("CLI explicit sources survive reimport, restart, tasks first and late attri
   );
   assert.equal(again.coverage.imports.length, 3);
   assert.equal(again.coverage.accounting.uncertain.entries, 0);
+  const breakdown = again.coverage.accounting.breakdown;
+  assert.equal(breakdown.length, 1);
+  assert.equal(breakdown[0].entries, 2);
+  assert.equal(breakdown[0].attributionEvidence, "task-consensus");
+  assert.equal(breakdown[0].observed.totalTokens, 38);
+  assert.equal(breakdown[0].observed.reasoning, null);
+  assert.equal(breakdown[0].missing.reasoning, 2);
+  assert.equal(breakdown[0].additive, false);
   for (const suffix of ["", "-wal"]) {
     if (existsSync(f.db + suffix))
       assert.equal(
