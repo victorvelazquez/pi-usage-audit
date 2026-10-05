@@ -7,7 +7,7 @@ import {
   appendFileSync,
 } from "node:fs";
 import { resolve, join, relative, isAbsolute } from "node:path";
-import { fork } from "node:child_process";
+import { fork, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { openLedger, defaultDatabasePath } from "../src/ledger.js";
 
@@ -176,7 +176,7 @@ test("recover malformed tails, invalid usage and incomplete coverage without fal
   ledger.close();
 });
 
-test("lineage resolves in reverse order without suppressing new child usage", () => {
+test("lineage resolves known copies while exposing unmatched child usage", () => {
   const f = fixture();
   const original = f.file("original.jsonl", [
     header("original"),
@@ -199,7 +199,7 @@ test("lineage resolves in reverse order without suppressing new child usage", ()
     2,
   );
   ledger.importFiles({ sessions: [original, independent] });
-  assert.equal(ledger.ranking()[0].tokens, 57);
+  assert.equal(ledger.ranking()[0].tokens, 38);
   assert.equal(
     ledger.entries().filter((e) => e.certainty === "copied").length,
     1,
@@ -209,7 +209,8 @@ test("lineage resolves in reverse order without suppressing new child usage", ()
     message("unique"),
   ]);
   ledger.importFiles({ sessions: [child] });
-  assert.equal(ledger.ranking()[0].tokens, 76);
+  assert.equal(ledger.ranking()[0].tokens, 38);
+  assert.equal(ledger.accounting().uncertain.observed.totalTokens, 38);
   ledger.close();
 });
 
@@ -454,6 +455,121 @@ test("lineage cycles are unresolved even when all entry IDs differ", () => {
   assert.equal(report.unresolved, 2);
   assert.equal(ledger.ranking().length, 0);
   ledger.close();
+});
+
+test("ranking and entries hold a snapshot across an independent writer commit", () => {
+  for (const method of ["ranking", "entries"]) {
+    const f = fixture();
+    const path = f.file("source.jsonl", [header("s"), message("one")]);
+    const task = f.task("actor", path, "red");
+    const ledger = openLedger(f.db);
+    try {
+      ledger.importFiles({ sessions: [path], tasks: [task] });
+      f.file("source.jsonl", [header("s"), message("one"), message("two")]);
+      f.task("actor", path, "blue");
+      const duplicate = f.file("duplicate.jsonl", [
+        header("s"),
+        message("one"),
+      ]);
+      const prepare = ledger.db.prepare.bind(ledger.db);
+      let fired = false;
+      ledger.db.prepare = (sql) => {
+        const stmt = prepare(sql);
+        const gate =
+          method === "ranking"
+            ? "SELECT * FROM entries"
+            : "SELECT * FROM sources";
+        if (sql === gate && !fired) {
+          const all = stmt.all.bind(stmt);
+          stmt.all = (...args) => {
+            const rows = all(...args);
+            fired = true;
+            const child = spawnSync(
+              process.execPath,
+              [
+                "test/writer.js",
+                "--commit",
+                f.db,
+                method === "ranking" ? path : duplicate,
+                task,
+              ],
+              { timeout: 10000, encoding: "utf8" },
+            );
+            assert.equal(child.status, 0, child.stderr);
+            return rows;
+          };
+        }
+        return stmt;
+      };
+      const result = ledger[method]();
+      assert.equal(fired, true);
+      if (method === "ranking") {
+        assert.deepEqual(
+          result.map((r) => [r.agent, r.tokens]),
+          [["red", 19]],
+        );
+        assert.deepEqual(
+          ledger.ranking().map((r) => [r.agent, r.tokens]),
+          [["blue", 38]],
+        );
+      } else {
+        assert.equal(result[0].certainty, "own");
+        assert.equal(ledger.entries()[0].certainty, "session-ambiguous");
+      }
+      ledger.db.prepare = () => {
+        throw new Error("synthetic read failure");
+      };
+      assert.throws(() => ledger[method](), /synthetic read failure/);
+      ledger.db.prepare = prepare;
+      assert.doesNotThrow(() => ledger.importFiles());
+    } finally {
+      ledger.close();
+    }
+  }
+});
+
+test("clean parent growth never proves unmatched child origin across restart", () => {
+  const f = fixture();
+  const parent = f.file("parent.jsonl", [header("p"), message("old")]);
+  let ledger = openLedger(f.db);
+  ledger.importFiles({ sessions: [parent] });
+  ledger.close();
+  appendFileSync(parent, JSON.stringify(message("retained")) + "\n");
+  const clone = f.file("clone.jsonl", [
+    header("clone", {
+      parentSession: parent,
+      timestamp: "2026-01-02T00:00:00Z",
+    }),
+    message("retained"),
+  ]);
+  const sdk = f.file("sdk.jsonl", [
+    header("sdk", { parentSession: parent, timestamp: "2025-12-31T00:00:00Z" }),
+    message("genuine"),
+  ]);
+  ledger = openLedger(f.db);
+  try {
+    ledger.importFiles({ sessions: [clone, sdk] });
+    assert.equal(ledger.ranking()[0].tokens, 19);
+    assert.equal(ledger.accounting().uncertain.entries, 2);
+    assert.equal(ledger.accounting().uncertain.observed.totalTokens, 38);
+    assert.equal(ledger.accounting().uncertain.observed.reasoning, 4);
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.equal(ledger.accounting().uncertain.entries, 2);
+    ledger.importFiles({ sessions: [parent] });
+    assert.equal(ledger.ranking()[0].tokens, 38);
+    assert.equal(
+      ledger.entries().find((r) => r.session === "clone").certainty,
+      "copied",
+    );
+    assert.equal(
+      ledger.entries().find((r) => r.session === "sdk").certainty,
+      "lineage-unresolved",
+    );
+    assert.equal(ledger.accounting().uncertain.observed.totalTokens, 19);
+  } finally {
+    ledger.close();
+  }
 });
 
 test("default database is outside repository", () => {

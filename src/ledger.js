@@ -151,6 +151,17 @@ export function openLedger(path = defaultDatabasePath()) {
       throw new Error("Explicit source could not be read");
     }
   };
+  const readTransaction = (fn) => {
+    db.exec("BEGIN DEFERRED");
+    try {
+      const result = fn();
+      db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  };
   const snapshot = () => {
     const sources = db.prepare("SELECT * FROM sources").all();
     const entries = db
@@ -191,12 +202,9 @@ export function openLedger(path = defaultDatabasePath()) {
       const parent = byPath.get(parentPath);
       if (!parent) return "lineage-unresolved";
       const copied = byEntry.get(JSON.stringify([parent.session, row.entry]));
-      if (!copied) {
-        const complete = db
-          .prepare("SELECT value FROM config WHERE key=?")
-          .get(`complete:${parent.path}`);
-        return complete?.value === "1" ? row.certainty : "lineage-unresolved";
-      }
+      // Absence in an earlier import is not origin evidence: parents can grow.
+      // Header/entry times alone do not prove that a record was not copied later.
+      if (!copied) return "lineage-unresolved";
       if (!row.timestamp || copied.evidence !== row.evidence)
         return "lineage-conflict";
       const ancestry = classify(copied, new Set([...visited, row.session]));
@@ -234,7 +242,47 @@ export function openLedger(path = defaultDatabasePath()) {
     db,
     close: () => db.close(),
     attribution,
-    entries: snapshot,
+    entries: () => readTransaction(snapshot),
+    accounting: () =>
+      readTransaction(() => {
+        const rows = snapshot();
+        const uncertain = rows.filter(
+          (row) => !["own", "copied"].includes(row.certainty),
+        );
+        const categories = [
+          "input",
+          "output",
+          "cacheRead",
+          "cacheWrite",
+          "totalTokens",
+          "reasoning",
+          "cacheWrite1h",
+        ];
+        return {
+          certainties: Object.fromEntries(
+            [...new Set(rows.map((row) => row.certainty))].map((certainty) => [
+              certainty,
+              rows.filter((row) => row.certainty === certainty).length,
+            ]),
+          ),
+          uncertain: {
+            entries: uncertain.length,
+            additive: false,
+            observed: Object.fromEntries(
+              categories.map((key) => [
+                key,
+                uncertain.reduce((sum, row) => sum + (row[key] ?? 0), 0),
+              ]),
+            ),
+            missing: Object.fromEntries(
+              categories.map((key) => [
+                key,
+                uncertain.filter((row) => row[key] === null).length,
+              ]),
+            ),
+          },
+        };
+      }),
     coverage: () =>
       db
         .prepare("SELECT report FROM imports ORDER BY id")
@@ -254,8 +302,6 @@ export function openLedger(path = defaultDatabasePath()) {
       db.exec("BEGIN IMMEDIATE");
       try {
         for (const path of sessions) {
-          const errorsBefore =
-            report.malformed + report.incomplete + report.pending;
           const lines = read(path).split("\n");
           let session;
           for (const line of lines) {
@@ -334,19 +380,12 @@ export function openLedger(path = defaultDatabasePath()) {
             }
           }
           if (!session) report.incomplete++;
-          else
-            db.prepare("INSERT OR REPLACE INTO config VALUES (?,?)").run(
-              `complete:${pathKey(path)}`,
-              report.malformed + report.incomplete + report.pending ===
-                errorsBefore
-                ? "1"
-                : "0",
-            );
         }
         for (const path of tasks) {
+          const content = read(path);
           let task;
           try {
-            task = JSON.parse(read(path)).task;
+            task = JSON.parse(content).task;
           } catch {
             report.malformed++;
             continue;
@@ -388,30 +427,34 @@ export function openLedger(path = defaultDatabasePath()) {
       }
     },
     ranking() {
-      const groups = new Map();
-      for (const entry of snapshot()) {
-        if (entry.certainty !== "own") continue;
-        const actor = attribution(entry.session);
-        if (!groups.has(actor.agent))
-          groups.set(actor.agent, {
-            agent: actor.agent,
-            tokens: 0,
-            runtimeEstimate: null,
-            missingEstimates: 0,
-            estimateProvenance: "runtime-estimate",
-            sessions: new Set(),
-          });
-        const group = groups.get(actor.agent);
-        group.tokens += entry.totalTokens;
-        group.sessions.add(entry.session);
-        if (entry.runtimeEstimate === null) group.missingEstimates++;
-        else
-          group.runtimeEstimate =
-            (group.runtimeEstimate ?? 0) + entry.runtimeEstimate;
-      }
-      return [...groups.values()]
-        .map((group) => ({ ...group, sessions: group.sessions.size }))
-        .sort((a, b) => b.tokens - a.tokens || a.agent.localeCompare(b.agent));
+      return readTransaction(() => {
+        const groups = new Map();
+        for (const entry of snapshot()) {
+          if (entry.certainty !== "own") continue;
+          const actor = attribution(entry.session);
+          if (!groups.has(actor.agent))
+            groups.set(actor.agent, {
+              agent: actor.agent,
+              tokens: 0,
+              runtimeEstimate: null,
+              missingEstimates: 0,
+              estimateProvenance: "runtime-estimate",
+              sessions: new Set(),
+            });
+          const group = groups.get(actor.agent);
+          group.tokens += entry.totalTokens;
+          group.sessions.add(entry.session);
+          if (entry.runtimeEstimate === null) group.missingEstimates++;
+          else
+            group.runtimeEstimate =
+              (group.runtimeEstimate ?? 0) + entry.runtimeEstimate;
+        }
+        return [...groups.values()]
+          .map((group) => ({ ...group, sessions: group.sessions.size }))
+          .sort(
+            (a, b) => b.tokens - a.tokens || a.agent.localeCompare(b.agent),
+          );
+      });
     },
   };
 }

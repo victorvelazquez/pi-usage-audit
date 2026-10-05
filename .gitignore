@@ -159,3 +159,6 @@ HANDOFF.local.md
 *.jsonl
 local-data/
 test/.runtime-*/
+
+# Generated local code index
+.codegraph/
