@@ -457,8 +457,8 @@ test("lineage cycles are unresolved even when all entry IDs differ", () => {
   ledger.close();
 });
 
-test("ranking and entries hold a snapshot across an independent writer commit", () => {
-  for (const method of ["ranking", "entries"]) {
+test("accounting, ranking and entries hold a snapshot across an independent writer commit", () => {
+  for (const method of ["ranking", "entries", "accounting"]) {
     const f = fixture();
     const path = f.file("source.jsonl", [header("s"), message("one")]);
     const task = f.task("actor", path, "red");
@@ -466,7 +466,7 @@ test("ranking and entries hold a snapshot across an independent writer commit", 
     try {
       ledger.importFiles({ sessions: [path], tasks: [task] });
       f.file("source.jsonl", [header("s"), message("one"), message("two")]);
-      f.task("actor", path, "blue");
+      f.task("actor", path, method === "accounting" ? null : "blue");
       const duplicate = f.file("duplicate.jsonl", [
         header("s"),
         message("one"),
@@ -476,9 +476,9 @@ test("ranking and entries hold a snapshot across an independent writer commit", 
       ledger.db.prepare = (sql) => {
         const stmt = prepare(sql);
         const gate =
-          method === "ranking"
-            ? "SELECT * FROM entries"
-            : "SELECT * FROM sources";
+          method === "entries"
+            ? "SELECT * FROM sources"
+            : "SELECT * FROM entries";
         if (sql === gate && !fired) {
           const all = stmt.all.bind(stmt);
           stmt.all = (...args) => {
@@ -490,7 +490,7 @@ test("ranking and entries hold a snapshot across an independent writer commit", 
                 "test/writer.js",
                 "--commit",
                 f.db,
-                method === "ranking" ? path : duplicate,
+                method === "entries" ? duplicate : path,
                 task,
               ],
               { timeout: 10000, encoding: "utf8" },
@@ -512,6 +512,12 @@ test("ranking and entries hold a snapshot across an independent writer commit", 
           ledger.ranking().map((r) => [r.agent, r.tokens]),
           [["blue", 38]],
         );
+      } else if (method === "accounting") {
+        assert.equal(result.breakdown[0].attributionEvidence, "task-consensus");
+        assert.equal(result.breakdown[0].observed.totalTokens, 19);
+        const next = ledger.accounting().breakdown;
+        assert.equal(next[0].attributionEvidence, "missing-agent");
+        assert.equal(next[0].observed.totalTokens, 38);
       } else {
         assert.equal(result[0].certainty, "own");
         assert.equal(ledger.entries()[0].certainty, "session-ambiguous");
@@ -567,6 +573,202 @@ test("clean parent growth never proves unmatched child origin across restart", (
       "lineage-unresolved",
     );
     assert.equal(ledger.accounting().uncertain.observed.totalTokens, 19);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("accounting separates task evidence without fanout or changing legacy ranking", () => {
+  const f = fixture();
+  const paths = ["absent", "missing", "conflict", "consensus"].map((id) =>
+    f.file(`${id}.jsonl`, [header(id), message("one")]),
+  );
+  let ledger = openLedger(f.db);
+  try {
+    ledger.importFiles({ sessions: paths });
+    assert.equal(
+      ledger.accounting().breakdown[0].attributionEvidence,
+      "no-task",
+    );
+    const tasks = [
+      f.task("missing", paths[1], null),
+      f.task("red", paths[2], "red"),
+      f.task("blue", paths[2], "blue"),
+      f.task("null", paths[2], null),
+      f.task("first", paths[3]),
+      f.task("continuation", paths[3]),
+    ];
+    ledger.importFiles({ tasks });
+    const breakdown = ledger.accounting().breakdown;
+    assert.deepEqual(
+      breakdown.map((r) => [r.attributionEvidence, r.entries]).sort(),
+      [
+        ["conflicting-agents", 1],
+        ["missing-agent", 1],
+        ["no-task", 1],
+        ["task-consensus", 1],
+      ],
+    );
+    for (const row of breakdown) {
+      assert.equal(row.operation, "assistant");
+      assert.equal(row.certainty, "own");
+      assert.equal(row.additive, false);
+      assert.deepEqual(row.observed, usage);
+      assert.ok(Object.values(row.missing).every((n) => n === 0));
+    }
+    assert.deepEqual(
+      ledger.ranking().map((r) => [r.agent, r.tokens]),
+      [
+        ["unknown", 57],
+        ["worker", 19],
+      ],
+    );
+    assert.equal(ledger.attribution("conflict").actor, "unknown");
+    ledger.close();
+    ledger = openLedger(f.db);
+    ledger.importFiles({ sessions: paths, tasks });
+    assert.deepEqual(ledger.accounting().breakdown, breakdown);
+    ledger.importFiles({ tasks: [f.task("late", paths[0])] });
+    assert.equal(
+      ledger
+        .accounting()
+        .breakdown.find((r) => r.attributionEvidence === "task-consensus")
+        .entries,
+      2,
+    );
+    ledger.importFiles({
+      tasks: [f.task("missing-continuation", paths[3], null)],
+    });
+    assert.equal(
+      ledger
+        .accounting()
+        .breakdown.find((r) => r.attributionEvidence === "missing-agent")
+        .entries,
+      2,
+    );
+  } finally {
+    ledger.close();
+  }
+});
+
+test("accounting preserves operations and null/partial observations without inferred roles", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  try {
+    assert.deepEqual(ledger.accounting().breakdown, []);
+    ledger.importFiles({
+      sessions: [
+        f.file("operations.jsonl", [
+          header("operations"),
+          message("a"),
+          { type: "usage", id: "u", kind: "future-kind", usage },
+          { type: "compaction", id: "c", usage },
+          { type: "branch_summary", id: "b", usage },
+          message("t", { role: "toolResult" }),
+          message("empty", { usage: undefined }),
+          message("partial", { usage: { input: 7 } }),
+        ]),
+      ],
+    });
+    const rows = ledger.accounting().breakdown;
+    assert.deepEqual(rows.map((r) => r.operation).sort(), [
+      "assistant",
+      "assistant",
+      "branch_summary",
+      "compaction",
+      "toolResult",
+      "usage",
+    ]);
+    const partial = rows.find((r) => r.certainty === "incomplete");
+    assert.equal(partial.entries, 2);
+    assert.equal(partial.observed.input, 7);
+    assert.equal(partial.missing.input, 1);
+    assert.equal(partial.observed.totalTokens, null);
+    assert.equal(partial.missing.totalTokens, 2);
+    assert.ok(
+      rows.every((r) => r.attributionEvidence === "no-task" && !r.additive),
+    );
+    assert.equal(
+      rows.find((r) => r.operation === "toolResult").certainty,
+      "nested-unknown",
+    );
+    assert.equal(ledger.ranking()[0].tokens, 76);
+    assert.equal(ledger.accounting().uncertain.observed.totalTokens, 19);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("accounting retains three-level copy uncertainty through late ancestors and restart", () => {
+  const f = fixture();
+  const root = f.file("root.jsonl", [header("root"), message("retained")]);
+  const middle = f.file("middle.jsonl", [
+    header("middle", { parentSession: root }),
+    message("retained"),
+  ]);
+  const leaf = f.file("leaf.jsonl", [
+    header("leaf", { parentSession: middle }),
+    message("retained"),
+    message("unmatched"),
+  ]);
+  let ledger = openLedger(f.db);
+  try {
+    ledger.importFiles({ sessions: [leaf] });
+    assert.equal(
+      ledger.accounting().breakdown[0].certainty,
+      "lineage-unresolved",
+    );
+    ledger.close();
+    ledger = openLedger(f.db);
+    ledger.importFiles({ sessions: [middle, root] });
+    const rows = ledger.accounting().breakdown;
+    assert.deepEqual(rows.map((r) => [r.certainty, r.entries]).sort(), [
+      ["copied", 2],
+      ["lineage-unresolved", 1],
+      ["own", 1],
+    ]);
+    assert.equal(ledger.ranking()[0].tokens, 19);
+    ledger.close();
+    ledger = openLedger(f.db);
+    ledger.importFiles({ sessions: [leaf, middle, root] });
+    assert.deepEqual(ledger.accounting().breakdown, rows);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("accounting includes quarantined identity, session and lineage conflict classes", () => {
+  const f = fixture();
+  const parent = f.file("p.jsonl", [header("p"), message("one")]);
+  const child = f.file("c.jsonl", [
+    header("c", { parentSession: parent }),
+    message("one", { content: "different" }),
+  ]);
+  const identity = f.file("i.jsonl", [header("i"), message("one")]);
+  const ledger = openLedger(f.db);
+  try {
+    ledger.importFiles({ sessions: [parent, child, identity] });
+    assert.equal(
+      ledger
+        .accounting()
+        .breakdown.find((r) => r.certainty === "lineage-conflict").entries,
+      1,
+    );
+    f.file("i.jsonl", [header("i"), message("one", { content: "changed" })]);
+    const duplicate = f.file("duplicate.jsonl", [header("p"), message("one")]);
+    ledger.importFiles({ sessions: [identity, duplicate] });
+    const rows = ledger.accounting().breakdown;
+    assert.deepEqual(rows.map((r) => r.certainty).sort(), [
+      "identity-conflict",
+      "session-ambiguous",
+    ]);
+    assert.equal(
+      rows.find((r) => r.certainty === "session-ambiguous").entries,
+      2,
+    );
+    assert.equal(ledger.ranking().length, 0);
+    // Restore neither identity nor lineage: inspect the earlier persisted report.
+    assert.equal(ledger.coverage()[0].certainties["lineage-conflict"], 1);
   } finally {
     ledger.close();
   }
