@@ -155,6 +155,29 @@ Operational failures roll back with `Imported estimate operation failed`.
 New IDs use current evidence/catalogue. Alternative estimates are non-additive,
 not new consumption, invoice truth or runtime/ranking changes. No CLI integration.
 
+### Global imported-estimate history (API only)
+
+```js
+const history = ledger.importedEstimates({});
+// { additive: false, estimates: [/* unchanged stored snapshots */] }
+```
+
+The argument must be an object with exactly zero own keys: missing arguments,
+null, arrays, extra keys (including symbols/non-enumerable keys) are rejected
+before SQL with `Invalid imported estimates`. Empty storage returns `estimates: []`.
+One SELECT reads all `imported_estimates`, ordered by literal ID with SQLite
+`COLLATE BINARY` (case-sensitive), without joins, entry/catalogue reads or writes.
+Invalid stored JSON or reader failures reject the whole call with
+`Imported estimates operation failed`; no partial results or private errors escape.
+
+Each call deeply decodes detached snapshots, preserving creation-time observation,
+eligibility and `quote.coverage` despite later conflicts or tariff changes. This
+is historical enumeration, not current ownership or coverage of all imported
+entries. Multiple IDs for one entry and multiple currencies are alternatives,
+**not additive**: no preferred estimate, repricing, currency conversion or grand
+total. Manual estimates remain separate. The result is unbounded/in-memory,
+without pagination; no runtime, ranking, UI or CLI integration.
+
 Append-only applies to these public catalogue/estimate methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds tables transactionally to existing SQLite databases without changing schema versions or deleting data.
 
 ## Privacy and boundaries
@@ -167,11 +190,14 @@ Deferred: broader block 2 coverage and trustworthy child-origin evidence, automa
 
 Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). Estimates delivered in PR #6 (main `68a85dc`), imported quotes in PR #7 (main `23ab4bc`).
 
-Collector extraction delivered in PR #8 (main `35ef3e4`). Current unit adds durable
-imported estimates; its three deferred synthetic tests are restored and strengthened.
-Writer evidence is in the roadmap; parent verification/review and delivery remain
-pending. Rollback removes only this unit's ledger, audit tests and documentation
-changes; never delete databases or earlier delivered behavior.
+Collector extraction delivered in PR #8 (main `35ef3e4`). Durable imported
+estimates delivered in PR #9 (main `8e2c823`, commit
+`7ad2dbed8c89f23f563cfa3d15376aaf1e996301`); historical evidence is in the roadmap.
+Current unit adds read-only global imported-estimate enumeration. Writer evidence
+is in the roadmap; parent review/delivery remain pending. The ignored deferred
+fixture stays unchanged and unpublished; its tests are already active.
+Rollback removes only this unit's four-file diff; preserve durable databases,
+manual/imported APIs and all earlier delivered behavior.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 

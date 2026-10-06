@@ -1,5 +1,6 @@
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
@@ -1835,6 +1836,203 @@ test("imported estimates freeze eligibility and copied pricing across retries an
   );
   assert.equal(ledger.importedEstimate({ id: "rejected" }), null);
   ledger.close();
+});
+
+test("imported estimates enumeration returns detached historical alternatives in binary ID order", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  try {
+    assert.deepEqual(ledger.importedEstimates({}), {
+      additive: false,
+      estimates: [],
+    });
+    const source = f.file("enumerated.jsonl", [
+      header("s"),
+      message("one"),
+      message("not-estimated"),
+    ]);
+    ledger.importFiles({ sessions: [source] });
+    const save = (id, currency = "USD") =>
+      ledger.addImportedEstimate({ id, ...importedRequest, currency });
+    const incomplete = save("a");
+    for (const currency of ["USD", "EUR"])
+      for (const category of coreCategories)
+        ledger.addManualPrice({
+          ...manualPrice,
+          category,
+          currency,
+          effectiveFrom: "2025-12-30T00:00:00.000Z",
+        });
+    const complete = save("Z");
+    const euro = save("A", "EUR");
+    assert.equal(incomplete.quote.coverage.complete, false);
+    assert.equal(complete.quote.coverage.complete, true);
+    assert.equal(euro.quote.currency, "EUR");
+    ledger.addManualEstimate({
+      id: "manual-only",
+      ...manualQuery,
+      at: manualPrice.effectiveFrom,
+      usage: coreUsage,
+    });
+    for (const category of coreCategories)
+      ledger.addManualPrice({
+        ...manualPrice,
+        category,
+        effectiveFrom: "2025-12-31T00:00:00.000Z",
+        ratePerMillion: "2",
+      });
+    assert.equal(
+      ledger.quoteImported(importedRequest).quote.total,
+      "0.000038000000",
+    );
+    appendFileSync(
+      source,
+      JSON.stringify(message("one", { content: "changed" })) + "\n",
+    );
+    ledger.importFiles({ sessions: [source] });
+    assert.equal(
+      ledger.quoteImported(importedRequest).eligibility.eligible,
+      false,
+    );
+    const expected = {
+      additive: false,
+      estimates: [euro, complete, incomplete],
+    };
+    assert.deepEqual(ledger.importedEstimates({}), expected);
+    ledger.close();
+    ledger = openLedger(f.db);
+    const detached = ledger.importedEstimates({});
+    detached.estimates[0].quote.categories.input.price.ratePerMillion = "999";
+    detached.estimates[1].eligibility.reasons.push("changed");
+    detached.estimates[2].quote.coverage.missingPrices.length = 0;
+    detached.estimates[0].observation.certainty = "changed";
+    assert.deepEqual(ledger.importedEstimates({}), expected);
+    assert.deepEqual(ledger.importedEstimate({ id: "A" }), euro);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("imported estimates enumeration strictly validates before SQL and fails atomically", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  try {
+    ledger.db.prepare = ledger.db.exec = () =>
+      assert.fail("SQL before validation");
+    for (const invalid of [
+      undefined,
+      null,
+      [],
+      "",
+      0,
+      () => {},
+      { id: "a" },
+      { [Symbol()]: 1 },
+      Object.defineProperty({}, "hidden", { value: 1 }),
+    ])
+      assert.throws(
+        () => ledger.importedEstimates(invalid),
+        /^Error: Invalid imported estimates$/,
+      );
+    assert.throws(
+      () => ledger.importedEstimates(),
+      /^Error: Invalid imported estimates$/,
+    );
+    for (const failure of ["prepare", "select"]) {
+      ledger.db.prepare = () => {
+        if (failure === "prepare") throw new Error("PRIVATE_SENTINEL");
+        return {
+          all: () => {
+            throw new Error("PRIVATE_SENTINEL");
+          },
+        };
+      };
+      assert.throws(
+        () => ledger.importedEstimates({}),
+        /^Error: Imported estimates operation failed$/,
+      );
+    }
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    ledger.importFiles({
+      sessions: [f.file("enumerated.jsonl", [header("s"), message("one")])],
+    });
+    for (const id of ["A", "Z"])
+      ledger.addImportedEstimate({ id, ...importedRequest });
+    ledger.db
+      .prepare("UPDATE imported_estimates SET estimate=? WHERE id=?")
+      .run("PRIVATE_SENTINEL", "Z");
+    assert.throws(
+      () => ledger.importedEstimates({}),
+      /^Error: Imported estimates operation failed$/,
+    );
+    assert.equal(ledger.importedEstimate({ id: "A" }).id, "A");
+  } finally {
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    ledger.close();
+  }
+});
+
+test("imported estimates enumeration uses one read without accounting or storage mutation", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  try {
+    ledger.importFiles({
+      sessions: [f.file("enumerated.jsonl", [header("s"), message("one")])],
+    });
+    const saved = ledger.addImportedEstimate({ id: "one", ...importedRequest });
+    const state = () => [
+      ledger.entries(),
+      ledger.accounting(),
+      ledger.ranking(),
+      ledger.coverage(),
+    ];
+    const storage = () =>
+      [
+        "config",
+        "sources",
+        "entries",
+        "tasks",
+        "imports",
+        "manual_prices",
+        "manual_estimates",
+        "imported_estimates",
+      ].map((table) => prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
+    const hash = (rows) =>
+      createHash("sha256").update(JSON.stringify(rows)).digest("hex");
+    const before = state();
+    const stored = storage();
+    const sqls = [];
+    ledger.db.prepare = (sql) => {
+      sqls.push(sql);
+      assert.equal(
+        sql,
+        "SELECT estimate FROM imported_estimates ORDER BY id COLLATE BINARY",
+      );
+      return prepare(sql);
+    };
+    ledger.db.exec = () =>
+      assert.fail("enumeration must not write or transact");
+    assert.deepEqual(ledger.importedEstimates({}), {
+      additive: false,
+      estimates: [saved],
+    });
+    assert.equal(sqls.length, 1);
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    assert.deepEqual(state(), before);
+    assert.deepEqual(storage(), stored);
+    assert.equal(hash(storage()), hash(stored));
+  } finally {
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    ledger.close();
+  }
 });
 
 test("imported estimates validate before SQL and retain exact importer identifiers", () => {

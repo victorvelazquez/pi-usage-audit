@@ -546,6 +546,28 @@ export function openLedger(path = defaultDatabasePath()) {
         throw new Error("Imported estimate operation failed");
       }
     },
+    importedEstimates: (value) => {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Reflect.ownKeys(value).length !== 0
+      )
+        throw new Error("Invalid imported estimates");
+      try {
+        const rows = db
+          .prepare(
+            "SELECT estimate FROM imported_estimates ORDER BY id COLLATE BINARY",
+          )
+          .all();
+        return {
+          additive: false,
+          estimates: rows.map((row) => storedJson(row.estimate)),
+        };
+      } catch {
+        throw new Error("Imported estimates operation failed");
+      }
+    },
     addManualEstimate: (value) => {
       const valid = validateManual(
         value,

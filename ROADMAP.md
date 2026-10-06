@@ -12,10 +12,11 @@
 - **Entregado (3, estimaciones explícitas):** PR #6, main `68a85dc`, commit `1a05948`. Revisión nativa `975d244bc17353a7`, target `2afff9cf9de427a49799b379a679ff3a91c3427309d245498897614022e191ef`, aprobada con ack, sin correcciones.
 - **Entregado (3, cotización importada):** PR #7, main `23ab4bc`, commit `8cdcbe9`. Revisión nativa `review-e61564f8d238322b`, target `c9a732ae2df2e3a287bf346f3edc5b029acf54d7e89639a608ebb7057e1006d4`, aprobada con ack, sin correcciones; evidencia histórica.
 - **Entregado (3, colector):** PR #8 integrado, main `35ef3e4`; extracción `ced9521` y política LF `dae15e9` conservadas.
-- **Bloque actual (3):** estimaciones importadas durables por API; implementación y pruebas del escritor, revisión/entrega del padre pendientes.
+- **Entregado (3, persistencia importada):** PR #9, main `8e2c823`, commit `7ad2dbed8c89f23f563cfa3d15376aaf1e996301`; evidencia histórica abajo.
+- **Bloque actual (3):** enumeración global de estimaciones importadas, sólo lectura por API; revisión/entrega del padre pendientes.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
-- **Siguiente:** verificación independiente/revisión y entrega sólo con autorización; sin publicación autorizada ahora.
+- **Siguiente:** revisión del padre y entrega sólo con autorización; sin publicación autorizada ahora. No se exige verificador independiente en esta unidad.
 - **No iniciado:** dashboard y captura en vivo. No se han recolectado sesiones reales.
 
 ## Lista completa del MVP
@@ -25,12 +26,24 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Catálogo, cotizaciones, estimaciones explícitas y colector entregados; persistencia importada en verificación | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 3. Precios manuales | Catálogo, cotizaciones, estimaciones explícitas, colector y persistencia importada entregados; enumeración en revisión | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 3 — estimaciones importadas durables
+## Bloque actual: 3 — enumeración global importada
+
+- [x] `importedEstimates({})` estricto: cero claves propias, rechazo antes de SQL.
+- [x] Un SELECT de `imported_estimates`, orden literal `id COLLATE BINARY`, snapshots históricos intactos y profundamente separados; `additive: false`.
+- [x] RED: imported 7/10, tres fallos esperados por API ausente; GREEN inicial 10/10.
+- [x] Triangulación: vacío, alternativas de una entrada, USD/EUR, quote completo/incompleto, tarifas/conflictos posteriores, reinicio/mutación, errores de prepare/SELECT y JSON corrupto sin resultado parcial.
+- [x] Una lectura sin transacción/escrituras ni consultas de entradas/precios; estado contable, filas/conteos y hash de almacenamiento conservados.
+- [x] Escritor final: `node --test --test-name-pattern=imported test/audit.test.js` 10/10; `npm test` 41/41; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Diagnósticos de edición JS/Markdown limpios; sin build/runtime aplicable a esta API, pruebas funcionales sólo sintéticas.
+- [ ] Revisión/entrega del padre pendientes; ninguna autoridad histórica aprueba esta unidad.
+
+**Límites:** máximo 400 líneas formateadas totales en los cuatro archivos autorizados. Historial no aditivo, no cobertura de todas las entradas ni ownership actual, sin selección preferida, suma, repricing, paginación, manual-estimates globales, runtime/ranking, CLI/UI ni datos reales. Lectura única consistente por SQLite; no se afirma nueva prueba de concurrencia. Rollback sólo del diff de esta unidad; preservar bases/APIs durables y fixture ignorado, ya activo y no publicado.
+
+## Bloque 3 entregado — estimaciones importadas durables
 
 - [x] API estricta de cuatro claves y consulta por ID; namespace independiente y migración aditiva.
 - [x] `BEGIN IMMEDIATE`: lookup antes de clasificación/precios, snapshot inmutable e ineligibles sin persistencia; tarifas faltantes producen quote incompleto.
@@ -38,7 +51,10 @@
 - [x] RED escritor: cuatro imported pasan, tres fallan por API ausente; GREEN inicial 7/7.
 - [x] Escritor final: imported 7/7, suite sintética 38/38, ambas comprobaciones `node --check` y `git diff --check` aprobadas; diagnósticos disponibles limpios, sin build aplicable.
 - [x] Triangulación: rollback de colector/tarifa/insert/commit, writers independientes bloqueados durante creación, arbitraje posterior, reinicio/copias y esquema legado preservado.
-- [ ] Verificación independiente, revisión y entrega del padre pendientes.
+- [x] Padre: suite 38/38, ambas comprobaciones de sintaxis, diff check y LSP primario limpios. ASSESS previo: riesgo medio/escritor grande, autoverificación suficiente; sin verificador independiente exigido ni afirmado.
+- [x] PR #9 integrado: main `8e2c823`, commit `7ad2dbed8c89f23f563cfa3d15376aaf1e996301`. Revisión `review-e7953ecbe3993137` aprobada con ack; autoridad consumida, sin correcciones.
+
+Identidades históricas: target `54348f7dd217a5f04652f265d9a8e7202656d99ddb7adde6a26b3baff38f0b0a`, tree `328884594fa924d5a5588f3619b40e98fe0f3209`, rev `58e3f0a23aa094ecc429311c85a4d940b34f4c17275ff2826b5a363f8088e4ea`. No constituyen autoridad para la enumeración nueva.
 
 **Límites:** 400 líneas formateadas totales, incluidos tests/docs; alternativas no aditivas, sin consumo nuevo, runtime/ranking, CLI/UI, fuentes ni sesiones reales. Rollback sólo de esta unidad en los cuatro archivos autorizados, nunca bases ni trabajo entregado.
 
