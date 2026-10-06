@@ -60,6 +60,56 @@ function json(result) {
   return JSON.parse(result.stdout);
 }
 
+test("CLI costs explicit currency, existing storage and API equivalence", () => {
+  const f = fixture();
+  for (const args of [
+    ["costs"],
+    ["costs", "--db", f.db],
+    ["costs", "--currency", "USD"],
+    ["costs", "--db", f.db, "--currency", "usd"],
+    ["costs", "--db", f.db, "--currency", "USD", "--currency", "EUR"],
+    ["costs", "--db", f.db, "--currency", "USD", "--session", "x"],
+  ]) {
+    assert.equal(f.run(...args).status, 2);
+    assert.equal(existsSync(join(f.dir, "db")), false);
+  }
+  assert.match(f.run("costs", "--help").stdout, /--currency/);
+  assert.equal(f.run("costs", "--db", f.db, "--currency", "USD").status, 1);
+  assert.equal(existsSync(join(f.dir, "db")), false);
+  const row = message("one");
+  row.timestamp = "2026-01-01T00:00:00.000Z";
+  row.message.provider = "synthetic";
+  row.message.model = "fixture";
+  const path = f.file("s.jsonl", [header("s"), row]);
+  json(f.run("import", "--db", f.db, "--session", path));
+  const ledger = openLedger(f.db);
+  let expected;
+  try {
+    for (const category of ["input", "output", "cacheRead", "cacheWrite"])
+      ledger.addManualPrice({
+        provider: "synthetic",
+        model: "fixture",
+        category,
+        currency: "USD",
+        effectiveFrom: row.timestamp,
+        ratePerMillion: "1",
+      });
+    expected = ledger.costReport({ currency: "USD" });
+  } finally {
+    ledger.close();
+  }
+  const result = json(f.run("costs", "--db", f.db, "--currency", "USD"));
+  assert.deepEqual(result, expected);
+  assert.equal(result.groups[0].total, "0.000019000000");
+  const corrupt = f.file("PRIVATE_SENTINEL.sqlite", [{ invalid: true }]);
+  const failed = f.run("costs", "--db", corrupt, "--currency", "USD");
+  assert.equal(failed.status, 1);
+  assert.equal(failed.stdout, "");
+  assert.match(failed.stderr, /Cost report failed/);
+  assert.equal(failed.stderr.includes("PRIVATE_SENTINEL"), false);
+  assert.equal(existsSync(join(f.home, ".local")), false);
+});
+
 test("CLI report validates without storage and reports separate-process imports", () => {
   const f = fixture();
   for (const args of [

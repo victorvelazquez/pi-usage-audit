@@ -94,7 +94,7 @@ The result is `{ provenance: 'imported-own-runtime-report', agents, models, runt
 - Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
 - `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.
 - Agent/model views describe the **same entries**, not additive totals together. Sessions across model groups are nonadditive. `coverage` counts included/excluded entries and exclusions by certainty; excluded usage is not zero.
-- `runtime` has `provenance: 'runtime-estimate'`, `currency: null`, `total: null`, and `totalUnavailableReason: 'runtime-currency-not-recorded'`. No monetary sum, ranking, conversion or inferred USD exists; comparative costs remain pending.
+- `runtime` has `provenance: 'runtime-estimate'`, `currency: null`, `total: null`, and `totalUnavailableReason: 'runtime-currency-not-recorded'`. No monetary sum, ranking, conversion or inferred USD exists in this runtime view; comparative manual costs use the separate report below.
 - `runtime.observations` contains individual persisted numeric `amount`s with session/entry/provider/model/agent metadata, ordered by binary session/entry. Decimal precision is not manufactured; zero is recorded, missing amounts are omitted. Its coverage counts `recordedEntries`, `missingEntries`, and `unknownCurrencyEntries` (all recorded amounts).
 - Current Pi RPC documentation describes USD-based rates, but cannot attest arbitrary historical producers, custom providers or gateway usage. Imported cost fields contain no currency; they remain unchanged. Manual prices and estimate history are not consulted.
 
@@ -106,6 +106,36 @@ CLI requires an explicit existing regular database; invalid/help/missing-path re
 create no storage. Exit codes remain 0/2/1; errors are sanitized and close is attempted.
 **Not wholly read-only:** the existing opener initializes tables/config and WAL even on
 existing databases. The filesystem existence check is not an atomic read-only-open guarantee.
+
+## Comparative manual costs (API and CLI)
+
+`ledger.costReport({ currency: 'USD' })` or
+`node src/cli.js costs --db /explicit/existing.sqlite --currency USD` returns
+`{ provenance: 'imported-own-manual-cost-report', currency, groups, coverage }`.
+Exactly one own key is required (symbols/nonenumerable extras rejected); currency
+is three uppercase ASCII letters, with no default, inference or conversion.
+Invalid requests fail before SQL: `Invalid cost report`.
+
+Groups use literal joint agent/provider/model identities, binary UTF-8 order,
+null first, not monetary ranking. Each has `entries`, per-entry `quotes` retaining
+session/entry, observation, eligibility reasons and selected prices, plus
+`coverage: { complete, completeQuotes, incompleteEntries }` and `total`.
+Totals are exact fixed-12 BigInt sums only when every entry has a complete quote;
+otherwise null, never a subtotal. Invalid own identity/date/counters remain
+incomplete entries; non-own entries appear only in global `coverage` counts
+`includedEntries`, `excludedEntries`, `excludedByCertainty`, without global money.
+
+One deferred snapshot spans current classification, task-consensus attribution
+and catalogue rates. Each own entry contributes once; continuations do not fan out.
+Prices select latest literal category/provider/model/currency `effectiveFrom <=`
+the canonical outer entry timestamp, with no fallback date or implicit now.
+Missing rates are unknown even for zero tokens; explicit zero rates are known.
+Retrospective additions can change fresh reports, not returned copied quotes.
+No invoices, runtime sums, historical-alternative sums or persisted estimates.
+Operational/rollback errors: `Cost report operation failed`. CLI uses the existing
+regular-database check, sanitized errors, close attempt and exit codes 0/2/1;
+help/invalid/missing-file requests create no storage. Opener initialization/WAL
+means it is not wholly read-only. Pricing remains through the existing API only.
 
 ## Opt-in manual price catalogue (API only)
 

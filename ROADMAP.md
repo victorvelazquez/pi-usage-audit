@@ -6,9 +6,9 @@
 
 **El motor de datos funciona. La aplicación visual todavía no existe.**
 
-- **Última tarea terminada:** documentación de seguimiento, integrada en `main` mediante PR #14; tokens por modelo entregados en PR #13.
-- **En curso:** reporte global por agente/modelo listo sin commit; padre confirmó 59/59 pruebas y LSP limpio; revisión nativa pendiente, no entregado.
-- **Siguiente propuesta:** costos comparativos con moneda/precios explícitos; pendientes, sin suma ni ranking monetario en esta unidad.
+- **Última tarea terminada:** reporte global runtime, entregado mediante PR #15; `main` confirmado por el padre: `f8f961b`.
+- **En curso:** costos comparativos API/CLI con moneda explícita; candidato implementado, 63/63 pruebas aprobadas; revisión pendiente, no entregado.
+- **Siguiente propuesta:** decidir habilitación del dashboard local; no autoriza implementación ni datos reales.
 - **Decisiones pendientes:** habilitar el dashboard y autorizar la selección de sesiones reales antes de trabajar en esos pasos.
 
 ## Qué ya podés hacer
@@ -28,7 +28,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
-| Reporte global integrado | Comparar tokens por agente/modelo y consultar importes runtime individuales sin moneda inferida | Listo sin commit; revisión/publicación pendientes; costos comparativos pendientes |
+| Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Candidato implementado; 63/63 pruebas aprobadas, revisión pendiente; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | No iniciado; requiere habilitación |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
@@ -76,11 +76,19 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
-| 4. Análisis global | Parcial: ranking básico y tokens por proveedor/modelo entregados; integración pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
+| 4. Análisis global | Parcial: tokens/runtime entregados; costos candidato sin entregar; evolución pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Reporte global runtime — candidato sin entregar
+## Costos comparativos — candidato sin entregar
+
+- `costReport({currency})` y CLI `costs --db` existente con moneda explícita; snapshot único, filas conjuntas y cobertura sin subtotal ni ranking monetario.
+- RED observado: 59/63, cuatro fallos por API/CLI ausentes; GREEN 63/63. CLI sintética equivalente a API; snapshot independiente, exclusiones, fechas, cero, precisión grande y grupos incompletos aprobados. LSP completo no disponible al escritor; revisión pendiente.
+- Expectativa grande corregida mediante aritmética independiente: `9007199254740991 × (10¹² − 10⁻⁶) = 9007199254740990990992.800745259009`.
+- Usuario autorizó hasta 500 líneas formateadas (adiciones + eliminaciones), sólo esta unidad/seis archivos, incluidas pruebas/docs; no hereda excepciones anteriores.
+- Sin datos reales, esquema, dependencias, captura/UI, cambios runtime/ranking ni publicación; rollback sólo del diff autorizado, preservando bases y fixtures ignorados.
+
+## Reporte global runtime — entregado en PR #15 (`f8f961b`)
 
 - API `runtimeReport({})` y CLI `report --db` explícito existente; snapshot único, tokens exactos, importes individuales con moneda/total null y faltantes visibles.
 - Excepción final del usuario: exactamente **616 líneas formateadas** sólo para este reporte, tras expansión del autoformato; límite habitual de 400 permanece para unidades futuras. Sin división API/CLI.
