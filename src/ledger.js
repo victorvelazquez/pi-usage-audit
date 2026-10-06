@@ -390,10 +390,10 @@ export function openLedger(path = defaultDatabasePath()) {
     });
   };
   // The caller owns the transaction spanning classification and tariff selection.
-  const collectImported = ({ session, entry, currency }) => {
-    const row = snapshot().find(
-      (row) => row.session === session && row.entry === entry,
-    );
+  const collectImported = ({ session, entry, currency }, classified) => {
+    const row =
+      classified ??
+      snapshot().find((row) => row.session === session && row.entry === entry);
     const reasons = [];
     let observation = null;
     if (row) {
@@ -459,6 +459,114 @@ export function openLedger(path = defaultDatabasePath()) {
     db,
     close: () => db.close(),
     attribution,
+    costReport: (value) => {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Reflect.ownKeys(value).length !== 1 ||
+        !Object.hasOwn(value, "currency") ||
+        typeof value.currency !== "string" ||
+        value.currency.length !== 3 ||
+        !/^[A-Z]{3}$/.test(value.currency)
+      )
+        throw new Error("Invalid cost report");
+      const currency = value.currency;
+      try {
+        return readTransaction(() => {
+          const groups = new Map();
+          const actors = new Map();
+          const coverage = {
+            includedEntries: 0,
+            excludedEntries: 0,
+            excludedByCertainty: {},
+          };
+          for (const row of snapshot()) {
+            if (row.certainty !== "own") {
+              coverage.excludedEntries++;
+              const key = row.certainty;
+              Object.defineProperty(coverage.excludedByCertainty, key, {
+                value: (coverage.excludedByCertainty[key] ?? 0) + 1,
+                enumerable: true,
+                configurable: true,
+              });
+              continue;
+            }
+            coverage.includedEntries++;
+            if (!actors.has(row.session))
+              actors.set(row.session, attribution(row.session).agent);
+            const agent = actors.get(row.session);
+            const key = JSON.stringify([agent, row.provider, row.model]);
+            if (!groups.has(key))
+              groups.set(key, {
+                agent,
+                provider: row.provider,
+                model: row.model,
+                entries: 0,
+                quotes: [],
+              });
+            const group = groups.get(key);
+            group.entries++;
+            group.quotes.push(
+              collectImported(
+                {
+                  session: row.session,
+                  entry: row.entry,
+                  currency,
+                },
+                row,
+              ),
+            );
+          }
+          const binary = (a, b) =>
+            a === b
+              ? 0
+              : a === null
+                ? -1
+                : b === null
+                  ? 1
+                  : Buffer.compare(Buffer.from(a), Buffer.from(b));
+          const result = [...groups.values()];
+          for (const group of result) {
+            group.quotes.sort(
+              (a, b) =>
+                binary(a.session, b.session) || binary(a.entry, b.entry),
+            );
+            const completeQuotes = group.quotes.filter(
+              (q) => q.quote?.coverage.complete,
+            ).length;
+            const complete = completeQuotes === group.entries;
+            group.coverage = {
+              complete,
+              completeQuotes,
+              incompleteEntries: group.entries - completeQuotes,
+            };
+            group.total = complete
+              ? fixedAmount(
+                  group.quotes.reduce(
+                    (sum, q) => sum + checkedAmount(q.quote.total),
+                    0n,
+                  ),
+                )
+              : null;
+          }
+          result.sort(
+            (a, b) =>
+              binary(a.agent, b.agent) ||
+              binary(a.provider, b.provider) ||
+              binary(a.model, b.model),
+          );
+          return {
+            provenance: "imported-own-manual-cost-report",
+            currency,
+            groups: result,
+            coverage,
+          };
+        });
+      } catch {
+        throw new Error("Cost report operation failed");
+      }
+    },
     addManualPrice: (value) => {
       const price = validateManual(value, manualKeys);
       const key = manualKeys.slice(0, -1).map((field) => price[field]);

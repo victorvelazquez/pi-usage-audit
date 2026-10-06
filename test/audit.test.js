@@ -59,6 +59,241 @@ function fixture() {
   return { dir, db, file, task };
 }
 
+test("costReport strict requests, detached empty result and generic recovery", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  try {
+    ledger.db.exec = () => assert.fail("invalid reached SQL");
+    for (const value of [
+      undefined,
+      null,
+      [],
+      {},
+      { currency: "usd" },
+      { currency: "USD\n" },
+      { currency: "USD", at: "now" },
+      { currency: "USD", [Symbol()]: 1 },
+      Object.create({ currency: "USD" }),
+    ]) {
+      assert.throws(() => ledger.costReport(value), /Invalid cost report/);
+    }
+    ledger.db.exec = exec;
+    const empty = ledger.costReport({ currency: "USD" });
+    assert.deepEqual(empty.groups, []);
+    assert.deepEqual(empty.coverage, {
+      includedEntries: 0,
+      excludedEntries: 0,
+      excludedByCertainty: {},
+    });
+    ledger.db.exec = () => {
+      throw new Error("PRIVATE_SENTINEL");
+    };
+    assert.throws(
+      () => ledger.costReport({ currency: "USD" }),
+      /^Error: Cost report operation failed$/,
+    );
+    ledger.db.exec = exec;
+    assert.deepEqual(ledger.costReport({ currency: "USD" }), empty);
+  } finally {
+    ledger.db.exec = exec;
+    ledger.close();
+  }
+});
+
+test("costReport exact grouped quotes, dates, exclusions and late attribution", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  try {
+    const huge = {
+      input: Number.MAX_SAFE_INTEGER,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: Number.MAX_SAFE_INTEGER,
+    };
+    const path = f.file("s.jsonl", [
+      header("s"),
+      message("a", { usage: huge }),
+      message("b", { usage: huge }),
+      message("zero", {
+        model: "zero",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+        },
+      }),
+      message("missing", { model: "missing" }),
+      message("bad", { provider: null }),
+      { ...message("date"), timestamp: "2026-01-01" },
+      message("nested", { role: "toolResult" }),
+      message("pending", { stopReason: "pending" }),
+    ]);
+    const child = f.file("c.jsonl", [
+      header("c", { parentSession: path }),
+      message("a", { usage: huge }),
+      message("new"),
+    ]);
+    ledger.importFiles({ sessions: [path, child] });
+    const price = (
+      model,
+      category,
+      ratePerMillion,
+      effectiveFrom = "2026-01-01T00:00:00.000Z",
+    ) =>
+      ledger.addManualPrice({
+        provider: "synthetic",
+        model,
+        category,
+        currency: "USD",
+        effectiveFrom,
+        ratePerMillion,
+      });
+    for (const category of ["input", "output", "cacheRead", "cacheWrite"]) {
+      price("fixture", category, "999999999999.999999");
+      price("fixture", category, "0", "2026-01-02T00:00:00.000Z");
+      price("zero", category, "0");
+    }
+    const before = ledger.db.prepare("SELECT * FROM entries").all();
+    const report = ledger.costReport({ currency: "USD" });
+    assert.equal(report.provenance, "imported-own-manual-cost-report");
+    assert.deepEqual(report.coverage, {
+      includedEntries: 6,
+      excludedEntries: 3,
+      excludedByCertainty: {
+        copied: 1,
+        "lineage-unresolved": 1,
+        "nested-unknown": 1,
+      },
+    });
+    const group = report.groups.find(
+      (g) => g.model === "fixture" && g.provider,
+    );
+    assert.equal(group.entries, 3);
+    assert.equal(group.total, null);
+    assert.deepEqual(group.coverage, {
+      complete: false,
+      completeQuotes: 2,
+      incompleteEntries: 1,
+    });
+    assert.equal(
+      group.quotes[0].quote.total,
+      "9007199254740990990992.800745259009",
+    );
+    assert.deepEqual(group.quotes[2].eligibility.reasons, [
+      "invalid-timestamp",
+    ]);
+    assert.equal(
+      report.groups.find((g) => g.model === "zero").total,
+      "0.000000000000",
+    );
+    const missing = report.groups.find((g) => g.model === "missing");
+    assert.equal(missing.total, null);
+    assert.equal(missing.quotes[0].quote.coverage.missingPrices.length, 4);
+    assert.equal(report.groups[0].provider, null);
+    assert.deepEqual(ledger.db.prepare("SELECT * FROM entries").all(), before);
+    report.groups[0].quotes[0].observation.usage.input = 999;
+    ledger.importFiles({
+      tasks: [f.task("t", path, "z"), f.task("continuation", path, "z")],
+    });
+    assert.equal(ledger.costReport({ currency: "USD" }).groups[0].agent, "z");
+    assert.equal(
+      ledger
+        .costReport({ currency: "EUR" })
+        .groups.every((g) => g.total === null),
+      true,
+    );
+    price("missing", "input", "1", "2025-01-01T00:00:00.000Z");
+    assert.equal(
+      ledger
+        .costReport({ currency: "USD" })
+        .groups.find((g) => g.model === "missing").quotes[0].quote.categories
+        .input.amount,
+      "0.000010000000",
+    );
+    const second = f.file("other.jsonl", [
+      header("other"),
+      message("a", { usage: huge }),
+      message("b", { usage: huge }),
+    ]);
+    ledger.importFiles({
+      sessions: [second],
+      tasks: [f.task("other-task", second, "a")],
+    });
+    const joint = ledger.costReport({ currency: "USD" }).groups;
+    assert.equal(joint[0].agent, "a");
+    assert.equal(joint[0].entries, 2);
+    assert.equal(joint[0].total, "18014398509481981981985.601490518018");
+    assert.equal(
+      joint.find((g) => g.agent === "z" && g.model === "fixture").total,
+      null,
+    );
+    ledger.db
+      .prepare(
+        "UPDATE entries SET data=json_set(data,'$.input',null) WHERE entry='zero'",
+      )
+      .run();
+    const invalid = ledger
+      .costReport({ currency: "USD" })
+      .groups.find((g) => g.model === "zero");
+    assert.deepEqual(invalid.quotes[0].eligibility.reasons, [
+      "invalid-counters",
+    ]);
+    assert.equal(invalid.total, null);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("costReport single snapshot includes attribution and tariff selection", () => {
+  const f = fixture();
+  const path = f.file("s.jsonl", [header("s"), message("a")]);
+  const ledger = openLedger(f.db);
+  const other = openLedger(f.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  try {
+    ledger.importFiles({ sessions: [path], tasks: [f.task("t", path, "a")] });
+    let fired = false;
+    ledger.db.prepare = (sql) => {
+      const stmt = prepare(sql);
+      if (sql === "SELECT * FROM entries" && !fired) {
+        const all = stmt.all.bind(stmt);
+        stmt.all = () => {
+          const rows = all();
+          fired = true;
+          other.importFiles({ tasks: [f.task("t", path, "b")] });
+          for (const category of ["input", "output", "cacheRead", "cacheWrite"])
+            other.addManualPrice({
+              provider: "synthetic",
+              model: "fixture",
+              category,
+              currency: "USD",
+              effectiveFrom: "2025-01-01T00:00:00.000Z",
+              ratePerMillion: "1",
+            });
+          return rows;
+        };
+      }
+      return stmt;
+    };
+    const first = ledger.costReport({ currency: "USD" }).groups[0];
+    assert.equal(fired, true);
+    assert.equal(first.agent, "a");
+    assert.equal(first.total, null);
+    const next = ledger.costReport({ currency: "USD" }).groups[0];
+    assert.equal(next.agent, "b");
+    assert.equal(next.total, "0.000019000000");
+    assert.equal(first.quotes[0].quote.categories.input.price, null);
+  } finally {
+    ledger.db.prepare = prepare;
+    other.close();
+    ledger.close();
+  }
+});
+
 test("runtimeReport strict requests, empty result and generic recovery", () => {
   const f = fixture();
   const ledger = openLedger(f.db);
