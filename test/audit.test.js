@@ -77,6 +77,262 @@ const importedRequest = { session: "s", entry: "one", currency: "USD" };
 const coreUsage = { input: 10, output: 4, cacheRead: 3, cacheWrite: 2 };
 const coreCategories = Object.keys(coreUsage);
 
+function summaryFixture() {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  ledger.importFiles({
+    sessions: [
+      f.file("summary.jsonl", [
+        header("s"),
+        message("one"),
+        message("two"),
+        message("zero", {
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+          },
+        }),
+      ]),
+    ],
+  });
+  const add = (id, entry = "one", currency = "USD") =>
+    ledger.addImportedEstimate({ id, session: "s", entry, currency });
+  add("unknown");
+  for (const category of coreCategories)
+    ledger.addManualPrice({ ...manualPrice, category });
+  add("first");
+  add("alternative");
+  add("second", "two");
+  add("zero", "zero");
+  add("euro", "two", "EUR");
+  const summarize = (ids, currency = "USD") =>
+    ledger.summarizeImportedEstimates({ ids, currency });
+  return { f, ledger, add, summarize };
+}
+
+test("imported summary validates exact dense requests before SQL", () => {
+  const { ledger } = summaryFixture();
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  ledger.db.prepare = () => assert.fail("invalid request reached SQL");
+  const request = { ids: ["first"], currency: "USD" };
+  for (const value of [
+    undefined,
+    null,
+    [],
+    {},
+    { ...request, extra: 1 },
+    { ...request, [Symbol()]: 1 },
+    { ids: new Array(1), currency: "USD" },
+    { ...request, ids: ["first", "first"] },
+    ...[
+      null,
+      "first",
+      [null],
+      [""],
+      [" first"],
+      ["a\n"],
+      ["a".repeat(513)],
+      Object.assign(["first"], { extra: 1 }),
+    ].map((ids) => ({ ...request, ids })),
+    ...["usd", "US", "USD\n", 123].map((currency) => ({
+      ...request,
+      currency,
+    })),
+  ])
+    assert.throws(() => ledger.summarizeImportedEstimates(value), {
+      message: "Invalid imported estimate summary",
+    });
+  ledger.db.prepare = prepare;
+  ledger.close();
+});
+
+test("imported summary rejects alternatives and missing or mismatched selection", () => {
+  const { ledger, summarize } = summaryFixture();
+  for (const ids of [
+    ["missing"],
+    ["first", "missing"],
+    ["first", "alternative"],
+    ["first", "euro"],
+  ])
+    assert.throws(() => summarize(ids), {
+      message: "Invalid imported estimate summary",
+    });
+  assert.deepEqual(summarize([]), {
+    provenance: "selected-imported-estimate-summary",
+    currency: "USD",
+    ids: [],
+    total: null,
+    coverage: {
+      complete: false,
+      selected: 0,
+      completeQuotes: 0,
+      incomplete: [],
+    },
+  });
+  assert.equal(summarize(["zero"]).total, "0.000000000000");
+  assert.deepEqual(summarize(["second", "unknown"]).coverage, {
+    complete: false,
+    selected: 2,
+    completeQuotes: 1,
+    incomplete: [
+      { id: "unknown", missingCounters: [], missingPrices: coreCategories },
+    ],
+  });
+  assert.equal(summarize(["second", "unknown"]).total, null);
+  ledger.close();
+});
+
+test("imported summary preserves historical snapshots and performs only one selected read", () => {
+  const { f, ledger, add, summarize } = summaryFixture();
+  const original = summarize(["second", "first"]);
+  assert.equal(original.total, "0.000038000000");
+  ledger.addManualPrice({
+    ...manualPrice,
+    effectiveFrom: "2025-12-01T00:00:00.000Z",
+    ratePerMillion: "9",
+  });
+  ledger.importFiles({
+    sessions: [
+      f.file("summary.jsonl", [
+        header("s"),
+        message("one", { model: "conflict" }),
+      ]),
+    ],
+  });
+  assert.equal(add("first").quote.total, "0.000019000000");
+  assert.deepEqual(summarize(["first", "second"]), original);
+  const state = () => [
+    ledger.accounting(),
+    ledger.coverage(),
+    ledger.ranking(),
+    ledger.entries(),
+    ledger.db.prepare("SELECT * FROM imported_estimates").all(),
+  ];
+  const before = state();
+  const hash = createHash("sha256").update(readFileSync(f.db)).digest("hex");
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  let reads = 0;
+  ledger.db.exec = () => assert.fail("summary executed SQL writes/transaction");
+  ledger.db.prepare = (sql) => {
+    reads++;
+    assert.match(sql, /^SELECT .*imported_estimates/s);
+    assert.doesNotMatch(sql, /JOIN|manual_prices|FROM entries/i);
+    return prepare(sql);
+  };
+  const result = summarize(["second", "first"]);
+  assert.equal(reads, 1);
+  result.ids.pop();
+  result.coverage.incomplete.push({ id: "mutated" });
+  ledger.db.prepare = prepare;
+  ledger.db.exec = exec;
+  assert.deepEqual(state(), before);
+  assert.equal(
+    createHash("sha256").update(readFileSync(f.db)).digest("hex"),
+    hash,
+  );
+  ledger.close();
+  const reopened = openLedger(f.db);
+  assert.deepEqual(
+    reopened.summarizeImportedEstimates({
+      ids: ["first", "second"],
+      currency: "USD",
+    }),
+    original,
+  );
+  reopened.close();
+});
+
+test("imported summary exact large money, literal pairs and SQLite binary Unicode order", () => {
+  const { ledger, summarize } = summaryFixture();
+  const saved = ledger.importedEstimate({ id: "first" });
+  const insert = ledger.db.prepare(
+    "INSERT INTO imported_estimates VALUES (?,?,?)",
+  );
+  const ids = ["\u{10000}", "\ue000"];
+  for (const [index, id] of ids.entries()) {
+    const estimate = structuredClone(saved);
+    Object.assign(estimate, {
+      id,
+      session: index ? "a" : "a:b",
+      entry: index ? "b:c" : "c",
+    });
+    let total = 0n;
+    for (const category of coreCategories) {
+      const part = estimate.quote.categories[category];
+      part.tokens = Number.MAX_SAFE_INTEGER;
+      part.price.ratePerMillion = "999999999999.999999";
+      const scaled = 999999999999999999n * BigInt(part.tokens);
+      part.amount = `${scaled / 1000000000000n}.${(scaled % 1000000000000n).toString().padStart(12, "0")}`;
+      estimate.observation.usage[category] = part.tokens;
+      total += scaled;
+    }
+    estimate.quote.total = `${total / 1000000000000n}.${(total % 1000000000000n).toString().padStart(12, "0")}`;
+    insert.run(id, "{}", JSON.stringify(estimate));
+  }
+  const result = summarize(ids);
+  assert.deepEqual(result.ids, [ids[1], ids[0]]);
+  assert.equal(result.total, "72057594037927927927942.405962072072");
+  ledger.close();
+});
+
+test("imported summary selected corruption and reader failures are atomic and generic", () => {
+  const { ledger, summarize } = summaryFixture();
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  for (const fail of [
+    () => {
+      throw new Error("PRIVATE");
+    },
+    () => ({
+      all() {
+        throw new Error("PRIVATE");
+      },
+    }),
+  ]) {
+    ledger.db.prepare = fail;
+    assert.throws(() => summarize(["first"]), {
+      message: "Imported estimate summary operation failed",
+    });
+  }
+  ledger.db.prepare = prepare;
+  const saved = ledger.importedEstimate({ id: "first" });
+  const update = prepare(
+    "UPDATE imported_estimates SET estimate=? WHERE id='first'",
+  );
+  for (const serialized of [
+    "{",
+    "null",
+    "{}",
+    ...[
+      "01.000000000000",
+      "-1.000000000000",
+      "1.0",
+      1,
+      "1.000000000000\n",
+      "1.000000000000",
+    ].map((total) =>
+      JSON.stringify({ ...saved, quote: { ...saved.quote, total } }),
+    ),
+    JSON.stringify({
+      ...saved,
+      quote: {
+        ...saved.quote,
+        coverage: { complete: false, missingCounters: [], missingPrices: [] },
+      },
+    }),
+  ]) {
+    update.run(serialized);
+    assert.equal(summarize(["second"]).total, "0.000019000000");
+    assert.throws(() => summarize(["first", "second"]), {
+      message: "Imported estimate summary operation failed",
+    });
+  }
+  ledger.close();
+});
+
 test("imported quote derives exact evidence, preserves storage and survives restart", () => {
   const f = fixture();
   let ledger = openLedger(f.db);

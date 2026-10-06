@@ -646,6 +646,77 @@ export function openLedger(path = defaultDatabasePath()) {
         throw new Error("Imported estimate operation failed");
       }
     },
+    summarizeImportedEstimates: (value) => {
+      const error = "Invalid imported estimate summary";
+      const { ids, currency } = validateManual(
+        value,
+        ["ids", "currency"],
+        error,
+      );
+      const invalid = () => {
+        throw new Error(error);
+      };
+      if (!Array.isArray(ids) || Reflect.ownKeys(ids).length !== ids.length + 1)
+        invalid();
+      const selected = [];
+      const unique = new Set();
+      for (let index = 0; index < ids.length; index++) {
+        if (!Object.hasOwn(ids, index)) invalid();
+        const { id } = validateManual({ id: ids[index] }, ["id"], error);
+        if (unique.has(id)) invalid();
+        unique.add(id);
+        selected.push(id);
+      }
+      let snapshots;
+      try {
+        // One JSON binding avoids SQLite's variable limit and chunked snapshots.
+        snapshots = selected.length
+          ? db
+              .prepare(`SELECT id,estimate FROM imported_estimates
+                WHERE id COLLATE BINARY IN (SELECT value FROM json_each(?))
+                ORDER BY id COLLATE BINARY`)
+              .all(JSON.stringify(selected))
+              .map((row) => checkedImportedSnapshot(row.estimate, row.id))
+          : [];
+      } catch {
+        throw new Error("Imported estimate summary operation failed");
+      }
+      if (snapshots.length !== selected.length) invalid();
+      const pairs = new Set();
+      const incomplete = [];
+      let total = 0n;
+      let completeQuotes = 0;
+      for (const saved of snapshots) {
+        if (saved.currency !== currency) invalid();
+        const pair = JSON.stringify([saved.session, saved.entry]);
+        if (pairs.has(pair)) invalid();
+        pairs.add(pair);
+        const coverage = saved.quote.coverage;
+        if (coverage.complete) {
+          completeQuotes++;
+          total += checkedAmount(saved.quote.total);
+        } else {
+          incomplete.push({
+            id: saved.id,
+            missingCounters: [...coverage.missingCounters],
+            missingPrices: [...coverage.missingPrices],
+          });
+        }
+      }
+      const complete = snapshots.length > 0 && incomplete.length === 0;
+      return {
+        provenance: "selected-imported-estimate-summary",
+        currency,
+        ids: snapshots.map((saved) => saved.id),
+        total: complete ? fixedAmount(total) : null,
+        coverage: {
+          complete,
+          selected: snapshots.length,
+          completeQuotes,
+          incomplete,
+        },
+      };
+    },
     importedEstimates: (value) => {
       if (
         !value ||

@@ -175,8 +175,31 @@ Malformed JSON, invalid required structure/money or reader failures produce only
 This hardening applies **only to the single-ID reader**. Global enumeration and
 idempotent creation retries retain their existing decoding behavior. Arbitrary
 `ledger.db` SQL remains outside these guarantees. Selected-cost summary is a
-separate next unit, not implemented here; its five RED tests are preserved in an
-ignored, inactive and unpublished fixture. Parent verification/review are pending.
+separate API below. Checked-reader hardening was delivered in PR #11 (main
+`4213aa4`, commit `b68a20c1621f`); its verification/review are historical.
+
+### Selected imported-estimate cost summary (API only)
+
+`ledger.summarizeImportedEstimates({ ids, currency })` requires exactly two own
+keys: a dense array of distinct literal manual-estimate IDs and three uppercase
+ASCII currency letters. No extras, symbols, normalization or currency conversion.
+Malformed requests/repeated IDs fail before SQL. Missing IDs, wrong currency or
+different IDs for the same literal session/entry pair reject the whole selection
+with `Invalid imported estimate summary`; alternatives are never chosen or added.
+
+One bound SELECT reads only selected snapshots, ordered by SQLite binary ID order.
+Stored snapshots use the checked reader's validation; corrupt selected data or
+read failures yield `Imported estimate summary operation failed`, without partial
+results or private errors. Unselected corruption does not block the call.
+The detached result contains `provenance: 'selected-imported-estimate-summary'`,
+`currency`, sorted `ids`, `total` and `coverage: { complete, selected,
+completeQuotes, incomplete }`. Each incomplete item has `id`, `missingCounters`
+and `missingPrices`. Total is an exact fixed-12 BigInt-derived string only when
+all selected quotes are complete; explicit zero is `'0.000000000000'`. Empty or
+incomplete selections return null, never a partial subtotal; empty coverage has
+false/0/0/[] respectively. No writes, live entry/tariff reads or reclassification.
+This is selected historical pricing, not global consumption, current ownership,
+invoice truth or cost ranking. Manual/runtime costs and CLI/UI remain separate.
 
 ### Global imported-estimate history (API only)
 
@@ -218,8 +241,8 @@ estimates delivered in PR #9 (main `8e2c823`, commit
 `7ad2dbed8c89f23f563cfa3d15376aaf1e996301`); historical evidence is in the roadmap.
 Global enumeration delivered in PR #10 (main `8dcc385`, commit
 `5a617299619e`); its review/checks are historical, not authority for this unit.
-Current unit hardens only the single imported-estimate reader; writer evidence
-is in the roadmap and parent verification/review/delivery remain pending.
+Current unit adds selected historical cost summaries; writer evidence is in the
+roadmap and parent review/delivery remain pending.
 Rollback removes only this unit's four-file diff; preserve durable databases,
 prior APIs and both ignored deferred fixtures.
 
