@@ -594,6 +594,10 @@ test("manual additive initialization preserves pre-catalogue schema and accounti
     ledger.db.prepare("PRAGMA table_info(manual_estimates)").all().length,
     3,
   );
+  assert.equal(
+    ledger.db.prepare("PRAGMA table_info(imported_estimates)").all().length,
+    3,
+  );
   assert.deepEqual(snapshot(), before);
   assert.equal(ledger.ranking()[0].runtimeEstimate, 0.25);
   ledger.close();
@@ -1733,6 +1737,238 @@ test("accounting includes quarantined identity, session and lineage conflict cla
   } finally {
     ledger.close();
   }
+});
+
+test("imported estimates freeze eligibility and copied pricing across retries and restart", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  const source = f.file("saved.jsonl", [header("s"), message("one")]);
+  ledger.importFiles({ sessions: [source] });
+  const state = () => [
+    ledger.entries(),
+    ledger.accounting(),
+    ledger.ranking(),
+    ledger.coverage(),
+  ];
+  const before = state();
+  const request = { id: "saved", ...importedRequest };
+  const incomplete = ledger.addImportedEstimate(request);
+  assert.deepEqual(incomplete, {
+    id: request.id,
+    ...ledger.quoteImported(importedRequest),
+    provenance: "imported-entry-estimate",
+  });
+  assert.equal(incomplete.quote.total, null);
+  assert.equal(incomplete.provenance, "imported-entry-estimate");
+  assert.equal(incomplete.usageProvenance, "imported-entry");
+  ledger.addManualEstimate({
+    id: request.id,
+    ...manualQuery,
+    at: manualPrice.effectiveFrom,
+    usage: coreUsage,
+  });
+  for (const category of coreCategories)
+    ledger.addManualPrice({
+      ...manualPrice,
+      category,
+      effectiveFrom: "2025-12-30T00:00:00.000Z",
+    });
+  const complete = ledger.addImportedEstimate({ ...request, id: "complete" });
+  assert.equal(complete.quote.total, "0.000019000000");
+  const saved = structuredClone(complete);
+  complete.quote.categories.input.price.ratePerMillion = "999";
+  complete.eligibility.reasons.push("changed");
+  assert.deepEqual(ledger.importedEstimate({ id: "complete" }), saved);
+  assert.deepEqual(state(), before);
+  ledger.close();
+  ledger = openLedger(f.db);
+  const original = ledger.db.prepare.bind(ledger.db);
+  ledger.db.prepare = (sql) => {
+    assert.doesNotMatch(sql, /SELECT.*(?:sources|entries|manual_prices)/s);
+    return original(sql);
+  };
+  assert.deepEqual(
+    ledger.addImportedEstimate({
+      currency: "USD",
+      entry: "one",
+      session: "s",
+      id: "saved",
+    }),
+    incomplete,
+  );
+  assert.throws(
+    () => ledger.addImportedEstimate({ ...request, entry: "missing" }),
+    /^Error: Imported estimate conflict$/,
+  );
+  ledger.db.prepare = original;
+  assert.equal(ledger.importedEstimate({ id: "absent" }), null);
+  for (const category of coreCategories)
+    ledger.addManualPrice({
+      ...manualPrice,
+      category,
+      effectiveFrom: "2025-12-31T00:00:00.000Z",
+      ratePerMillion: "2",
+    });
+  assert.deepEqual(
+    ledger.addImportedEstimate({ ...request, id: "complete" }),
+    saved,
+  );
+  assert.equal(
+    ledger.addImportedEstimate({ ...request, id: "later" }).quote.total,
+    "0.000038000000",
+  );
+  appendFileSync(
+    source,
+    JSON.stringify(
+      message("one", { usage: { ...usage, input: 11, totalTokens: 20 } }),
+    ) + "\n",
+  );
+  ledger.importFiles({ sessions: [source] });
+  assert.equal(
+    ledger.quoteImported(importedRequest).eligibility.eligible,
+    false,
+  );
+  assert.deepEqual(ledger.addImportedEstimate(request), incomplete);
+  assert.throws(
+    () => ledger.addImportedEstimate({ ...request, id: "rejected" }),
+    /^Error: Imported estimate ineligible$/,
+  );
+  assert.equal(ledger.importedEstimate({ id: "rejected" }), null);
+  ledger.close();
+});
+
+test("imported estimates validate before SQL and retain exact importer identifiers", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const request = { id: "valid", ...importedRequest };
+  const original = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  ledger.db.prepare = ledger.db.exec = () =>
+    assert.fail("SQL before validation");
+  for (const invalid of [
+    null,
+    [],
+    {},
+    { ...request, extra: 1 },
+    { ...request, [Symbol()]: 1 },
+    { ...request, id: " bad" },
+    { ...request, id: "x\n" },
+    { ...request, session: "" },
+    { ...request, entry: "x".repeat(513) },
+    { ...request, currency: "usd" },
+    { ...request, at: manualPrice.effectiveFrom },
+    { ...request, usage: coreUsage },
+  ])
+    assert.throws(
+      () => ledger.addImportedEstimate(invalid),
+      /^Error: Invalid imported estimate$/,
+    );
+  for (const invalid of [
+    {},
+    { id: " valid" },
+    { id: "valid", extra: 1 },
+    { id: "valid", [Symbol()]: 1 },
+  ])
+    assert.throws(
+      () => ledger.importedEstimate(invalid),
+      /^Error: Invalid imported estimate$/,
+    );
+  ledger.db.prepare = () => {
+    throw new Error("PRIVATE_SENTINEL");
+  };
+  assert.throws(
+    () => ledger.importedEstimate({ id: request.id }),
+    /^Error: Imported estimate operation failed$/,
+  );
+  ledger.db.prepare = original;
+  ledger.db.exec = exec;
+  ledger.importFiles({
+    sessions: [f.file("literal.jsonl", [header(" s "), message(" one ")])],
+  });
+  assert.equal(
+    ledger.addImportedEstimate({ ...request, session: " s ", entry: " one " })
+      .observation.certainty,
+    "own",
+  );
+  ledger.close();
+});
+
+test("imported estimates rollback failures and serialize independent writer attempts", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  ledger.importFiles({
+    sessions: [f.file("source.jsonl", [header("s"), message("one")])],
+  });
+  const other = openLedger(f.db);
+  other.db.exec("PRAGMA busy_timeout=0");
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  const request = { id: "atomic", ...importedRequest };
+  for (const failure of ["collector", "tariff", "insert", "commit"]) {
+    ledger.db.prepare = (sql) => {
+      if (
+        (failure === "collector" && sql.includes("FROM sources")) ||
+        (failure === "tariff" && sql.includes("FROM manual_prices")) ||
+        (failure === "insert" &&
+          sql.startsWith("INSERT INTO imported_estimates"))
+      )
+        throw new Error("PRIVATE_SENTINEL");
+      return prepare(sql);
+    };
+    ledger.db.exec = (sql) => {
+      if (failure === "commit" && sql === "COMMIT")
+        throw new Error("PRIVATE_SENTINEL");
+      return exec(sql);
+    };
+    assert.throws(
+      () => ledger.addImportedEstimate(request),
+      /^Error: Imported estimate operation failed$/,
+    );
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    assert.equal(ledger.importedEstimate({ id: request.id }), null);
+  }
+  const attempts = [];
+  ledger.db.prepare = (sql) => {
+    if (
+      sql.includes("FROM sources") ||
+      sql.startsWith("INSERT INTO imported_estimates")
+    ) {
+      assert.throws(
+        () => other.addManualPrice(manualPrice),
+        /^Error: Manual price operation failed$/,
+      );
+      assert.throws(
+        () => other.addImportedEstimate(request),
+        /^Error: Imported estimate operation failed$/,
+      );
+      attempts.push(sql);
+    }
+    return prepare(sql);
+  };
+  assert.equal(ledger.addImportedEstimate(request).quote.total, null);
+  ledger.db.prepare = prepare;
+  assert.equal(attempts.length, 2);
+  other.addManualPrice(manualPrice);
+  assert.equal(
+    ledger.addImportedEstimate(request).quote.categories.input.price,
+    null,
+  );
+  assert.equal(
+    ledger.addImportedEstimate({ ...request, id: "after" }).quote.categories
+      .input.price.ratePerMillion,
+    "1.000000",
+  );
+  assert.deepEqual(
+    other.addImportedEstimate(request),
+    ledger.importedEstimate({ id: request.id }),
+  );
+  assert.throws(
+    () => other.addImportedEstimate({ ...request, currency: "EUR" }),
+    /^Error: Imported estimate conflict$/,
+  );
+  other.close();
+  ledger.close();
 });
 
 test("default database is outside repository", () => {
