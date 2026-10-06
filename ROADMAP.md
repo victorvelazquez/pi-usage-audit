@@ -11,10 +11,11 @@
 - **Entregado (3, cotización):** PR #5 integrado en `main` `b3fd9c5`, commit `f473cb7`. Revisión nativa `review-57f9a0860f6d2e68`, target `248ee402ea11afe31272797035701ec934ac063afb4a8e2adb5dcc517a1d9636`, aprobada y reconocida, sin correcciones.
 - **Entregado (3, estimaciones explícitas):** PR #6, main `68a85dc`, commit `1a05948`. Revisión nativa `975d244bc17353a7`, target `2afff9cf9de427a49799b379a679ff3a91c3427309d245498897614022e191ef`, aprobada con ack, sin correcciones.
 - **Entregado (3, cotización importada):** PR #7, main `23ab4bc`, commit `8cdcbe9`. Revisión nativa `review-e61564f8d238322b`, target `c9a732ae2df2e3a287bf346f3edc5b029acf54d7e89639a608ebb7057e1006d4`, aprobada con ack, sin correcciones; evidencia histórica.
-- **Bloque actual (3):** extracción interna del colector importado, sin cambios de comportamiento; comprobación funcional del padre y LSP completos, revisión pendiente.
+- **Entregado (3, colector):** PR #8 integrado, main `35ef3e4`; extracción `ced9521` y política LF `dae15e9` conservadas.
+- **Bloque actual (3):** estimaciones importadas durables por API; implementación y pruebas del escritor, revisión/entrega del padre pendientes.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
-- **Siguiente:** verificar/revisar y entregar la extracción antes de implementar estimaciones importadas durables en otra unidad de hasta 400 líneas. Sin publicación autorizada ahora.
+- **Siguiente:** verificación independiente/revisión y entrega sólo con autorización; sin publicación autorizada ahora.
 - **No iniciado:** dashboard y captura en vivo. No se han recolectado sesiones reales.
 
 ## Lista completa del MVP
@@ -24,12 +25,24 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Catálogo, cotizaciones y estimaciones explícitas entregados; extracción interna en verificación | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 3. Precios manuales | Catálogo, cotizaciones, estimaciones explícitas y colector entregados; persistencia importada en verificación | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 3 — extracción del colector importado
+## Bloque actual: 3 — estimaciones importadas durables
+
+- [x] API estricta de cuatro claves y consulta por ID; namespace independiente y migración aditiva.
+- [x] `BEGIN IMMEDIATE`: lookup antes de clasificación/precios, snapshot inmutable e ineligibles sin persistencia; tarifas faltantes producen quote incompleto.
+- [x] Fixture ignorado intacto: hashes completos y de cuerpos verificados antes de restaurar sus tres pruebas; tarifa retrospectiva ahora aplicable cambia ID nuevo de `0.000019000000` a `0.000038000000`.
+- [x] RED escritor: cuatro imported pasan, tres fallan por API ausente; GREEN inicial 7/7.
+- [x] Escritor final: imported 7/7, suite sintética 38/38, ambas comprobaciones `node --check` y `git diff --check` aprobadas; diagnósticos disponibles limpios, sin build aplicable.
+- [x] Triangulación: rollback de colector/tarifa/insert/commit, writers independientes bloqueados durante creación, arbitraje posterior, reinicio/copias y esquema legado preservado.
+- [ ] Verificación independiente, revisión y entrega del padre pendientes.
+
+**Límites:** 400 líneas formateadas totales, incluidos tests/docs; alternativas no aditivas, sin consumo nuevo, runtime/ranking, CLI/UI, fuentes ni sesiones reales. Rollback sólo de esta unidad en los cuatro archivos autorizados, nunca bases ni trabajo entregado.
+
+## Bloque 3 entregado — extracción del colector importado
 
 - [x] Extraer clasificación, observación y quote opcional a un colector interno sin transacciones; el llamador conserva validación, transacción diferida y errores.
 - [x] Preservar exactamente las tres pruebas RED de estimaciones en `local-data/deferred-imported-estimates.test.js` (fixture sintético ignorado); restaurar sólo sus adiciones en audit, conservando todas las pruebas actuales.
@@ -37,7 +50,7 @@
 - [x] Escritor: `npm test` 35/35; ambas comprobaciones de sintaxis y `git diff --check` aprobados.
 - [x] Padre tras autoformato: `npm test` 35/35 y ambas comprobaciones de sintaxis aprobadas; 137 líneas antes del cierre documental. Evaluación nativa: riesgo medio/escritor grande, sin verificador separado exigido.
 - [x] LSP primario confirmado limpio al comprobar cada archivo individualmente con mayor presupuesto; los dos intentos batch previos fueron inconclusos por timeout.
-- [ ] Revisión nativa y entrega autorizada pendientes.
+- [x] Integrado mediante PR #8; confirmación de base suministrada por el padre.
 
 **División:** primero esta extracción, después persistencia importada; máximo 400 líneas formateadas por unidad. Sin APIs/tablas durables nuevas, cambios de runtime/ranking, fuentes, CLI, UI ni datos reales. La tarifa retrospectiva del fixture diferido es anterior a la original y no prueba cambio de precio para un ID nuevo; reforzar ese caso en la unidad siguiente. La evidencia PR #7 siguiente es histórica, no aprobación de este refactor.
 

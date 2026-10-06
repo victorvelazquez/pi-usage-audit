@@ -199,6 +199,8 @@ export function openLedger(path = defaultDatabasePath()) {
         PRIMARY KEY(provider,model,category,currency,effectiveFrom));
       CREATE TABLE IF NOT EXISTS manual_estimates (
         id TEXT PRIMARY KEY NOT NULL, request TEXT NOT NULL, estimate TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS imported_estimates (
+        id TEXT PRIMARY KEY NOT NULL, request TEXT NOT NULL, estimate TEXT NOT NULL);
       COMMIT;`),
     );
     db.prepare("INSERT OR IGNORE INTO config VALUES (?,?)").run(
@@ -470,6 +472,78 @@ export function openLedger(path = defaultDatabasePath()) {
         );
       } catch {
         throw new Error("Imported quote operation failed");
+      }
+    },
+    addImportedEstimate: (value) => {
+      const valid = validateManual(
+        value,
+        ["id", "session", "entry", "currency"],
+        "Invalid imported estimate",
+      );
+      if (!text(valid.session) || !text(valid.entry))
+        throw new Error("Invalid imported estimate");
+      const request = {
+        id: valid.id,
+        session: valid.session,
+        entry: valid.entry,
+        currency: valid.currency,
+      };
+      const encoded = JSON.stringify(request);
+      let begun = false;
+      let rejection = null;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        begun = true;
+        const old = db
+          .prepare("SELECT request,estimate FROM imported_estimates WHERE id=?")
+          .get(request.id);
+        let estimate;
+        if (old) {
+          if (old.request !== encoded) {
+            rejection = "Imported estimate conflict";
+            throw new Error(rejection);
+          }
+          estimate = storedJson(old.estimate);
+        } else {
+          const { id, ...query } = request;
+          const collected = collectImported(query);
+          if (!collected.eligibility.eligible) {
+            rejection = "Imported estimate ineligible";
+            throw new Error(rejection);
+          }
+          estimate = {
+            id,
+            ...collected,
+            provenance: "imported-entry-estimate",
+          };
+          db.prepare("INSERT INTO imported_estimates VALUES (?,?,?)").run(
+            id,
+            encoded,
+            JSON.stringify(estimate),
+          );
+        }
+        db.exec("COMMIT");
+        return estimate;
+      } catch {
+        if (begun) {
+          try {
+            db.exec("ROLLBACK");
+          } catch {
+            rejection = null;
+          }
+        }
+        throw new Error(rejection ?? "Imported estimate operation failed");
+      }
+    },
+    importedEstimate: (value) => {
+      const { id } = validateManual(value, ["id"], "Invalid imported estimate");
+      try {
+        const row = db
+          .prepare("SELECT estimate FROM imported_estimates WHERE id=?")
+          .get(id);
+        return row ? storedJson(row.estimate) : null;
+      } catch {
+        throw new Error("Imported estimate operation failed");
       }
     },
     addManualEstimate: (value) => {

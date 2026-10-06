@@ -129,10 +129,31 @@ No header/message timestamp fallback, implicit now or timezone guessing occurs.
 Classification and the existing manual quote share one deferred read transaction.
 Missing tariffs leave ownership eligible but the quote's total null; zero remains
 known. Operational/cleanup failures become `Imported quote operation failed`.
-Fresh calls reflect late lineage/conflicts and retrospective tariffs. No durable
-imported estimate, invoice claim, historical rewrite, runtime/ranking change or
-CLI integration; returned objects are detached. Delivered in PR #7 (main
+Fresh calls reflect late lineage/conflicts and retrospective tariffs. No invoice
+claim, historical rewrite, runtime/ranking change or CLI integration; returned
+objects are detached. Delivered in PR #7 (main
 `23ab4bc`, commit `8cdcbe9`); historical review evidence is in the roadmap.
+
+### Durable imported-entry estimates (API only)
+
+`ledger.addImportedEstimate({ id, session, entry, currency })` requires exactly
+four keys; `ledger.importedEstimate({ id })` returns the saved snapshot or null.
+IDs use manual-estimate literal rules; session/entry use imported-quote rules.
+Invalid requests fail before SQL with `Invalid imported estimate`.
+
+Creation stores the actual imported quote shape, with `id` and
+`provenance: 'imported-entry-estimate'`, `usageProvenance: 'imported-entry'`,
+copied observation, creation-time eligibility and full applied-price quote.
+Ineligible new IDs throw `Imported estimate ineligible` without persistence;
+eligible entries with missing tariffs persist an incomplete quote (null total).
+
+The additive `imported_estimates` table has its own ID namespace. `BEGIN IMMEDIATE`
+serializes lookup, classification, pricing and insertion. Canonical retries return
+original snapshots **before** reclassification/pricing, including after conflicts
+or retrospective tariffs; changed requests throw `Imported estimate conflict`.
+Operational failures roll back with `Imported estimate operation failed`.
+New IDs use current evidence/catalogue. Alternative estimates are non-additive,
+not new consumption, invoice truth or runtime/ranking changes. No CLI integration.
 
 Append-only applies to these public catalogue/estimate methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds tables transactionally to existing SQLite databases without changing schema versions or deleting data.
 
@@ -146,15 +167,11 @@ Deferred: broader block 2 coverage and trustworthy child-origin evidence, automa
 
 Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). Estimates delivered in PR #6 (main `68a85dc`), imported quotes in PR #7 (main `23ab4bc`).
 
-Current unit: behavior-preserving extraction of the imported collector. Public
-validation, deferred transaction, response and generic errors stay unchanged;
-the internal collector owns no transaction. No durable imported API or table is
-implemented. Durable estimates are a separate later unit, after this extraction's
-authorized delivery. Its three authored RED tests are preserved as a deferred
-synthetic fixture in ignored `local-data/deferred-imported-estimates.test.js`,
-not removed from future coverage. Writer compatibility checks are in the roadmap;
-parent verification, native review and delivery remain pending. Rollback touches
-only this unit's source/documentation changes, never deletes databases.
+Collector extraction delivered in PR #8 (main `35ef3e4`). Current unit adds durable
+imported estimates; its three deferred synthetic tests are restored and strengthened.
+Writer evidence is in the roadmap; parent verification/review and delivery remain
+pending. Rollback removes only this unit's ledger, audit tests and documentation
+changes; never delete databases or earlier delivered behavior.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 
