@@ -141,11 +141,14 @@ function validateManual(value, keys, error = "Invalid manual price") {
   const own = Reflect.ownKeys(value);
   if (own.length !== keys.length || !keys.every((key) => own.includes(key)))
     invalid();
-  for (const key of ["provider", "model"]) {
+  for (const key of ["id", "provider", "model"].filter((key) =>
+    keys.includes(key),
+  )) {
     const id = value[key];
     if (!text(id) || id.trim() !== id || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(id))
       invalid();
   }
+  if (keys.length === 1) return { id: value.id };
   if (
     typeof value.currency !== "string" ||
     value.currency.length !== 3 ||
@@ -194,6 +197,8 @@ export function openLedger(path = defaultDatabasePath()) {
         provider TEXT NOT NULL, model TEXT NOT NULL, category TEXT NOT NULL,
         currency TEXT NOT NULL, effectiveFrom TEXT NOT NULL, ratePerMillion TEXT NOT NULL,
         PRIMARY KEY(provider,model,category,currency,effectiveFrom));
+      CREATE TABLE IF NOT EXISTS manual_estimates (
+        id TEXT PRIMARY KEY NOT NULL, request TEXT NOT NULL, estimate TEXT NOT NULL);
       COMMIT;`),
     );
     db.prepare("INSERT OR IGNORE INTO config VALUES (?,?)").run(
@@ -301,7 +306,7 @@ export function openLedger(path = defaultDatabasePath()) {
       actor: consensus("agent") === "unknown" ? "unknown" : "agent",
     };
   };
-  return {
+  const api = {
     db,
     close: () => db.close(),
     attribution,
@@ -390,6 +395,83 @@ export function openLedger(path = defaultDatabasePath()) {
         coverage: { complete, missingCounters, missingPrices },
         total: complete ? fixedAmount(total) : null,
       };
+    },
+    addManualEstimate: (value) => {
+      const valid = validateManual(
+        value,
+        ["id", "provider", "model", "currency", "at", "usage"],
+        "Invalid manual estimate",
+      );
+      const request = {
+        id: valid.id,
+        provider: valid.provider,
+        model: valid.model,
+        currency: valid.currency,
+        at: valid.at,
+        usage: Object.fromEntries(
+          priceCategories.map((key) => [
+            key,
+            Object.hasOwn(valid.usage, key) ? valid.usage[key] : null,
+          ]),
+        ),
+      };
+      const encoded = JSON.stringify(request);
+      let begun = false;
+      let conflict = false;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        begun = true;
+        const old = db
+          .prepare("SELECT request,estimate FROM manual_estimates WHERE id=?")
+          .get(request.id);
+        let estimate;
+        if (old) {
+          if (old.request !== encoded) {
+            conflict = true;
+            throw new Error("Manual estimate conflict");
+          }
+          estimate = storedJson(old.estimate);
+        } else {
+          const { id, ...query } = request;
+          estimate = {
+            id,
+            ...api.quoteManual(query),
+            provenance: "manual-estimate",
+            usageProvenance: "caller-explicit",
+          };
+          db.prepare("INSERT INTO manual_estimates VALUES (?,?,?)").run(
+            id,
+            encoded,
+            JSON.stringify(estimate),
+          );
+        }
+        db.exec("COMMIT");
+        return estimate;
+      } catch {
+        if (begun) {
+          try {
+            db.exec("ROLLBACK");
+          } catch {
+            // Keep operation errors generic even if rollback fails.
+          }
+        }
+        throw new Error(
+          conflict
+            ? "Manual estimate conflict"
+            : "Manual estimate operation failed",
+        );
+      }
+    },
+    manualEstimate: (value) => {
+      const { id } = validateManual(value, ["id"], "Invalid manual estimate");
+      try {
+        const row = db
+          .prepare("SELECT estimate FROM manual_estimates WHERE id=?")
+          .get(id);
+        return row ? storedJson(row.estimate) : null;
+      } catch {
+        throw new Error("Manual estimate operation failed");
+      }
     },
     entries: () => readTransaction(snapshot),
     accounting: () =>
@@ -654,4 +736,5 @@ export function openLedger(path = defaultDatabasePath()) {
       });
     },
   };
+  return api;
 }

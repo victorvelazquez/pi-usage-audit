@@ -8,11 +8,12 @@
 - **Entregado (1A + 1B):** PR #2 integrado en `main`, comprobado en el historial tras actualizar la base: `9f4745c`, commit del bloque `a100962`. Se conserva la evidencia previa; no se reabre esa revisión.
 - **Entregado (2, unidad acotada):** `accounting().breakdown`, integrado mediante PR #3: merge `76f8931`, commit `7d5fff5`. Revisión RDD `review-8bb3c81ff0de5489`, target `f817b475`, aprobada; ack consumido antes del commit, sin correcciones.
 - **Entregado (3, catálogo):** PR #4 integrado en `main`, merge `a55c043`, commit `52a08854bba352c8e626298601dd4152b6e8d583`. Revisión `45f20b992971afaf`, target `300bd64a137b4a3977b6ebbc99ef3f483288750fd1f298d33ef84d1a51a99a9f`, aprobada; ack consumido antes del commit, sin correcciones.
-- **Bloque actual (3, cotización):** `quoteManual` de sólo lectura para contadores explícitos del llamador; implementación y verificación funcional independiente completas. Revisión nativa y entrega pendientes.
+- **Entregado (3, cotización):** PR #5 integrado en `main` `b3fd9c5`, commit `f473cb7`. Revisión nativa `review-57f9a0860f6d2e68`, target `248ee402ea11afe31272797035701ec934ac063afb4a8e2adb5dcc517a1d9636`, aprobada y reconocida, sin correcciones.
+- **Bloque actual (3, estimaciones explícitas):** snapshots durables por ID, implementación y comprobación funcional del padre completas; revisión nativa y entrega pendientes.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
-- **Siguiente:** revisión nativa de cotizaciones y autorización de entrega antes de otra unidad funcional. No ampliar fuentes ni prometer roles o deduplicación completa.
-- **No iniciado:** estimaciones manuales persistidas, dashboard y captura en vivo. No se han recolectado sesiones reales.
+- **Siguiente:** revisión nativa de estimaciones antes de autorizar entrega. No ampliar fuentes ni prometer roles o deduplicación completa.
+- **No iniciado:** dashboard y captura en vivo. No se han recolectado sesiones reales.
 
 ## Lista completa del MVP
 
@@ -21,12 +22,24 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Catálogo entregado; cotizaciones verificadas, revisión/entrega pendientes | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 3. Precios manuales | Catálogo y cotizaciones entregados; estimaciones explícitas verificadas por escritor, revisión/entrega pendientes | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 3 — cotización manual de sólo lectura
+## Bloque actual: 3 — estimaciones manuales explícitas persistidas
+
+- [x] API estricta de seis claves y consulta por ID; validación antes de SQL, sin metadatos libres.
+- [x] Request canónico de cuatro contadores; null/omisión equivalentes, cero distinto; mismo ID conserva snapshot sin consultar tarifas, conflicto sin escrituras.
+- [x] Tabla aditiva y `BEGIN IMMEDIATE`; reutilizar cotización exacta, procedencias explícitas y tarifas copiadas, incluso cobertura incompleta.
+- [x] Escritor: `node --test --test-name-pattern=manual test/audit.test.js`: RED cinco fallos por API ausente; GREEN 9/9. `npm test`: 31/31; `node --check src/ledger.js` y `node --check test/audit.test.js`: aprobados. Regresiones de reinicio, copias mutables, tarifas retrospectivas, límites exactos, rollback y esquema legado.
+- [x] Arbitraje probado entre handles independientes secuenciales; no se afirma carrera simultánea entre procesos para estimaciones.
+- [x] Padre tras autoformato: `npm test` 31/31, dos comprobaciones de sintaxis y LSP sin errores. Evaluación nativa: riesgo medio, escritor grande; no exige verificador separado. El padre no observó el RED histórico.
+- [ ] Revisión nativa y entrega autorizada.
+
+**Presupuesto:** previsión 305–370; medición del padre tras autoformato 356 líneas antes del cierre documental. Techo 400 líneas formateadas totales (adiciones + eliminaciones), incluidas pruebas/docs. Sin CLI, fuentes nuevas, datos reales, integración de entradas ni cambios de ranking/runtime. Rollback sólo en los cuatro archivos autorizados, sin borrar bases. Reestimar requiere ID nuevo; `at` sigue siendo vigencia, no conocimiento histórico.
+
+## Bloque 3 entregado — cotización manual de sólo lectura
 
 - [x] Validar cinco claves explícitas, fecha UTC y sólo cuatro contadores seguros; rechazos antes de SQL.
 - [x] Seleccionar versiones inclusivas por categoría en un SELECT y calcular importes exactos con BigInt.
@@ -34,9 +47,9 @@
 - [x] Probar límites, versiones futuras/retrospectivas, reinicio, mutación de respuesta y ausencia de escrituras/cambios contables.
 - [x] Escritor: RED observado en tres pruebas nuevas por API ausente (y regresión histórica ampliada); GREEN 6/6 `manual`, `npm test` 28/28 y dos comprobaciones de sintaxis aprobadas.
 - [x] Verificador independiente: 28/28 pruebas y 6/6 `manual`, dos comprobaciones de sintaxis y LSP sin errores, hashes estables; probes API con 103 entradas inválidas rechazadas antes de SQL y coherencia con escritor independiente. No observó el RED histórico.
-- [ ] Revisión nativa y entrega autorizada.
+- [x] Revisión nativa aprobada y entrega mediante PR #5; identidades registradas arriba. La evidencia de pruebas siguiente es histórica, no aprobación de la unidad nueva.
 
-**Presupuesto actual:** objetivo 250–295 líneas formateadas; medición independiente tras autoformato: 393 líneas antes del cierre documental (adiciones + eliminaciones). Se conserva el techo 400; la excepción de 450 del catálogo no se traslada a esta unidad.
+**Presupuesto histórico de cotización:** objetivo 250–295 líneas formateadas; medición independiente tras autoformato: 393 líneas antes del cierre documental (adiciones + eliminaciones). Se conserva el techo 400; la excepción de 450 del catálogo no se traslada a esta unidad.
 
 **Alcance:** sólo contadores del llamador; ninguna cotización ni estimación persistida, integración de costos/ranking, conversión, CLI o datos reales. `at` es vigencia de tarifa, no conocimiento histórico: una adición retrospectiva puede cambiar una cotización nueva. La respuesta anterior conserva su tarifa copiada, sin garantía durable. Aplicación futura: nuevo registro inmutable con procedencia, nunca sobrescritura. Rollback: sólo cambios de esta unidad en los cuatro archivos permitidos, sin borrar bases.
 
