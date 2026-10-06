@@ -13,7 +13,8 @@
 - **Entregado (3, cotización importada):** PR #7, main `23ab4bc`, commit `8cdcbe9`. Revisión nativa `review-e61564f8d238322b`, target `c9a732ae2df2e3a287bf346f3edc5b029acf54d7e89639a608ebb7057e1006d4`, aprobada con ack, sin correcciones; evidencia histórica.
 - **Entregado (3, colector):** PR #8 integrado, main `35ef3e4`; extracción `ced9521` y política LF `dae15e9` conservadas.
 - **Entregado (3, persistencia importada):** PR #9, main `8e2c823`, commit `7ad2dbed8c89f23f563cfa3d15376aaf1e996301`; evidencia histórica abajo.
-- **Bloque actual (3):** enumeración global de estimaciones importadas, sólo lectura por API; revisión/entrega del padre pendientes.
+- **Entregado (3, enumeración):** PR #10, main `8dcc385`, commit `5a617299619e`; revisión `review-7802c286f859ac36` aprobada con ack, sin correcciones; autoridad consumida. Target histórico `f57c418063f337c1c9c6ae0dc6b33e5bca0cc610f0c699753257f2512bd344f4`.
+- **Bloque actual (3):** validación histórica del lector por ID; resumen seleccionado después, en otra unidad. Verificación/revisión/entrega del padre pendientes.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
 - **Siguiente:** revisión del padre y entrega sólo con autorización; sin publicación autorizada ahora. No se exige verificador independiente en esta unidad.
@@ -26,12 +27,24 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Catálogo, cotizaciones, estimaciones explícitas, colector y persistencia importada entregados; enumeración en revisión | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector y enumeración entregados; lector validado en revisión | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 3 — enumeración global importada
+## Bloque actual: 3 — lector histórico validado por ID
+
+- [x] Sólo `importedEstimate({ id })`: estructura requerida, identidad/procedencia y coherencia histórica; missing ID sigue null y validación pública sin cambios.
+- [x] Parser privado fixed-12/BigInt, cuatro categorías y cobertura coherentes; total completo exacto o null incompleto, sin subtotal.
+- [x] Baseline tras aparcar cinco RED de resumen: `npm test` 41/41; fixture completo y cuerpo de 256 líneas preservados byte a byte, ignorados/inactivos/no publicados.
+- [x] RED nuevo: imported 11/12, rechazo ausente de JSON válido corrupto; GREEN inicial 12/12.
+- [x] Casos alternos: completo, cero, incompleto con null, importes grandes, metadata extra, historia tras conflicto/tarifas, copias/reinicio y fallos genéricos; una lectura, sin cambios contables/almacenamiento.
+- [x] Escritor final: imported 12/12, `npm test` 43/43 y dos comprobaciones `node --check` aprobadas; diagnósticos JS/Markdown de edición limpios. API sintética, sin build/runtime aplicable.
+- [ ] Verificación/revisión/entrega del padre pendientes; ninguna autoridad histórica aprueba esta unidad.
+
+**Límites:** máximo 400 líneas formateadas en cuatro archivos publicados; fixture ignorado adicional preservado. No cambia enumeración ni retries de creación, esquema, clasificación/precios actuales, ranking/runtime, CLI/UI ni datos reales. Resumen seleccionado no implementado; siguiente unidad separada. Rollback sólo del diff de cuatro archivos, nunca bases ni fixtures.
+
+## Bloque 3 entregado — enumeración global importada
 
 - [x] `importedEstimates({})` estricto: cero claves propias, rechazo antes de SQL.
 - [x] Un SELECT de `imported_estimates`, orden literal `id COLLATE BINARY`, snapshots históricos intactos y profundamente separados; `additive: false`.
@@ -39,7 +52,7 @@
 - [x] Triangulación: vacío, alternativas de una entrada, USD/EUR, quote completo/incompleto, tarifas/conflictos posteriores, reinicio/mutación, errores de prepare/SELECT y JSON corrupto sin resultado parcial.
 - [x] Una lectura sin transacción/escrituras ni consultas de entradas/precios; estado contable, filas/conteos y hash de almacenamiento conservados.
 - [x] Escritor final: `node --test --test-name-pattern=imported test/audit.test.js` 10/10; `npm test` 41/41; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Diagnósticos de edición JS/Markdown limpios; sin build/runtime aplicable a esta API, pruebas funcionales sólo sintéticas.
-- [ ] Revisión/entrega del padre pendientes; ninguna autoridad histórica aprueba esta unidad.
+- [x] Padre histórico: suite 41/41, sintaxis en dos archivos, diff check y LSP en dos archivos limpios; diff final formateado de 282 líneas. PR #10 integrado, revisión reconocida sin correcciones; no verifica el lector nuevo.
 
 **Límites:** máximo 400 líneas formateadas totales en los cuatro archivos autorizados. Historial no aditivo, no cobertura de todas las entradas ni ownership actual, sin selección preferida, suma, repricing, paginación, manual-estimates globales, runtime/ranking, CLI/UI ni datos reales. Lectura única consistente por SQLite; no se afirma nueva prueba de concurrencia. Rollback sólo del diff de esta unidad; preservar bases/APIs durables y fixture ignorado, ya activo y no publicado.
 

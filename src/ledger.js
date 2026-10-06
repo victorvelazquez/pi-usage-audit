@@ -133,6 +133,106 @@ const canonicalUtc = (date) =>
   new Date(date).toISOString() === date;
 const fixedAmount = (scaled) =>
   `${scaled / 1000000000000n}.${(scaled % 1000000000000n).toString().padStart(12, "0")}`;
+function checkedAmount(value) {
+  if (
+    typeof value !== "string" ||
+    value.match(/^(0|[1-9]\d*)\.\d{12}$/)?.[0] !== value
+  )
+    throw new Error("Invalid stored amount");
+  return BigInt(value.replace(".", ""));
+}
+function checkedImportedSnapshot(encoded, id) {
+  const saved = storedJson(encoded);
+  const require = (condition) => {
+    if (!condition) throw new Error("Invalid stored imported estimate");
+  };
+  const object = (value) =>
+    value && typeof value === "object" && !Array.isArray(value);
+  require(object(saved));
+  require(saved.id === id && text(saved.session) && text(saved.entry));
+  require(saved.provenance === "imported-entry-estimate");
+  require(saved.usageProvenance === "imported-entry");
+  require(object(saved.eligibility) && saved.eligibility.eligible === true);
+  require(
+    Array.isArray(saved.eligibility.reasons) &&
+      saved.eligibility.reasons.length === 0,
+  );
+  const observation = saved.observation;
+  const quote = saved.quote;
+  require(object(observation) && object(quote));
+  require(text(observation.operation) && observation.certainty === "own");
+  require(
+    object(observation.usage) &&
+      object(quote.categories) &&
+      object(quote.coverage),
+  );
+  // Validate known fields only: future metadata is preserved, not coerced away.
+  validateManual(
+    {
+      provider: observation.provider,
+      model: observation.model,
+      currency: saved.currency,
+      at: observation.timestamp,
+      usage: Object.fromEntries(
+        priceCategories.map((key) => [key, observation.usage[key]]),
+      ),
+    },
+    ["provider", "model", "currency", "at", "usage"],
+  );
+  require(
+    quote.provenance === "manual-quote" && quote.currency === saved.currency,
+  );
+  require(
+    quote.provider === observation.provider &&
+      quote.model === observation.model,
+  );
+  require(quote.at === observation.timestamp);
+  const missingCounters = [];
+  const missingPrices = [];
+  let total = 0n;
+  for (const category of priceCategories) {
+    const part = quote.categories[category];
+    require(object(part) && part.tokens === observation.usage[category]);
+    require(part.tokens === null || counter(part.tokens) !== null);
+    if (part.tokens === null) missingCounters.push(category);
+    let rate = null;
+    if (part.price === null) missingPrices.push(category);
+    else {
+      require(object(part.price));
+      const price = validateManual(
+        Object.fromEntries(manualKeys.map((key) => [key, part.price[key]])),
+        manualKeys,
+      );
+      require(price.ratePerMillion === part.price.ratePerMillion);
+      require(price.provider === quote.provider && price.model === quote.model);
+      require(price.currency === saved.currency && price.category === category);
+      require(price.effectiveFrom <= quote.at);
+      rate = BigInt(price.ratePerMillion.replace(".", ""));
+    }
+    if (part.tokens === null || rate === null) require(part.amount === null);
+    else {
+      const amount = checkedAmount(part.amount);
+      require(amount === BigInt(part.tokens) * rate);
+      total += amount;
+    }
+  }
+  const coverage = quote.coverage;
+  const complete = missingCounters.length === 0 && missingPrices.length === 0;
+  require(coverage.complete === complete);
+  for (const [key, expected] of Object.entries({
+    missingCounters,
+    missingPrices,
+  })) {
+    require(Array.isArray(coverage[key]));
+    require(coverage[key].length === expected.length);
+    require(
+      expected.every((category, index) => coverage[key][index] === category),
+    );
+  }
+  if (complete) require(checkedAmount(quote.total) === total);
+  else require(quote.total === null);
+  return saved;
+}
 function validateManual(value, keys, error = "Invalid manual price") {
   const invalid = () => {
     throw new Error(error);
@@ -541,7 +641,7 @@ export function openLedger(path = defaultDatabasePath()) {
         const row = db
           .prepare("SELECT estimate FROM imported_estimates WHERE id=?")
           .get(id);
-        return row ? storedJson(row.estimate) : null;
+        return row ? checkedImportedSnapshot(row.estimate, id) : null;
       } catch {
         throw new Error("Imported estimate operation failed");
       }

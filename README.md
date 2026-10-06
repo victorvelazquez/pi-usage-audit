@@ -155,6 +155,29 @@ Operational failures roll back with `Imported estimate operation failed`.
 New IDs use current evidence/catalogue. Alternative estimates are non-additive,
 not new consumption, invoice truth or runtime/ranking changes. No CLI integration.
 
+### Checked single imported-estimate reader
+
+`importedEstimate({ id })` still accepts exactly one literal ID, returns a detached
+historical snapshot or null, and rejects invalid requests before SQL. Its one
+bound SELECT now checks required stored structure, matching ID, provenance,
+creation-time eligibility/observation and quote identity/currency/date coherence.
+It does not reclassify entries, consult tariffs, repair data or write storage.
+
+Four category counters/prices/amounts and ordered missing-coverage arrays must
+agree. Canonical nonnegative fixed-12 money is parsed with BigInt; category
+amounts must equal saved rate × counter. Complete quotes require the exact sum;
+incomplete quotes require null total, never a partial subtotal. Explicit zero,
+large exact amounts and historical snapshots whose entries are now ineligible
+remain valid. Unknown extra JSON metadata is preserved, not rejected or coerced.
+Malformed JSON, invalid required structure/money or reader failures produce only
+`Imported estimate operation failed`; no partial object or private error escapes.
+
+This hardening applies **only to the single-ID reader**. Global enumeration and
+idempotent creation retries retain their existing decoding behavior. Arbitrary
+`ledger.db` SQL remains outside these guarantees. Selected-cost summary is a
+separate next unit, not implemented here; its five RED tests are preserved in an
+ignored, inactive and unpublished fixture. Parent verification/review are pending.
+
 ### Global imported-estimate history (API only)
 
 ```js
@@ -193,11 +216,12 @@ Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes deliver
 Collector extraction delivered in PR #8 (main `35ef3e4`). Durable imported
 estimates delivered in PR #9 (main `8e2c823`, commit
 `7ad2dbed8c89f23f563cfa3d15376aaf1e996301`); historical evidence is in the roadmap.
-Current unit adds read-only global imported-estimate enumeration. Writer evidence
-is in the roadmap; parent review/delivery remain pending. The ignored deferred
-fixture stays unchanged and unpublished; its tests are already active.
+Global enumeration delivered in PR #10 (main `8dcc385`, commit
+`5a617299619e`); its review/checks are historical, not authority for this unit.
+Current unit hardens only the single imported-estimate reader; writer evidence
+is in the roadmap and parent verification/review/delivery remain pending.
 Rollback removes only this unit's four-file diff; preserve durable databases,
-manual/imported APIs and all earlier delivered behavior.
+prior APIs and both ignored deferred fixtures.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 
