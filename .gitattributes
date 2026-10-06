@@ -1,0 +1,2 @@
+# Keep JavaScript checkouts consistent with LF-writing editors and formatters.
+*.js text eol=lf
