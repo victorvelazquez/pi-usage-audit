@@ -131,8 +131,8 @@ Missing tariffs leave ownership eligible but the quote's total null; zero remain
 known. Operational/cleanup failures become `Imported quote operation failed`.
 Fresh calls reflect late lineage/conflicts and retrospective tariffs. No durable
 imported estimate, invoice claim, historical rewrite, runtime/ranking change or
-CLI integration; returned objects are detached. Writer checks are recorded below;
-parent verification and native review of this new unit remain pending.
+CLI integration; returned objects are detached. Delivered in PR #7 (main
+`23ab4bc`, commit `8cdcbe9`); historical review evidence is in the roadmap.
 
 Append-only applies to these public catalogue/estimate methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds tables transactionally to existing SQLite databases without changing schema versions or deleting data.
 
@@ -144,7 +144,17 @@ SQLite uses WAL, a 5-second busy timeout, initialization retries, transactions a
 
 Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, automatic manual price application, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
 
-Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). Estimates delivered in PR #6 (main `68a85dc`). The current imported-quote unit rolls back only its changes in `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md`; no database deletion. Only synthetic ignored fixtures were used. Writer: imported RED 0/4, GREEN 4/4; final checks in roadmap. Parent verification, native review and authorized delivery remain pending.
+Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). Estimates delivered in PR #6 (main `68a85dc`), imported quotes in PR #7 (main `23ab4bc`).
+
+Current unit: behavior-preserving extraction of the imported collector. Public
+validation, deferred transaction, response and generic errors stay unchanged;
+the internal collector owns no transaction. No durable imported API or table is
+implemented. Durable estimates are a separate later unit, after this extraction's
+authorized delivery. Its three authored RED tests are preserved as a deferred
+synthetic fixture in ignored `local-data/deferred-imported-estimates.test.js`,
+not removed from future coverage. Writer compatibility checks are in the roadmap;
+parent verification, native review and delivery remain pending. Rollback touches
+only this unit's source/documentation changes, never deletes databases.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 
