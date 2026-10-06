@@ -6,9 +6,9 @@
 
 **El motor de datos funciona. La aplicación visual todavía no existe.**
 
-- **Última tarea terminada:** tokens globales por proveedor/modelo, integrada en `main` mediante PR #13.
-- **En curso:** simplificar este seguimiento. No hay una nueva función en implementación.
-- **Siguiente propuesta:** integrar un reporte global útil con agentes, modelos, tokens, costos estimados y datos faltantes. Alcance aún por acordar; no iniciado.
+- **Última tarea terminada:** documentación de seguimiento, integrada en `main` mediante PR #14; tokens por modelo entregados en PR #13.
+- **En curso:** reporte global por agente/modelo listo sin commit; padre confirmó 59/59 pruebas y LSP limpio; revisión nativa pendiente, no entregado.
+- **Siguiente propuesta:** costos comparativos con moneda/precios explícitos; pendientes, sin suma ni ranking monetario en esta unidad.
 - **Decisiones pendientes:** habilitar el dashboard y autorizar la selección de sesiones reales antes de trabajar en esos pasos.
 
 ## Qué ya podés hacer
@@ -28,7 +28,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
-| Reporte global integrado | Comparar agentes/modelos por tokens y costos estimados, sin confundir faltantes con cero | Piezas existentes; integración pendiente |
+| Reporte global integrado | Comparar tokens por agente/modelo y consultar importes runtime individuales sin moneda inferida | Listo sin commit; revisión/publicación pendientes; costos comparativos pendientes |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | No iniciado; requiere habilitación |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
@@ -79,6 +79,14 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 4. Análisis global | Parcial: ranking básico y tokens por proveedor/modelo entregados; integración pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
+
+## Reporte global runtime — candidato sin entregar
+
+- API `runtimeReport({})` y CLI `report --db` explícito existente; snapshot único, tokens exactos, importes individuales con moneda/total null y faltantes visibles.
+- Excepción final del usuario: exactamente **616 líneas formateadas** sólo para este reporte, tras expansión del autoformato; límite habitual de 400 permanece para unidades futuras. Sin división API/CLI.
+- RED original API 0/3 y CLI 0/1; final tras formato: API 5/5, CLI 1/1, suite 59/59 y cuatro comprobaciones de sintaxis aprobadas. Cobertura adicional sin defecto observado no requiere RED artificial.
+- Sin datos reales, esquema, captura, UI ni precios inferidos. Inicialización/WAL del opener impide afirmar CLI totalmente read-only.
+- Rollback sólo del diff de ledger, CLI, ambas pruebas, README y ROADMAP; preservar bases, APIs anteriores y fixtures ignorados. Revisión/publicación pertenecen al padre.
 
 ## Bloque 4 entregado — tokens globales por proveedor/modelo
 

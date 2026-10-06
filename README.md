@@ -80,6 +80,33 @@ new schema, task/attribution reads, costs, pricing or invoice inference. Operati
 and rollback errors are generic: `Model usage operation failed`. Existing APIs
 and CLI outputs are unchanged; no dashboard, live capture or automatic model policy.
 
+## Global runtime report (API and CLI)
+
+```sh
+node src/cli.js report --db /explicit/existing.sqlite
+node src/cli.js report --help
+```
+
+Or call `ledger.runtimeReport({})`. Exactly zero own keys are required, including
+symbols/nonenumerable keys; invalid requests fail before SQL: `Invalid runtime report`.
+The result is `{ provenance: 'imported-own-runtime-report', agents, models, runtime, coverage }`.
+
+- Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
+- `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.
+- Agent/model views describe the **same entries**, not additive totals together. Sessions across model groups are nonadditive. `coverage` counts included/excluded entries and exclusions by certainty; excluded usage is not zero.
+- `runtime` has `provenance: 'runtime-estimate'`, `currency: null`, `total: null`, and `totalUnavailableReason: 'runtime-currency-not-recorded'`. No monetary sum, ranking, conversion or inferred USD exists; comparative costs remain pending.
+- `runtime.observations` contains individual persisted numeric `amount`s with session/entry/provider/model/agent metadata, ordered by binary session/entry. Decimal precision is not manufactured; zero is recorded, missing amounts are omitted. Its coverage counts `recordedEntries`, `missingEntries`, and `unknownCurrencyEntries` (all recorded amounts).
+- Current Pi RPC documentation describes USD-based rates, but cannot attest arbitrary historical producers, custom providers or gateway usage. Imported cost fields contain no currency; they remain unchanged. Manual prices and estimate history are not consulted.
+
+One deferred transaction spans classification, attribution and all views; late evidence
+changes fresh reports. Results are detached and the query writes nothing. Corrupt own
+counters/amounts reject the whole report; operational/cleanup errors are generic:
+`Runtime report operation failed`. Empty storage yields empty arrays, zero counts and null money.
+CLI requires an explicit existing regular database; invalid/help/missing-path requests
+create no storage. Exit codes remain 0/2/1; errors are sanitized and close is attempted.
+**Not wholly read-only:** the existing opener initializes tables/config and WAL even on
+existing databases. The filesystem existence check is not an atomic read-only-open guarantee.
+
 ## Opt-in manual price catalogue (API only)
 
 `ledger.addManualPrice({ provider, model, category, currency, effectiveFrom, ratePerMillion })`

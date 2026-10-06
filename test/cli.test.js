@@ -60,6 +60,42 @@ function json(result) {
   return JSON.parse(result.stdout);
 }
 
+test("CLI report validates without storage and reports separate-process imports", () => {
+  const f = fixture();
+  for (const args of [
+    ["report"],
+    ["report", "--db"],
+    ["report", "--db", f.db, "--db", f.db],
+    ["report", "--session", "x"],
+    ["report", "--help", "--oops"],
+  ]) {
+    assert.equal(f.run(...args).status, 2);
+    assert.equal(existsSync(join(f.dir, "db")), false);
+  }
+  assert.equal(f.run("report", "--help").status, 0);
+  assert.equal(f.run("report", "--db", f.db).status, 1);
+  assert.equal(existsSync(join(f.dir, "db")), false);
+  assert.equal(existsSync(join(f.home, ".local")), false);
+  const path = f.file("s.jsonl", [header("s"), message("one")]);
+  assert.equal(
+    json(f.run("import", "--db", f.db, "--session", path)).report.inserted,
+    1,
+  );
+  const report = json(f.run("report", "--db", f.db));
+  assert.equal(report.agents[0].totalTokens, "19");
+  assert.equal(report.runtime.total, null);
+  assert.equal(report.runtime.coverage.missingEntries, 1);
+  const corrupt = f.file("PRIVATE_SENTINEL.sqlite", [{ invalid: true }]);
+  for (const db of [corrupt, f.dir]) {
+    const result = f.run("report", "--db", db);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /Report failed/);
+    assert.equal(result.stderr.includes(f.dir), false);
+    assert.equal(result.stderr.includes("PRIVATE_SENTINEL"), false);
+  }
+});
+
 test("CLI help and invalid arguments never create default or explicit storage", () => {
   const f = fixture();
   for (const args of [

@@ -911,6 +911,164 @@ export function openLedger(path = defaultDatabasePath()) {
         throw new Error("Model usage operation failed");
       }
     },
+    runtimeReport: (value) => {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Reflect.ownKeys(value).length !== 0
+      ) {
+        throw new Error("Invalid runtime report");
+      }
+      try {
+        return readTransaction(() => {
+          const categories = [
+            "input",
+            "output",
+            "cacheRead",
+            "cacheWrite",
+            "totalTokens",
+          ];
+          const models = new Map();
+          const agents = new Map();
+          const excluded = new Map();
+          const observations = [];
+          const identities = new Map();
+          let includedEntries = 0;
+          let excludedEntries = 0;
+          let missingEntries = 0;
+          const binary = (a, b) => {
+            if (a === b) return 0;
+            if (a === null) return -1;
+            if (b === null) return 1;
+            return Buffer.compare(Buffer.from(a), Buffer.from(b));
+          };
+          for (const row of snapshot()) {
+            if (row.certainty !== "own") {
+              excludedEntries++;
+              excluded.set(
+                row.certainty,
+                (excluded.get(row.certainty) ?? 0) + 1,
+              );
+              continue;
+            }
+            const tokens = categories.map((key) => {
+              if (counter(row[key]) === null)
+                throw new Error("Invalid stored counter");
+              return BigInt(row[key]);
+            });
+            if (
+              tokens.slice(0, 4).reduce((sum, n) => sum + n, 0n) !== tokens[4]
+            ) {
+              throw new Error("Invalid stored total");
+            }
+            if (
+              row.runtimeEstimate !== null &&
+              (typeof row.runtimeEstimate !== "number" ||
+                !Number.isFinite(row.runtimeEstimate) ||
+                row.runtimeEstimate < 0)
+            ) {
+              throw new Error("Invalid stored runtime amount");
+            }
+            if (!identities.has(row.session)) {
+              identities.set(row.session, attribution(row.session).agent);
+            }
+            const agent = identities.get(row.session);
+            const key = JSON.stringify([row.provider, row.model]);
+            if (!models.has(key)) {
+              models.set(key, {
+                provider: row.provider,
+                model: row.model,
+                entries: 0,
+                sessions: new Set(),
+                tokens: categories.map(() => 0n),
+              });
+            }
+            if (!agents.has(agent)) {
+              agents.set(agent, {
+                agent,
+                entries: 0,
+                sessions: new Set(),
+                totalTokens: 0n,
+              });
+            }
+            const model = models.get(key);
+            const actor = agents.get(agent);
+            model.entries++;
+            model.sessions.add(row.session);
+            tokens.forEach((n, i) => {
+              model.tokens[i] += n;
+            });
+            actor.entries++;
+            actor.sessions.add(row.session);
+            actor.totalTokens += tokens[4];
+            includedEntries++;
+            if (row.runtimeEstimate === null) missingEntries++;
+            else
+              observations.push({
+                session: row.session,
+                entry: row.entry,
+                provider: row.provider,
+                model: row.model,
+                agent,
+                amount: row.runtimeEstimate,
+              });
+          }
+          const descending = (a, b) => (a === b ? 0 : a > b ? -1 : 1);
+          const orderedModels = [...models.values()].sort(
+            (a, b) =>
+              descending(a.tokens[4], b.tokens[4]) ||
+              binary(a.provider, b.provider) ||
+              binary(a.model, b.model),
+          );
+          const orderedAgents = [...agents.values()].sort(
+            (a, b) =>
+              descending(a.totalTokens, b.totalTokens) ||
+              binary(a.agent, b.agent),
+          );
+          observations.sort(
+            (a, b) => binary(a.session, b.session) || binary(a.entry, b.entry),
+          );
+          return {
+            provenance: "imported-own-runtime-report",
+            agents: orderedAgents.map((group) => ({
+              agent: group.agent,
+              entries: group.entries,
+              sessions: group.sessions.size,
+              totalTokens: group.totalTokens.toString(),
+            })),
+            models: orderedModels.map((group) => ({
+              provider: group.provider,
+              model: group.model,
+              entries: group.entries,
+              sessions: group.sessions.size,
+              tokens: Object.fromEntries(
+                categories.map((key, i) => [key, group.tokens[i].toString()]),
+              ),
+            })),
+            runtime: {
+              provenance: "runtime-estimate",
+              currency: null,
+              total: null,
+              totalUnavailableReason: "runtime-currency-not-recorded",
+              observations,
+              coverage: {
+                recordedEntries: observations.length,
+                missingEntries,
+                unknownCurrencyEntries: observations.length,
+              },
+            },
+            coverage: {
+              includedEntries,
+              excludedEntries,
+              excludedByCertainty: Object.fromEntries(excluded),
+            },
+          };
+        });
+      } catch {
+        throw new Error("Runtime report operation failed");
+      }
+    },
     entries: () => readTransaction(snapshot),
     accounting: () =>
       readTransaction(() => {
