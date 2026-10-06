@@ -287,6 +287,53 @@ export function openLedger(path = defaultDatabasePath()) {
       return { ...safe, certainty: classify(row) };
     });
   };
+  // The caller owns the transaction spanning classification and tariff selection.
+  const collectImported = ({ session, entry, currency }) => {
+    const row = snapshot().find(
+      (row) => row.session === session && row.entry === entry,
+    );
+    const reasons = [];
+    let observation = null;
+    if (row) {
+      const literal = (id) =>
+        text(id) && id.trim() === id && !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(id);
+      if (row.certainty !== "own") reasons.push("not-own");
+      if (!literal(row.provider)) reasons.push("invalid-provider");
+      if (!literal(row.model)) reasons.push("invalid-model");
+      if (!canonicalUtc(row.timestamp)) reasons.push("invalid-timestamp");
+      if (priceCategories.some((key) => counter(row[key]) === null))
+        reasons.push("invalid-counters");
+      observation = {
+        operation: row.operation,
+        certainty: row.certainty,
+        provider: row.provider,
+        model: row.model,
+        timestamp: row.timestamp,
+        usage: Object.fromEntries(
+          priceCategories.map((key) => [key, row[key]]),
+        ),
+      };
+    } else reasons.push("entry-not-found");
+    const eligible = reasons.length === 0;
+    return {
+      session,
+      entry,
+      currency,
+      provenance: "imported-entry-quote",
+      usageProvenance: "imported-entry",
+      eligibility: { eligible, reasons },
+      observation,
+      quote: eligible
+        ? api.quoteManual({
+            provider: observation.provider,
+            model: observation.model,
+            currency,
+            at: observation.timestamp,
+            usage: observation.usage,
+          })
+        : null,
+    };
+  };
   const attribution = (session) => {
     const rows = db
       .prepare(`SELECT t.* FROM tasks t JOIN sources s ON s.path=t.path
@@ -418,55 +465,9 @@ export function openLedger(path = defaultDatabasePath()) {
       )
         invalid();
       try {
-        return readTransaction(() => {
-          const row = snapshot().find(
-            (row) => row.session === session && row.entry === entry,
-          );
-          const reasons = [];
-          let observation = null;
-          if (!row) reasons.push("entry-not-found");
-          else {
-            const literal = (id) =>
-              text(id) &&
-              id.trim() === id &&
-              !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(id);
-            if (row.certainty !== "own") reasons.push("not-own");
-            if (!literal(row.provider)) reasons.push("invalid-provider");
-            if (!literal(row.model)) reasons.push("invalid-model");
-            if (!canonicalUtc(row.timestamp)) reasons.push("invalid-timestamp");
-            if (priceCategories.some((key) => counter(row[key]) === null))
-              reasons.push("invalid-counters");
-            observation = {
-              operation: row.operation,
-              certainty: row.certainty,
-              provider: row.provider,
-              model: row.model,
-              timestamp: row.timestamp,
-              usage: Object.fromEntries(
-                priceCategories.map((key) => [key, row[key]]),
-              ),
-            };
-          }
-          const eligible = reasons.length === 0;
-          return {
-            session,
-            entry,
-            currency,
-            provenance: "imported-entry-quote",
-            usageProvenance: "imported-entry",
-            eligibility: { eligible, reasons },
-            observation,
-            quote: eligible
-              ? api.quoteManual({
-                  provider: observation.provider,
-                  model: observation.model,
-                  currency,
-                  at: observation.timestamp,
-                  usage: observation.usage,
-                })
-              : null,
-          };
-        });
+        return readTransaction(() =>
+          collectImported({ session, entry, currency }),
+        );
       } catch {
         throw new Error("Imported quote operation failed");
       }

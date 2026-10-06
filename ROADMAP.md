@@ -10,10 +10,11 @@
 - **Entregado (3, catálogo):** PR #4 integrado en `main`, merge `a55c043`, commit `52a08854bba352c8e626298601dd4152b6e8d583`. Revisión `45f20b992971afaf`, target `300bd64a137b4a3977b6ebbc99ef3f483288750fd1f298d33ef84d1a51a99a9f`, aprobada; ack consumido antes del commit, sin correcciones.
 - **Entregado (3, cotización):** PR #5 integrado en `main` `b3fd9c5`, commit `f473cb7`. Revisión nativa `review-57f9a0860f6d2e68`, target `248ee402ea11afe31272797035701ec934ac063afb4a8e2adb5dcc517a1d9636`, aprobada y reconocida, sin correcciones.
 - **Entregado (3, estimaciones explícitas):** PR #6, main `68a85dc`, commit `1a05948`. Revisión nativa `975d244bc17353a7`, target `2afff9cf9de427a49799b379a679ff3a91c3427309d245498897614022e191ef`, aprobada con ack, sin correcciones.
-- **Bloque actual (3):** cotización de entrada importada de sólo lectura; comprobaciones del escritor y del padre completas, revisión nativa pendiente.
+- **Entregado (3, cotización importada):** PR #7, main `23ab4bc`, commit `8cdcbe9`. Revisión nativa `review-e61564f8d238322b`, target `c9a732ae2df2e3a287bf346f3edc5b029acf54d7e89639a608ebb7057e1006d4`, aprobada con ack, sin correcciones; evidencia histórica.
+- **Bloque actual (3):** extracción interna del colector importado, sin cambios de comportamiento; comprobación funcional del padre y LSP completos, revisión pendiente.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
-- **Siguiente:** revisión nativa de cotización importada antes de autorizar entrega. No ampliar fuentes ni prometer roles o deduplicación completa.
+- **Siguiente:** verificar/revisar y entregar la extracción antes de implementar estimaciones importadas durables en otra unidad de hasta 400 líneas. Sin publicación autorizada ahora.
 - **No iniciado:** dashboard y captura en vivo. No se han recolectado sesiones reales.
 
 ## Lista completa del MVP
@@ -23,12 +24,24 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Catálogo, cotizaciones y estimaciones explícitas entregados; cotización importada en verificación | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 3. Precios manuales | Catálogo, cotizaciones y estimaciones explícitas entregados; extracción interna en verificación | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 3 — cotización importada de sólo lectura
+## Bloque actual: 3 — extracción del colector importado
+
+- [x] Extraer clasificación, observación y quote opcional a un colector interno sin transacciones; el llamador conserva validación, transacción diferida y errores.
+- [x] Preservar exactamente las tres pruebas RED de estimaciones en `local-data/deferred-imported-estimates.test.js` (fixture sintético ignorado); restaurar sólo sus adiciones en audit, conservando todas las pruebas actuales.
+- [x] Compatibilidad antes/después: cuatro pruebas imported aprobadas; no hay RED significativo para esta extracción sin cambio de comportamiento.
+- [x] Escritor: `npm test` 35/35; ambas comprobaciones de sintaxis y `git diff --check` aprobados.
+- [x] Padre tras autoformato: `npm test` 35/35 y ambas comprobaciones de sintaxis aprobadas; 137 líneas antes del cierre documental. Evaluación nativa: riesgo medio/escritor grande, sin verificador separado exigido.
+- [x] LSP primario confirmado limpio al comprobar cada archivo individualmente con mayor presupuesto; los dos intentos batch previos fueron inconclusos por timeout.
+- [ ] Revisión nativa y entrega autorizada pendientes.
+
+**División:** primero esta extracción, después persistencia importada; máximo 400 líneas formateadas por unidad. Sin APIs/tablas durables nuevas, cambios de runtime/ranking, fuentes, CLI, UI ni datos reales. La tarifa retrospectiva del fixture diferido es anterior a la original y no prueba cambio de precio para un ID nuevo; reforzar ese caso en la unidad siguiente. La evidencia PR #7 siguiente es histórica, no aprobación de este refactor.
+
+## Bloque 3 entregado — cotización importada de sólo lectura
 
 - [x] Tres claves exactas, par session/entry literal y moneda explícita; rechazo antes de SQL.
 - [x] Clasificación dinámica y tarifas en el mismo snapshot diferido; sólo own con identidad/fecha/contadores válidos.
@@ -37,7 +50,7 @@
 - [x] Casos alternos: metadatos inválidos, clases no propias, linaje tardío, conflicto posterior, commit WAL independiente, errores/rollback, mutación/reinicio y tarifas retrospectivas.
 - [x] Escritor final: `npm test` 35/35; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Diff final manualmente formateado: 389 líneas (381 adiciones + 8 eliminaciones).
 - [x] Padre tras autoformato: `npm test` 35/35, dos comprobaciones de sintaxis y LSP sin errores; diff 396 líneas antes del cierre documental. Evaluación nativa: riesgo medio/escritor grande, sin verificador separado exigido. El padre no observó RED.
-- [ ] Revisión nativa y entrega pendientes.
+- [x] Revisión nativa aprobada con ack y entrega mediante PR #7; identidades registradas arriba. Sin correcciones.
 
 **Límites:** máximo 400 líneas formateadas totales; sólo los cuatro archivos autorizados. Sin estimaciones importadas durables, CLI, fuentes nuevas, datos reales ni cambios de ranking/runtime. Rollback sólo de esta unidad, sin borrar bases. Evidencia anterior es histórica, no aprobación de este bloque.
 
