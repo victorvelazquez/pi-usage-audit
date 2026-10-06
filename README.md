@@ -79,9 +79,35 @@ The result copies `provider`, `model`, `currency`, `at`, with `provenance: 'manu
 
 Each category independently selects the latest `effectiveFrom <= at` in one bound SELECT. `coverage` contains `complete`, `missingCounters` and `missingPrices` (category-name arrays). An amount is null if either counter or price is unknown, even if the other is zero. `total` is null unless all four categories are covered; fully priced explicit zero counters produce `'0.000000000000'`. No partial subtotal or currency conversion is implied.
 
-**`at` is the tariff-effective instant, not historical catalogue knowledge.** Retrospective additions can change a fresh quote for the same `at`. Previously returned copied rates/keys/amounts remain self-describing and unchanged, but are not durable historical pricing. Quotes perform no writes, are not stored, and do not claim invoice truth or token ownership. Entries, runtime estimates, ranking, accounting and ledger coverage remain unchanged; no CLI integration. Future persisted price application must create a new immutable estimate with applied-rate provenance, never overwrite history.
+**`at` is the tariff-effective instant, not historical catalogue knowledge.** Retrospective additions can change a fresh quote for the same `at`. Previously returned copied rates/keys/amounts remain self-describing and unchanged, but are not durable historical pricing. Quotes perform no writes, are not stored, and do not claim invoice truth or token ownership. Entries, runtime estimates, ranking, accounting and ledger coverage remain unchanged; no CLI integration. Persisted price application creates a new immutable estimate with applied-rate provenance, never overwrites history.
 
-Append-only applies to these public catalogue methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds a table transactionally to existing SQLite databases without changing schema versions or deleting data.
+### Durable caller-explicit manual estimates
+
+`ledger.addManualEstimate({ id, provider, model, currency, at, usage })` requires
+exactly these six keys; `ledger.manualEstimate({ id })` requires exactly one and
+returns the stored snapshot or null. IDs follow the literal provider/model rules.
+Quote validation, four-category coverage and fixed-12 BigInt arithmetic apply.
+The snapshot adds `id`, `provenance: 'manual-estimate'` and
+`usageProvenance: 'caller-explicit'`; full selected price records are stored,
+including incomplete results whose total remains null. No timestamp or free-form
+metadata is accepted. Returned objects are fresh copies, including nested prices.
+
+A stable request includes all four counters: omission and null are equivalent,
+but explicit zero is distinct. Same ID and canonical request returns the original
+without querying prices; a different valid request throws a generic conflict and
+writes nothing. New IDs snapshot the current catalogue in one SELECT. `at` remains
+tariff-effective time, not historical knowledge: retrospective prices affect new
+IDs, never saved ones. Re-estimating even an incomplete snapshot requires a new ID.
+
+Initialization adds `manual_estimates` (`id` primary key, request/estimate JSON).
+`BEGIN IMMEDIATE` serializes lookup, optional quote and insertion; failures roll
+back with generic errors. No entry linkage, CLI, automatic application, ownership
+or invoice claim; accounting, runtime estimates, ranking and import history are
+unchanged. Synthetic tests exercise independent handles sequentially, not a
+simultaneous cross-process estimate race. Functional verification is complete;
+native review and delivery of this estimate unit remain pending.
+
+Append-only applies to these public catalogue/estimate methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds tables transactionally to existing SQLite databases without changing schema versions or deleting data.
 
 ## Privacy and boundaries
 
@@ -89,9 +115,9 @@ Only whitelisted accounting/attribution metadata, opaque path keys and keyed cop
 
 SQLite uses WAL, a 5-second busy timeout, initialization retries, transactions and unique insert keys. Public `entries()`, `ranking()` and `accounting()` each use a deferred read transaction; the import's internal snapshot stays inside its write transaction. Separate API calls/output fields are not one combined snapshot. Tests use synthetic fixtures only and independent concurrent processes with overlapping/disjoint inputs. Tests leave synthetic artifacts under ignored `test/.runtime-*/` directories; these can be removed after verification.
 
-Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, persisted manual price application/estimation, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
+Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, automatic manual price application, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
 
-Block 3 catalogue delivered in PR #4 (merge `a55c043`). The current quote unit rolls back only its changes in `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md`; no database deletion. Only synthetic ignored fixtures were used. Independent functional verification passed; native review and authorized delivery remain pending.
+Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). The current estimate unit rolls back only its changes in `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md`; no database deletion. Only synthetic ignored fixtures were used. Parent independent verification, native review and authorized delivery remain pending.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 

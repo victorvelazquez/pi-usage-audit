@@ -324,6 +324,11 @@ test("manual additive initialization preserves pre-catalogue schema and accounti
     at: manualPrice.effectiveFrom,
     usage: {},
   });
+  ledger.addManualEstimate({ id: "legacy-estimate", ...quoteRequest });
+  assert.equal(
+    ledger.db.prepare("PRAGMA table_info(manual_estimates)").all().length,
+    3,
+  );
   assert.deepEqual(snapshot(), before);
   assert.equal(ledger.ranking()[0].runtimeEstimate, 0.25);
   ledger.close();
@@ -335,6 +340,196 @@ const quoteRequest = {
   usage: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 },
 };
 const quoteCategories = Object.keys(quoteRequest.usage);
+
+test("manual estimates retain snapshots across restart and retrospective prices", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  for (const category of quoteCategories) {
+    ledger.addManualPrice({ ...manualPrice, category });
+  }
+  const request = { id: "original", ...quoteRequest };
+  const original = ledger.addManualEstimate(request);
+  assert.equal(original.id, request.id);
+  assert.equal(original.provenance, "manual-estimate");
+  assert.equal(original.usageProvenance, "caller-explicit");
+  assert.equal(original.total, "0.000004000000");
+  ledger.addManualPrice({
+    ...manualPrice,
+    effectiveFrom: "2026-01-15T00:00:00.000Z",
+    ratePerMillion: "2",
+  });
+  const later = {
+    id: "later",
+    ...quoteRequest,
+    at: "2026-02-01T00:00:00.000Z",
+  };
+  const saved = ledger.addManualEstimate(later);
+  ledger.addManualPrice({
+    ...manualPrice,
+    effectiveFrom: "2026-01-20T00:00:00.000Z",
+    ratePerMillion: "9",
+  });
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  ledger.db.prepare = (sql) => {
+    assert.doesNotMatch(sql, /manual_prices/);
+    return prepare(sql);
+  };
+  assert.deepEqual(ledger.addManualEstimate(later), saved);
+  let priceReads = 0;
+  ledger.db.prepare = (sql) => {
+    if (/SELECT \* FROM manual_prices/.test(sql)) priceReads++;
+    return prepare(sql);
+  };
+  assert.equal(
+    ledger.addManualEstimate({ ...later, id: "fresh" }).total,
+    "0.000012000000",
+  );
+  assert.equal(priceReads, 1);
+  ledger.db.prepare = prepare;
+  original.categories.input.price.ratePerMillion = "999.000000";
+  saved.coverage.missingPrices.push("input");
+  const durable = ledger.manualEstimate({ id: "later" });
+  ledger.close();
+  ledger = openLedger(f.db);
+  assert.deepEqual(ledger.manualEstimate({ id: "later" }), durable);
+  durable.categories.input.tokens = 99;
+  assert.equal(
+    ledger.manualEstimate({ id: "later" }).categories.input.tokens,
+    1,
+  );
+  assert.equal(
+    ledger.manualEstimate({ id: "original" }).categories.input.price
+      .ratePerMillion,
+    "1.000000",
+  );
+  assert.equal(ledger.manualEstimate({ id: "absent" }), null);
+  for (const id of ["Original", "i".repeat(512)]) {
+    assert.equal(ledger.addManualEstimate({ ...request, id }).id, id);
+  }
+  ledger.close();
+});
+
+test("manual estimates canonicalize unknowns, arbitrate handles and roll back failures", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const other = openLedger(f.db);
+  const request = { id: "unknown", ...quoteRequest, usage: { input: null } };
+  const original = ledger.addManualEstimate(request);
+  assert.equal(original.total, null);
+  assert.deepEqual(original.coverage.missingCounters, quoteCategories);
+  assert.deepEqual(original.coverage.missingPrices, quoteCategories);
+  const reordered = {
+    usage: {},
+    at: request.at,
+    currency: "USD",
+    model: "fixture",
+    provider: "synthetic",
+    id: "unknown",
+  };
+  assert.deepEqual(other.addManualEstimate(reordered), original);
+  const stored = ledger.db
+    .prepare("SELECT request FROM manual_estimates WHERE id=?")
+    .get(request.id);
+  assert.deepEqual(JSON.parse(stored.request), {
+    ...request,
+    usage: Object.fromEntries(quoteCategories.map((key) => [key, null])),
+  });
+  assert.deepEqual(
+    Object.keys(JSON.parse(stored.request)),
+    Object.keys(request),
+  );
+  for (const extra of [
+    { usage: { input: 0 } },
+    { provider: "other" },
+    { model: "other" },
+    { currency: "EUR" },
+    { at: "2026-02-01T00:00:00.000Z" },
+  ]) {
+    assert.throws(() => other.addManualEstimate({ ...request, ...extra }), {
+      message: "Manual estimate conflict",
+    });
+  }
+  ledger.addManualPrice({ ...manualPrice, ratePerMillion: "0" });
+  assert.deepEqual(ledger.addManualEstimate(request), original);
+  const zero = other.addManualEstimate({
+    ...request,
+    id: "zero",
+    usage: { input: 0 },
+  });
+  assert.equal(zero.categories.input.amount, "0.000000000000");
+  assert.equal(zero.categories.output.amount, null);
+  assert.equal(zero.total, null);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  for (const failure of [/manual_prices/, /INSERT INTO manual_estimates/]) {
+    ledger.db.prepare = (sql) => {
+      if (failure.test(sql)) throw new Error("PRIVATE_SENTINEL");
+      return prepare(sql);
+    };
+    assert.throws(() => ledger.addManualEstimate({ ...request, id: "retry" }), {
+      message: "Manual estimate operation failed",
+    });
+    ledger.db.prepare = prepare;
+    assert.equal(ledger.manualEstimate({ id: "retry" }), null);
+  }
+  assert.equal(ledger.manualEstimate({ id: "retry" }), null);
+  assert.equal(
+    ledger.addManualEstimate({ ...request, id: "retry" }).id,
+    "retry",
+  );
+  const rows = prepare("SELECT * FROM manual_estimates").all();
+  assert.equal(rows.length, 3);
+  assert.doesNotMatch(JSON.stringify(rows), /PRIVATE_SENTINEL/);
+  other.close();
+  ledger.close();
+});
+
+test("manual estimates reject extra privacy fields and invalid requests before SQL", () => {
+  const ledger = openLedger(fixture().db);
+  const request = { id: "valid", ...quoteRequest };
+  const invalid = [
+    null,
+    [],
+    {},
+    { ...request, prompt: "PRIVATE_SENTINEL" },
+    { ...request, [Symbol()]: 1 },
+  ];
+  for (const key of Object.keys(request)) {
+    const missing = { ...request };
+    delete missing[key];
+    invalid.push(missing, { ...request, [key]: null });
+  }
+  const ids = ["", " id", "id ", "i\u200bd", "i\nd", "i".repeat(513), 1];
+  for (const id of ids) invalid.push({ ...request, id });
+  for (const extra of [
+    { currency: "usd" },
+    { at: "now" },
+    { usage: { input: -1 } },
+    { usage: { input: 1.5 } },
+    { usage: { input: Number.MAX_SAFE_INTEGER + 1 } },
+    { usage: { content: "PRIVATE_SENTINEL" } },
+  ])
+    invalid.push({ ...request, ...extra });
+  ledger.db.prepare = () => assert.fail("invalid request reached SQL");
+  ledger.db.exec = () => assert.fail("invalid request began transaction");
+  for (const value of invalid) {
+    assert.throws(() => ledger.addManualEstimate(value), {
+      message: "Invalid manual estimate",
+    });
+  }
+  for (const value of [
+    null,
+    {},
+    [],
+    { id: "valid", extra: true },
+    { id: "valid", [Symbol()]: 1 },
+    ...ids.map((id) => ({ id })),
+  ]) {
+    assert.throws(() => ledger.manualEstimate(value), {
+      message: "Invalid manual estimate",
+    });
+  }
+  ledger.close();
+});
 
 test("manual quote selects independent inclusive versions in one read without writes", () => {
   const f = fixture();
@@ -461,6 +656,13 @@ test("manual quote exact arithmetic and unknown versus explicit zero coverage", 
     "9007199254740990990992.800745259009",
   );
   assert.equal(maximum.total, "36028797018963963963971.202981036036");
+  const estimate = ledger.addManualEstimate({
+    id: "maximum",
+    ...request,
+    usage: counters(Number.MAX_SAFE_INTEGER),
+  });
+  assert.deepEqual(estimate.categories, maximum.categories);
+  assert.equal(estimate.total, maximum.total);
   assert.deepEqual(maximum.coverage, {
     complete: true,
     missingCounters: [],
@@ -468,6 +670,11 @@ test("manual quote exact arithmetic and unknown versus explicit zero coverage", 
   });
   const zero = ledger.quoteManual({ ...request, usage: counters(0) });
   assert.equal(zero.total, "0.000000000000");
+  assert.equal(
+    ledger.addManualEstimate({ id: "all-zero", ...request, usage: counters(0) })
+      .total,
+    zero.total,
+  );
   const unknown = ledger.quoteManual({ ...request, usage: {} });
   assert.equal(unknown.categories.input.amount, null);
   ledger.addManualPrice({
