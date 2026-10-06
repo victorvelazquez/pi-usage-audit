@@ -396,6 +396,81 @@ export function openLedger(path = defaultDatabasePath()) {
         total: complete ? fixedAmount(total) : null,
       };
     },
+    quoteImported: (value) => {
+      const invalid = () => {
+        throw new Error("Invalid imported quote");
+      };
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        invalid();
+      const keys = Reflect.ownKeys(value);
+      if (
+        keys.length !== 3 ||
+        !["session", "entry", "currency"].every((key) => keys.includes(key))
+      )
+        invalid();
+      const { session, entry, currency } = value;
+      if (
+        !text(session) ||
+        !text(entry) ||
+        typeof currency !== "string" ||
+        currency.length !== 3 ||
+        !/^[A-Z]{3}$/.test(currency)
+      )
+        invalid();
+      try {
+        return readTransaction(() => {
+          const row = snapshot().find(
+            (row) => row.session === session && row.entry === entry,
+          );
+          const reasons = [];
+          let observation = null;
+          if (!row) reasons.push("entry-not-found");
+          else {
+            const literal = (id) =>
+              text(id) &&
+              id.trim() === id &&
+              !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(id);
+            if (row.certainty !== "own") reasons.push("not-own");
+            if (!literal(row.provider)) reasons.push("invalid-provider");
+            if (!literal(row.model)) reasons.push("invalid-model");
+            if (!canonicalUtc(row.timestamp)) reasons.push("invalid-timestamp");
+            if (priceCategories.some((key) => counter(row[key]) === null))
+              reasons.push("invalid-counters");
+            observation = {
+              operation: row.operation,
+              certainty: row.certainty,
+              provider: row.provider,
+              model: row.model,
+              timestamp: row.timestamp,
+              usage: Object.fromEntries(
+                priceCategories.map((key) => [key, row[key]]),
+              ),
+            };
+          }
+          const eligible = reasons.length === 0;
+          return {
+            session,
+            entry,
+            currency,
+            provenance: "imported-entry-quote",
+            usageProvenance: "imported-entry",
+            eligibility: { eligible, reasons },
+            observation,
+            quote: eligible
+              ? api.quoteManual({
+                  provider: observation.provider,
+                  model: observation.model,
+                  currency,
+                  at: observation.timestamp,
+                  usage: observation.usage,
+                })
+              : null,
+          };
+        });
+      } catch {
+        throw new Error("Imported quote operation failed");
+      }
+    },
     addManualEstimate: (value) => {
       const valid = validateManual(
         value,

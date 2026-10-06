@@ -104,8 +104,35 @@ Initialization adds `manual_estimates` (`id` primary key, request/estimate JSON)
 back with generic errors. No entry linkage, CLI, automatic application, ownership
 or invoice claim; accounting, runtime estimates, ranking and import history are
 unchanged. Synthetic tests exercise independent handles sequentially, not a
-simultaneous cross-process estimate race. Functional verification is complete;
-native review and delivery of this estimate unit remain pending.
+simultaneous cross-process estimate race. Delivered in PR #6 (main `68a85dc`,
+commit `1a05948`); historical verification/review evidence is in the roadmap.
+
+### Read-only imported-entry quote (API only)
+
+`ledger.quoteImported({ session, entry, currency })` accepts exactly three own
+keys (no symbols/extras). Session/entry are exact importer-compatible nonempty
+strings up to 512 characters, without trimming or aliases; currency is three
+uppercase ASCII letters. Caller usage, provider, model, date and certainty are
+never accepted. Invalid requests fail before SQL: `Invalid imported quote`.
+
+The result includes the request, `provenance: 'imported-entry-quote'`,
+`usageProvenance: 'imported-entry'`, `eligibility: { eligible, reasons }`,
+`observation` and `quote`. Missing entries have null observation/quote.
+Observation contains current operation/certainty, provider/model, outer timestamp
+and only the four core usage counters; it is not purported winning evidence.
+Only current `own` classification, valid literal catalogue identities, canonical
+real UTC outer timestamp and four safe nonnegative counters permit a quote.
+Reasons are ordered: `entry-not-found`, or `not-own`, `invalid-provider`,
+`invalid-model`, `invalid-timestamp`, `invalid-counters` as applicable.
+No header/message timestamp fallback, implicit now or timezone guessing occurs.
+
+Classification and the existing manual quote share one deferred read transaction.
+Missing tariffs leave ownership eligible but the quote's total null; zero remains
+known. Operational/cleanup failures become `Imported quote operation failed`.
+Fresh calls reflect late lineage/conflicts and retrospective tariffs. No durable
+imported estimate, invoice claim, historical rewrite, runtime/ranking change or
+CLI integration; returned objects are detached. Writer checks are recorded below;
+parent verification and native review of this new unit remain pending.
 
 Append-only applies to these public catalogue/estimate methods, not a security guarantee: `ledger.db` still exposes arbitrary SQL. Initialization adds tables transactionally to existing SQLite databases without changing schema versions or deleting data.
 
@@ -117,7 +144,7 @@ SQLite uses WAL, a 5-second busy timeout, initialization retries, transactions a
 
 Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, automatic manual price application, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
 
-Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). The current estimate unit rolls back only its changes in `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md`; no database deletion. Only synthetic ignored fixtures were used. Parent independent verification, native review and authorized delivery remain pending.
+Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). Estimates delivered in PR #6 (main `68a85dc`). The current imported-quote unit rolls back only its changes in `src/ledger.js`, `test/audit.test.js`, `README.md` and `ROADMAP.md`; no database deletion. Only synthetic ignored fixtures were used. Writer: imported RED 0/4, GREEN 4/4; final checks in roadmap. Parent verification, native review and authorized delivery remain pending.
 
 Block 2 breakdown rollback: revert only its ledger, audit/CLI tests and accompanying documentation changes; no CLI source change, schema migration or database deletion is needed. Synthetic test artifacts stay under ignored `test/.runtime-*/` directories. Independent verification/review and delivery remain parent-owned.
 

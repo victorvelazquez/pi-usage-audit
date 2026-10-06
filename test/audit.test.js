@@ -72,6 +72,271 @@ const manualQuery = {
   currency: "USD",
 };
 
+const importedRequest = { session: "s", entry: "one", currency: "USD" };
+const coreUsage = { input: 10, output: 4, cacheRead: 3, cacheWrite: 2 };
+const coreCategories = Object.keys(coreUsage);
+
+test("imported quote derives exact evidence, preserves storage and survives restart", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  const source = f.file("source.jsonl", [header("s"), message("one")]);
+  ledger.importFiles({ sessions: [source] });
+  const state = () => [
+    ledger.entries(),
+    ledger.accounting(),
+    ledger.ranking(),
+    ledger.coverage(),
+    ledger.db.prepare("SELECT * FROM manual_estimates").all(),
+  ];
+  const before = state();
+  const quote = () => ledger.quoteImported(importedRequest);
+  const absent = ledger.quoteImported({ ...importedRequest, entry: "missing" });
+  assert.deepEqual(absent.eligibility.reasons, ["entry-not-found"]);
+  assert.equal(absent.eligibility.eligible, false);
+  assert.equal(absent.observation, null);
+  assert.equal(absent.quote, null);
+  assert.equal(quote().quote.total, null);
+  for (const category of coreCategories)
+    ledger.addManualPrice({
+      ...manualPrice,
+      category,
+      effectiveFrom: "2025-12-31T00:00:00.000Z",
+      ratePerMillion: "0.000001",
+    });
+  ledger.addManualPrice({
+    ...manualPrice,
+    effectiveFrom: "2026-01-02T00:00:00.000Z",
+    ratePerMillion: "9",
+  });
+  const changes = ledger.db.prepare("SELECT total_changes() AS n");
+  const count = changes.get().n;
+  const result = quote();
+  assert.equal(changes.get().n, count);
+  const expected = ledger.quoteManual({
+    ...manualQuery,
+    at: manualPrice.effectiveFrom,
+    usage: coreUsage,
+  });
+  assert.deepEqual(result, {
+    ...importedRequest,
+    provenance: "imported-entry-quote",
+    usageProvenance: "imported-entry",
+    eligibility: { eligible: true, reasons: [] },
+    observation: {
+      operation: "assistant",
+      certainty: "own",
+      provider: "synthetic",
+      model: "fixture",
+      timestamp: manualPrice.effectiveFrom,
+      usage: coreUsage,
+    },
+    quote: expected,
+  });
+  assert.equal(result.quote.total, "0.000000000019");
+  result.observation.usage.input = 999;
+  result.quote.categories.input.price.ratePerMillion = "999";
+  ledger.addManualPrice({
+    ...manualPrice,
+    category: "input",
+    ratePerMillion: "0.000009",
+  });
+  assert.equal(quote().quote.total, "0.000000000099");
+  assert.deepEqual(state(), before);
+  ledger.close();
+  ledger = openLedger(f.db);
+  assert.equal(quote().quote.total, "0.000000000099");
+  assert.equal(expected.total, "0.000000000019");
+  const zeros = Object.fromEntries(coreCategories.map((key) => [key, 0]));
+  const zero = message("zero", { usage: { ...zeros, totalTokens: 0 } });
+  ledger.importFiles({
+    sessions: [f.file("source.jsonl", [header("s"), message("one"), zero])],
+  });
+  const request = { ...importedRequest, entry: "zero" };
+  assert.equal(ledger.quoteImported(request).quote.total, "0.000000000000");
+  ledger.close();
+});
+
+test("imported strict requests reject before SQL and stored metadata cannot counterfeit eligibility", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  ledger.importFiles({
+    sessions: [f.file("source.jsonl", [header("s"), message("one")])],
+  });
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  ledger.db.exec = () => {
+    throw new Error("SQL reached");
+  };
+  ledger.db.prepare = () => {
+    throw new Error("SQL reached");
+  };
+  const missing = { ...importedRequest };
+  delete missing.entry;
+  const invalid = [null, [], missing, { ...importedRequest, [Symbol()]: 1 }];
+  for (const key of ["usage", "provider", "model", "at", "certainty"])
+    invalid.push({ ...importedRequest, [key]: "fake" });
+  for (const key of ["session", "entry"])
+    for (const value of ["", "x".repeat(513), null, 3])
+      invalid.push({ ...importedRequest, [key]: value });
+  for (const currency of ["usd", "US", "USD\n", 3])
+    invalid.push({ ...importedRequest, currency });
+  for (const value of invalid)
+    assert.throws(() => ledger.quoteImported(value), {
+      message: "Invalid imported quote",
+    });
+  ledger.db.prepare = prepare;
+  ledger.db.exec = exec;
+  const spaced = { ...importedRequest, session: " s", entry: " one " };
+  assert.equal(ledger.quoteImported(spaced).observation, null);
+  const original = ledger.entries()[0];
+  const update = (patch) =>
+    ledger.db
+      .prepare("UPDATE entries SET data=?")
+      .run(JSON.stringify({ ...original, ...patch }));
+  for (const [patch, reasons] of [
+    [{ provider: " synthetic" }, ["invalid-provider"]],
+    [{ model: "bad\u0000model" }, ["invalid-model"]],
+    [{ timestamp: "2026-02-30T00:00:00.000Z" }, ["invalid-timestamp"]],
+    [{ timestamp: "2026-01-01T01:00:00.000+01:00" }, ["invalid-timestamp"]],
+    [{ timestamp: null }, ["invalid-timestamp"]],
+    [{ input: Number.MAX_SAFE_INTEGER + 1 }, ["invalid-counters"]],
+    [{ output: -1 }, ["invalid-counters"]],
+    [{ cacheRead: null }, ["invalid-counters"]],
+    [{ cacheWrite: 0.5 }, ["invalid-counters"]],
+    [
+      { provider: null, model: null, timestamp: null, input: null },
+      [
+        "invalid-provider",
+        "invalid-model",
+        "invalid-timestamp",
+        "invalid-counters",
+      ],
+    ],
+  ]) {
+    update(patch);
+    const result = ledger.quoteImported(importedRequest);
+    assert.deepEqual(result.eligibility, { eligible: false, reasons });
+    assert.equal(result.quote, null);
+  }
+  update({ provider: "other", model: "Other", input: 0 });
+  const derived = ledger.quoteImported(importedRequest);
+  assert.equal(derived.quote.provider, "other");
+  assert.equal(derived.quote.model, "Other");
+  assert.equal(derived.quote.categories.input.tokens, 0);
+  assert.equal(derived.eligibility.eligible, true);
+  update({});
+  ledger.db.prepare = () => {
+    throw new Error("secret SQL/path payload");
+  };
+  const failure = { message: "Imported quote operation failed" };
+  assert.throws(() => ledger.quoteImported(importedRequest), failure);
+  ledger.db.exec = (sql) => {
+    const result = exec(sql);
+    if (sql === "ROLLBACK") throw new Error("cleanup payload");
+    return result;
+  };
+  assert.throws(() => ledger.quoteImported(importedRequest), failure);
+  ledger.db.exec = exec;
+  ledger.db.prepare = prepare;
+  assert.equal(
+    ledger.quoteImported(importedRequest).eligibility.eligible,
+    true,
+  );
+  ledger.db.prepare("UPDATE entries SET data=?").run("{");
+  assert.throws(() => ledger.quoteImported(importedRequest), failure);
+  update({});
+  assert.doesNotThrow(() => ledger.importFiles());
+  ledger.importFiles({
+    sessions: [f.file("spaced.jsonl", [header(" s"), message(" one ")])],
+  });
+  assert.equal(ledger.quoteImported(spaced).eligibility.eligible, true);
+  ledger.close();
+});
+
+test("imported current non-own classification and late lineage never quote winning evidence", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const parent = f.file("parent.jsonl", [header("p"), message("one")]);
+  const child = f.file("child.jsonl", [
+    header("c", { parentSession: parent }),
+    message("one"),
+  ]);
+  const source = f.file("source.jsonl", [
+    header("s"),
+    message("one"),
+    message("nested", { role: "toolResult" }),
+    message("partial", { usage: { input: 1 } }),
+  ]);
+  ledger.importFiles({ sessions: [source, child] });
+  const check = (session, entry, certainty) => {
+    const result = ledger.quoteImported({ session, entry, currency: "USD" });
+    assert.equal(result.observation.certainty, certainty);
+    assert.equal(result.eligibility.eligible, false);
+    assert.equal(result.eligibility.reasons[0], "not-own");
+    assert.equal(result.quote, null);
+  };
+  check("s", "nested", "nested-unknown");
+  check("s", "partial", "incomplete");
+  check("c", "one", "lineage-unresolved");
+  ledger.importFiles({ sessions: [parent] });
+  check("c", "one", "copied");
+  const different = f.file("different.jsonl", [
+    header("d", { parentSession: parent }),
+    message("one", { content: "different" }),
+  ]);
+  ledger.importFiles({ sessions: [different] });
+  check("d", "one", "lineage-conflict");
+  assert.equal(
+    ledger.quoteImported(importedRequest).eligibility.eligible,
+    true,
+  );
+  f.file("source.jsonl", [header("s"), message("one", { model: "changed" })]);
+  ledger.importFiles({ sessions: [source] });
+  check("s", "one", "identity-conflict");
+  const duplicate = f.file("duplicate.jsonl", [header("p"), message("one")]);
+  ledger.importFiles({ sessions: [duplicate] });
+  check("p", "one", "session-ambiguous");
+  check("c", "one", "session-ambiguous");
+  ledger.close();
+});
+
+test("imported entry and tariffs share one deferred WAL snapshot during independent commit", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const other = openLedger(f.db);
+  const source = f.file("source.jsonl", [header("s"), message("one")]);
+  ledger.importFiles({ sessions: [source] });
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  let fired = false;
+  ledger.db.prepare = (sql) => {
+    const stmt = prepare(sql);
+    if (sql === "SELECT * FROM entries" && !fired) {
+      const all = stmt.all.bind(stmt);
+      stmt.all = (...args) => {
+        const rows = all(...args);
+        fired = true;
+        other.db.exec("BEGIN IMMEDIATE");
+        other.db.prepare("UPDATE entries SET conflict=1").run();
+        for (const category of coreCategories)
+          other.addManualPrice({ ...manualPrice, category });
+        other.db.exec("COMMIT");
+        return rows;
+      };
+    }
+    return stmt;
+  };
+  const old = ledger.quoteImported(importedRequest);
+  assert.equal(fired, true);
+  assert.equal(old.eligibility.eligible, true);
+  assert.equal(old.quote.total, null);
+  assert.equal(old.quote.coverage.missingPrices.length, 4);
+  const next = ledger.quoteImported(importedRequest);
+  assert.equal(next.observation.certainty, "identity-conflict");
+  assert.equal(ledger.quoteImported(importedRequest).quote, null);
+  other.close();
+  ledger.close();
+});
+
 test("manual catalogue persists versions, literal identities and append-only rates", () => {
   const f = fixture();
   let ledger = openLedger(f.db);
