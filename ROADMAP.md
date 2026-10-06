@@ -14,7 +14,8 @@
 - **Entregado (3, colector):** PR #8 integrado, main `35ef3e4`; extracción `ced9521` y política LF `dae15e9` conservadas.
 - **Entregado (3, persistencia importada):** PR #9, main `8e2c823`, commit `7ad2dbed8c89f23f563cfa3d15376aaf1e996301`; evidencia histórica abajo.
 - **Entregado (3, enumeración):** PR #10, main `8dcc385`, commit `5a617299619e`; revisión `review-7802c286f859ac36` aprobada con ack, sin correcciones; autoridad consumida. Target histórico `f57c418063f337c1c9c6ae0dc6b33e5bca0cc610f0c699753257f2512bd344f4`.
-- **Bloque actual (3):** validación histórica del lector por ID; resumen seleccionado después, en otra unidad. Verificación/revisión/entrega del padre pendientes.
+- **Entregado (3, lector validado):** PR #11, main `4213aa4`, commit `b68a20c1621f`; evidencia histórica abajo.
+- **Bloque actual (3):** resumen de costos históricos seleccionados; revisión/entrega del padre pendientes.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
 - **Siguiente:** revisión del padre y entrega sólo con autorización; sin publicación autorizada ahora. No se exige verificador independiente en esta unidad.
@@ -27,12 +28,24 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector y enumeración entregados; lector validado en revisión | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración y lector entregados; resumen seleccionado en revisión | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 3 — lector histórico validado por ID
+## Bloque actual: 3 — resumen histórico seleccionado
+
+- [x] Dos claves exactas, IDs densos/distintos y moneda explícita; rechazos antes de SQL.
+- [x] Un SELECT seleccionado con binding JSON, orden binario y snapshots validados; sin lectura de entradas/tarifas ni escrituras.
+- [x] Rechazar IDs ausentes, moneda distinta y alternativas de una entrada; pares literales sin colisiones de delimitadores.
+- [x] Total fixed-12/BigInt sólo con selección no vacía y completa; null incompleto/vacío, cero explícito y cobertura histórica separada.
+- [x] RED observado: imported 12 pasan/5 fallan por API ausente; luego 16/17 por expectativa aparcada incorrecta de 18 decimales. Corrección autorizada sólo en la aserción activa: `72057594037927927927942.405962072072`; fixtures ignorados intactos.
+- [x] Escritor: imported 17/17, suite 48/48, sintaxis de ledger/audit y diff check aprobados; pruebas sintéticas, sin build/runtime aplicable.
+- [ ] Revisión/entrega del padre pendientes; no se afirma verificación independiente ni autoridad histórica para esta unidad.
+
+**Límites:** 400 líneas formateadas totales; sin subtotal parcial, ranking global, ownership actual, factura, conversión, manual/runtime, CLI/UI ni datos reales. Rollback sólo del diff actual de cuatro archivos; preservar lector entregado, bases y ambos fixtures ignorados.
+
+## Bloque 3 entregado — lector histórico validado por ID
 
 - [x] Sólo `importedEstimate({ id })`: estructura requerida, identidad/procedencia y coherencia histórica; missing ID sigue null y validación pública sin cambios.
 - [x] Parser privado fixed-12/BigInt, cuatro categorías y cobertura coherentes; total completo exacto o null incompleto, sin subtotal.
@@ -40,9 +53,10 @@
 - [x] RED nuevo: imported 11/12, rechazo ausente de JSON válido corrupto; GREEN inicial 12/12.
 - [x] Casos alternos: completo, cero, incompleto con null, importes grandes, metadata extra, historia tras conflicto/tarifas, copias/reinicio y fallos genéricos; una lectura, sin cambios contables/almacenamiento.
 - [x] Escritor final: imported 12/12, `npm test` 43/43 y dos comprobaciones `node --check` aprobadas; diagnósticos JS/Markdown de edición limpios. API sintética, sin build/runtime aplicable.
-- [ ] Verificación/revisión/entrega del padre pendientes; ninguna autoridad histórica aprueba esta unidad.
+- [x] Padre histórico: 43/43, sintaxis en dos archivos, diff check y LSP en dos archivos limpios; diff final 339 líneas. PR #11 integrado; revisión `review-bfc943dd06fb8b00` aprobada con ack, autoridad consumida.
 
-**Límites:** máximo 400 líneas formateadas en cuatro archivos publicados; fixture ignorado adicional preservado. No cambia enumeración ni retries de creación, esquema, clasificación/precios actuales, ranking/runtime, CLI/UI ni datos reales. Resumen seleccionado no implementado; siguiente unidad separada. Rollback sólo del diff de cuatro archivos, nunca bases ni fixtures.
+Ack/target histórico: `25057d6260917e7e8a3d3e80483283a7ec2824df54a42a99960beefdf73ec16a`; no aprueba el resumen seleccionado.
+**Límites históricos:** sólo lector por ID, sin cambios de enumeración/retries, esquema, clasificación/precios actuales, ranking/runtime, CLI/UI ni datos reales. Rollback de esa unidad, nunca bases ni fixtures.
 
 ## Bloque 3 entregado — enumeración global importada
 
