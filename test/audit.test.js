@@ -1740,6 +1740,190 @@ test("accounting includes quarantined identity, session and lineage conflict cla
   }
 });
 
+function checkedEstimateFixture() {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const source = f.file("checked.jsonl", [header("s"), message("one")]);
+  ledger.importFiles({ sessions: [source] });
+  const request = { id: "checked", ...importedRequest };
+  const incomplete = ledger.addImportedEstimate({ ...request, id: "unknown" });
+  for (const category of coreCategories)
+    ledger.addManualPrice({ ...manualPrice, category });
+  const saved = ledger.addImportedEstimate(request);
+  const replace = (value) =>
+    ledger.db
+      .prepare("UPDATE imported_estimates SET estimate=? WHERE id='checked'")
+      .run(JSON.stringify(value));
+  return { f, ledger, source, request, incomplete, saved, replace };
+}
+
+test("imported checked reader rejects corrupt structures, identities and exact money", () => {
+  const { ledger, saved, incomplete, replace } = checkedEstimateFixture();
+  const changes = [
+    ["observation", undefined],
+    ["quote.categories.input", undefined],
+    ["id", "other"],
+    ["session", ""],
+    ["currency", "EUR"],
+    ["provenance", "manual-estimate"],
+    ["usageProvenance", "caller-explicit"],
+    ["eligibility.eligible", false],
+    ["eligibility.reasons", ["not-own"]],
+    ["observation.certainty", "copied"],
+    ["observation.usage.input", -1],
+    ["quote.provider", "other"],
+    ["quote.at", "now"],
+    ["quote.provenance", "runtime-estimate"],
+    ["quote.categories.input.tokens", "10"],
+    ["quote.categories.input.price.currency", "EUR"],
+    ["quote.categories.input.price.category", "output"],
+    ["quote.categories.input.price.provider", "other"],
+    ["quote.categories.input.price.effectiveFrom", "2027-01-01T00:00:00.000Z"],
+    ["quote.categories.input.price.ratePerMillion", "2.000000"],
+    ["quote.coverage.complete", 1],
+    ["quote.coverage.missingCounters", ["input"]],
+    ["quote.coverage.missingPrices", null],
+    ["quote.total", null],
+    ["quote.coverage.complete", false],
+    ["quote.categories.input.amount", "bogus"],
+  ];
+  for (const amount of [
+    1,
+    "NaN",
+    "-1.000000000000",
+    "01.000000000000",
+    "0.1",
+    "0.0000000000000",
+    "0.000019000000\n",
+    "0.000020000000",
+  ])
+    changes.push(["quote.total", amount]);
+  const corrupt = changes.map(([path, value]) => {
+    const s = structuredClone(saved);
+    const keys = path.split(".");
+    const last = keys.pop();
+    const parent = keys.reduce((object, key) => object[key], s);
+    parent[last] = value;
+    return JSON.parse(JSON.stringify(s));
+  });
+  const wrongIncomplete = structuredClone(incomplete);
+  wrongIncomplete.id = "checked";
+  wrongIncomplete.quote.total = "0.000000000000";
+  for (const value of [null, [], {}, wrongIncomplete, ...corrupt]) {
+    replace(value);
+    assert.throws(() => ledger.importedEstimate({ id: "checked" }), {
+      message: "Imported estimate operation failed",
+    });
+    // Enumeration and canonical creation retries deliberately remain unchanged.
+    assert.deepEqual(
+      ledger.addImportedEstimate({ id: "checked", ...importedRequest }),
+      value,
+    );
+    assert.ok(
+      ledger
+        .importedEstimates({})
+        .estimates.some((s) => JSON.stringify(s) === JSON.stringify(value)),
+    );
+  }
+  ledger.db
+    .prepare("UPDATE imported_estimates SET estimate='{' WHERE id='checked'")
+    .run();
+  assert.throws(() => ledger.importedEstimate({ id: "checked" }), {
+    message: "Imported estimate operation failed",
+  });
+  ledger.close();
+});
+
+test("imported checked reader preserves valid snapshots, history and read-only storage", () => {
+  const { f, ledger, source, request, incomplete, saved, replace } =
+    checkedEstimateFixture();
+  const variants = [saved, { ...saved, extra: { future: true } }];
+  const zero = structuredClone(saved);
+  const huge = structuredClone(saved);
+  let total = 0n;
+  for (const category of coreCategories) {
+    zero.observation.usage[category] = 0;
+    zero.quote.categories[category].tokens = 0;
+    zero.quote.categories[category].amount = "0.000000000000";
+    huge.observation.usage[category] = Number.MAX_SAFE_INTEGER;
+    const part = huge.quote.categories[category];
+    part.tokens = Number.MAX_SAFE_INTEGER;
+    part.price.ratePerMillion = "999999999999.999999";
+    const amount = 999999999999999999n * BigInt(part.tokens);
+    part.amount = `${amount / 1000000000000n}.${(amount % 1000000000000n).toString().padStart(12, "0")}`;
+    total += amount;
+  }
+  zero.quote.total = "0.000000000000";
+  huge.quote.total = `${total / 1000000000000n}.${(total % 1000000000000n).toString().padStart(12, "0")}`;
+  const unknown = structuredClone(incomplete);
+  unknown.id = request.id;
+  unknown.observation.usage.input = null;
+  unknown.quote.categories.input.tokens = null;
+  unknown.quote.coverage.missingCounters = ["input"];
+  variants.push(zero, huge, unknown);
+  appendFileSync(
+    source,
+    JSON.stringify(message("one", { model: "changed" })) + "\n",
+  );
+  ledger.importFiles({ sessions: [source] });
+  ledger.addManualPrice({
+    ...manualPrice,
+    effectiveFrom: "2025-12-01T00:00:00.000Z",
+    ratePerMillion: "9",
+  });
+  for (const value of variants) {
+    replace(value);
+    const before = [ledger.accounting(), ledger.ranking(), ledger.coverage()];
+    const prepare = ledger.db.prepare.bind(ledger.db);
+    const exec = ledger.db.exec.bind(ledger.db);
+    const hash = createHash("sha256").update(readFileSync(f.db)).digest("hex");
+    let reads = 0;
+    ledger.db.exec = () => assert.fail("reader executed transaction/write");
+    ledger.db.prepare = (sql) => {
+      reads++;
+      assert.equal(sql, "SELECT estimate FROM imported_estimates WHERE id=?");
+      return prepare(sql);
+    };
+    const copy = ledger.importedEstimate({ id: request.id });
+    assert.deepEqual(copy, value);
+    assert.equal(reads, 1);
+    copy.quote.categories.input.tokens = 42;
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    assert.deepEqual(ledger.importedEstimate({ id: request.id }), value);
+    assert.deepEqual(
+      [ledger.accounting(), ledger.ranking(), ledger.coverage()],
+      before,
+    );
+    assert.equal(
+      createHash("sha256").update(readFileSync(f.db)).digest("hex"),
+      hash,
+    );
+  }
+  ledger.close();
+  const reopened = openLedger(f.db);
+  assert.deepEqual(reopened.importedEstimate({ id: request.id }), unknown);
+  assert.equal(reopened.importedEstimate({ id: "absent" }), null);
+  const prepare = reopened.db.prepare.bind(reopened.db);
+  for (const fail of [
+    () => {
+      throw Error("PRIVATE");
+    },
+    () => ({
+      get() {
+        throw Error("PRIVATE");
+      },
+    }),
+  ]) {
+    reopened.db.prepare = fail;
+    assert.throws(() => reopened.importedEstimate({ id: request.id }), {
+      message: "Imported estimate operation failed",
+    });
+  }
+  reopened.db.prepare = prepare;
+  reopened.close();
+});
+
 test("imported estimates freeze eligibility and copied pricing across retries and restart", () => {
   const f = fixture();
   let ledger = openLedger(f.db);
