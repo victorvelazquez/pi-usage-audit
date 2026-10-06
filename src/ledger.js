@@ -816,6 +816,101 @@ export function openLedger(path = defaultDatabasePath()) {
         throw new Error("Manual estimate operation failed");
       }
     },
+    modelUsage: (value) => {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Reflect.ownKeys(value).length !== 0
+      ) {
+        throw new Error("Invalid model usage");
+      }
+      try {
+        return readTransaction(() => {
+          const categories = [
+            "input",
+            "output",
+            "cacheRead",
+            "cacheWrite",
+            "totalTokens",
+          ];
+          const groups = new Map();
+          const excluded = new Map();
+          let includedEntries = 0;
+          let excludedEntries = 0;
+          for (const row of snapshot()) {
+            if (row.certainty !== "own") {
+              excludedEntries++;
+              excluded.set(
+                row.certainty,
+                (excluded.get(row.certainty) ?? 0) + 1,
+              );
+              continue;
+            }
+            const tokens = categories.map((key) => {
+              if (counter(row[key]) === null) {
+                throw new Error("Invalid stored counter");
+              }
+              return BigInt(row[key]);
+            });
+            if (
+              tokens.slice(0, 4).reduce((sum, n) => sum + n, 0n) !== tokens[4]
+            ) {
+              throw new Error("Invalid stored total");
+            }
+            const key = JSON.stringify([row.provider, row.model]);
+            if (!groups.has(key)) {
+              groups.set(key, {
+                provider: row.provider,
+                model: row.model,
+                entries: 0,
+                sessions: new Set(),
+                tokens: categories.map(() => 0n),
+              });
+            }
+            const group = groups.get(key);
+            group.entries++;
+            group.sessions.add(row.session);
+            for (const [i, n] of tokens.entries()) group.tokens[i] += n;
+            includedEntries++;
+          }
+          // SQLite BINARY-style UTF-8 ordering, with null before literal identities.
+          const literalCompare = (a, b) => {
+            if (a === b) return 0;
+            if (a === null) return -1;
+            if (b === null) return 1;
+            return Buffer.compare(Buffer.from(a), Buffer.from(b));
+          };
+          const ordered = [...groups.values()].sort((a, b) => {
+            if (a.tokens[4] !== b.tokens[4])
+              return a.tokens[4] > b.tokens[4] ? -1 : 1;
+            return (
+              literalCompare(a.provider, b.provider) ||
+              literalCompare(a.model, b.model)
+            );
+          });
+          return {
+            provenance: "imported-own-model-usage",
+            groups: ordered.map((group) => ({
+              provider: group.provider,
+              model: group.model,
+              entries: group.entries,
+              sessions: group.sessions.size,
+              tokens: Object.fromEntries(
+                categories.map((key, i) => [key, group.tokens[i].toString()]),
+              ),
+            })),
+            coverage: {
+              includedEntries,
+              excludedEntries,
+              excludedByCertainty: Object.fromEntries(excluded),
+            },
+          };
+        });
+      } catch {
+        throw new Error("Model usage operation failed");
+      }
+    },
     entries: () => readTransaction(snapshot),
     accounting: () =>
       readTransaction(() => {

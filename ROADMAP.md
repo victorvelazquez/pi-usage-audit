@@ -15,7 +15,8 @@
 - **Entregado (3, persistencia importada):** PR #9, main `8e2c823`, commit `7ad2dbed8c89f23f563cfa3d15376aaf1e996301`; evidencia histórica abajo.
 - **Entregado (3, enumeración):** PR #10, main `8dcc385`, commit `5a617299619e`; revisión `review-7802c286f859ac36` aprobada con ack, sin correcciones; autoridad consumida. Target histórico `f57c418063f337c1c9c6ae0dc6b33e5bca0cc610f0c699753257f2512bd344f4`.
 - **Entregado (3, lector validado):** PR #11, main `4213aa4`, commit `b68a20c1621f`; evidencia histórica abajo.
-- **Bloque actual (3):** resumen de costos históricos seleccionados; revisión/entrega del padre pendientes.
+- **Entregado (3, resumen seleccionado):** PR #12, main `4f5af9d`, commit `14c4587f5fb9f9057d2b9059f7d3102b068fedaf`; evidencia histórica abajo.
+- **Bloque actual (4):** tokens globales propios por proveedor/modelo (`modelUsage({})`), opción elegida por el usuario; revisión/entrega del padre pendientes.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
 - **Siguiente:** revisión del padre y entrega sólo con autorización; sin publicación autorizada ahora. No se exige verificador independiente en esta unidad.
@@ -28,12 +29,23 @@
 | 0. Base contable local | Completado, cobertura inicial | SQLite durable, ingesta por API, deduplicación, atribución básica y pruebas sintéticas |
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
-| 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración y lector entregados; resumen seleccionado en revisión | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
-| 4. Análisis global | Parcial: ranking básico por API | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
+| 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
+| 4. Análisis global | Parcial: ranking básico; tokens por proveedor/modelo en revisión | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 3 — resumen histórico seleccionado
+## Bloque actual: 4 — tokens globales por proveedor/modelo
+
+- [x] `modelUsage({})` estricto antes de SQL; una clasificación dinámica dentro de un snapshot diferido, sin tareas ni escrituras.
+- [x] Sólo own: cuatro categorías y total almacenado con BigInt/strings; exclusiones por certeza, sin ceros ficticios ni costos.
+- [x] Identidades observadas literales/null; orden total descendente, desempate binario UTF-8 con null primero; sesiones no aditivas entre modelos.
+- [x] RED: cinco pruebas nuevas fallaron por API ausente; GREEN 5/5. Escritor: `npm test` 53/53, dos `node --check` y diff check aprobados; API sintética sin build/runtime adicional aplicable.
+- [x] Triangulación: suma exacta grande/cero, identidades/null/Unicode, todas las exclusiones, tareas tardías, copias/reinicio/estado intacto, commit WAL independiente y recuperación de fallos genéricos. Diagnósticos automáticos parciales; no se afirma LSP completo.
+- [ ] Revisión/entrega del padre pendientes; padre postformato: suite 53/53, sintaxis en dos archivos, diff check y LSP primario en dos archivos limpios; riesgo medio/escritor grande, sin verificador independiente separado afirmado ni nueva aprobación nativa.
+
+**Límites:** excepción explícita del usuario de exactamente 478 líneas formateadas incluidas pruebas/docs sólo para esta unidad; límite habitual de 400 para unidades futuras. Sin dinero, esquema, cambios de ranking/accounting, CLI/UI, captura, políticas automáticas ni datos reales. Rollback sólo de este diff de cuatro archivos; preservar bases, APIs anteriores y ambos fixtures ignorados.
+
+## Bloque 3 entregado — resumen histórico seleccionado
 
 - [x] Dos claves exactas, IDs densos/distintos y moneda explícita; rechazos antes de SQL.
 - [x] Un SELECT seleccionado con binding JSON, orden binario y snapshots validados; sin lectura de entradas/tarifas ni escrituras.
@@ -41,7 +53,9 @@
 - [x] Total fixed-12/BigInt sólo con selección no vacía y completa; null incompleto/vacío, cero explícito y cobertura histórica separada.
 - [x] RED observado: imported 12 pasan/5 fallan por API ausente; luego 16/17 por expectativa aparcada incorrecta de 18 decimales. Corrección autorizada sólo en la aserción activa: `72057594037927927927942.405962072072`; fixtures ignorados intactos.
 - [x] Escritor: imported 17/17, suite 48/48, sintaxis de ledger/audit y diff check aprobados; pruebas sintéticas, sin build/runtime aplicable.
-- [ ] Revisión/entrega del padre pendientes; no se afirma verificación independiente ni autoridad histórica para esta unidad.
+- [x] Padre histórico: suite 48/48, sintaxis en dos archivos, diff check y LSP primario limpios; unidad final 382 líneas. Revisión `review-61e8763c6490c107` aprobada con ack, autoridad consumida sin correcciones; PR #12 integrado. No aprueba la unidad nueva.
+
+Identidades históricas: target `75104038d83cd33e0ac47302b3ca8570248b32c632f501d131959a213cb0f01b`, tree `47dedad218cb9758058c763eb7fa1a91294b787c`, revisión `20cba84d861c6e7780eb6a0919a33afaa6b3c6c43fb808044e6a8c55eb12fdc3`.
 
 **Límites:** 400 líneas formateadas totales; sin subtotal parcial, ranking global, ownership actual, factura, conversión, manual/runtime, CLI/UI ni datos reales. Rollback sólo del diff actual de cuatro archivos; preservar lector entregado, bases y ambos fixtures ignorados.
 

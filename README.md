@@ -49,6 +49,37 @@ Pass a database filename to `openLedger(filename)` to override storage. Keep it 
 - `importFiles()` returns coverage counters; `coverage()` retains historical import reports, including current-ledger certainty counts at import time. Malformed lines/tails are skipped and recoverable by reimport, with no raw-line logging. An empty/unsupported source is incomplete. These are observed totals, **not complete billing totals**.
 - Runtime cost totals retain `runtime-estimate` provenance, not invoice truth. Missing estimates are null and counted separately; a partial sum does not imply complete cost coverage. Manual catalogue rates do not change these totals; no currency conversion.
 
+## Global tokens by provider/model (API only)
+
+`ledger.modelUsage({})` reads current imported confirmed-own usage globally.
+The empty object is required; missing/null/array requests or any extra own key
+(including symbols/nonenumerable keys) fail before SQL: `Invalid model usage`.
+
+It returns `{ provenance: 'imported-own-model-usage', groups, coverage }`:
+
+- Each group has `provider`, `model`, `entries`, `sessions` and `tokens`.
+  Tokens contains exactly `input`, `output`, `cacheRead`, `cacheWrite`,
+  `totalTokens`: canonical nonnegative decimal **strings**, summed exactly with
+  BigInt beyond Number's safe range. Reasoning/cacheWrite1h are not added again.
+- Identities are the observed persisted strings, preserving case and whitespace;
+  missing/empty identities are null, distinct from any literal display label.
+  No catalogue validation, aliases or task-derived identity applies.
+- Groups sort by exact total tokens descending, then provider/model in
+  case-sensitive UTF-8 binary order, null first. `entries` counts records, not
+  calls/successes. `sessions` counts distinct session IDs per group; sessions
+  across different models are **not additive**.
+- Coverage has `includedEntries`, `excludedEntries`, `excludedByCertainty`.
+  Only dynamic `own` records contribute tokens; every other certainty is counted
+  separately, not assigned zero tokens. Empty storage returns `groups: []`, zero
+  entry counts and an empty exclusion object. Invalid stored own counters fail
+  the entire operation rather than becoming zero or being reclassified.
+
+One deferred read transaction classifies and sums one sources/entries snapshot;
+late lineage/conflicts affect fresh calls. Results are detached, with no writes,
+new schema, task/attribution reads, costs, pricing or invoice inference. Operational
+and rollback errors are generic: `Model usage operation failed`. Existing APIs
+and CLI outputs are unchanged; no dashboard, live capture or automatic model policy.
+
 ## Opt-in manual price catalogue (API only)
 
 `ledger.addManualPrice({ provider, model, category, currency, effectiveFrom, ratePerMillion })`
