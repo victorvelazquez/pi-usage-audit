@@ -59,6 +59,334 @@ function fixture() {
   return { dir, db, file, task };
 }
 
+test("modelUsage validates empty requests before SQL and returns empty coverage", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  ledger.db.exec = () => assert.fail("invalid request reached SQL");
+  for (const value of [
+    undefined,
+    null,
+    [],
+    0,
+    "",
+    { extra: 1 },
+    { [Symbol("extra")]: 1 },
+    Object.defineProperty({}, "extra", { value: 1 }),
+  ]) {
+    assert.throws(() => ledger.modelUsage(value), {
+      message: "Invalid model usage",
+    });
+  }
+  ledger.db.exec = exec;
+  assert.deepEqual(ledger.modelUsage({}), {
+    provenance: "imported-own-model-usage",
+    groups: [],
+    coverage: {
+      includedEntries: 0,
+      excludedEntries: 0,
+      excludedByCertainty: {},
+    },
+  });
+  ledger.importFiles({
+    sessions: [
+      f.file("zero.jsonl", [
+        header("zero"),
+        message("zero", {
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+          },
+        }),
+      ]),
+    ],
+  });
+  assert.deepEqual(ledger.modelUsage({}).groups[0].tokens, {
+    input: "0",
+    output: "0",
+    cacheRead: "0",
+    cacheWrite: "0",
+    totalTokens: "0",
+  });
+  ledger.close();
+});
+
+test("modelUsage exact global groups preserve literal identities and detached state", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const large = {
+    input: Number.MAX_SAFE_INTEGER,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: Number.MAX_SAFE_INTEGER,
+  };
+  const identities = [
+    ["z", "big"],
+    [null, null],
+    ["Sin clasificar", "Sin clasificar"],
+    ["a|b", "c"],
+    ["a", "b|c"],
+    ["A", "m"],
+    ["a", "m"],
+    ["é", "m"],
+    ["😀", "m"],
+    [" spaced ", " m "],
+  ];
+  const first = f.file("first.jsonl", [
+    header("first"),
+    ...identities.map(([provider, model], i) =>
+      message(String(i), {
+        provider,
+        model,
+        usage: i === 0 ? large : usage,
+      }),
+    ),
+    message("empty", { provider: "", model: "" }),
+  ]);
+  const second = f.file("second.jsonl", [
+    header("second"),
+    message("large", { provider: "z", model: "big", usage: large }),
+  ]);
+  ledger.importFiles({ sessions: [first, second] });
+  const state = () => [
+    ledger.entries(),
+    ledger.accounting(),
+    ledger.ranking(),
+    ledger.coverage(),
+  ];
+  const before = state();
+  const storage = () =>
+    createHash("sha256").update(readFileSync(f.db)).digest("hex");
+  const hash = storage();
+  const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const reads = [];
+  ledger.db.prepare = (sql) => {
+    reads.push(sql);
+    return prepare(sql);
+  };
+  const result = ledger.modelUsage({});
+  ledger.db.prepare = prepare;
+  assert.deepEqual(reads, ["SELECT * FROM sources", "SELECT * FROM entries"]);
+  assert.deepEqual(
+    result.groups.map((g) => [g.provider, g.model]),
+    [
+      identities[0],
+      identities[1],
+      identities[9],
+      identities[5],
+      identities[2],
+      identities[4],
+      identities[6],
+      identities[3],
+      identities[7],
+      identities[8],
+    ],
+  );
+  assert.deepEqual(result.groups[0], {
+    provider: "z",
+    model: "big",
+    entries: 2,
+    sessions: 2,
+    tokens: {
+      input: "18014398509481982",
+      output: "0",
+      cacheRead: "0",
+      cacheWrite: "0",
+      totalTokens: "18014398509481982",
+    },
+  });
+  assert.deepEqual(result.groups[1].tokens, {
+    input: "20",
+    output: "8",
+    cacheRead: "6",
+    cacheWrite: "4",
+    totalTokens: "38",
+  });
+  assert.equal(result.groups[1].sessions, 1);
+  assert.equal(
+    result.groups.reduce((n, g) => n + g.entries, 0),
+    12,
+  );
+  assert.deepEqual(result.coverage, {
+    includedEntries: 12,
+    excludedEntries: 0,
+    excludedByCertainty: {},
+  });
+  assert.equal(
+    ledger.db.prepare("SELECT total_changes() AS n").get().n,
+    changes,
+  );
+  assert.equal(storage(), hash);
+  assert.deepEqual(state(), before);
+  const expected = structuredClone(result);
+  result.groups[0].tokens.input = "0";
+  result.coverage.includedEntries = -1;
+  ledger.importFiles({ tasks: [f.task("late", first)] });
+  assert.deepEqual(ledger.modelUsage({}), expected);
+  ledger.close();
+  const reopened = openLedger(f.db);
+  assert.deepEqual(reopened.modelUsage({}), expected);
+  reopened.close();
+});
+
+test("modelUsage excludes every dynamic uncertainty without summing its tokens", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const parent = f.file("parent.jsonl", [header("p"), message("copy")]);
+  const child = f.file("child.jsonl", [
+    header("c", { parentSession: parent }),
+    message("copy"),
+    message("unmatched"),
+    message("copy-conflict", { usage }),
+  ]);
+  appendFileSync(
+    parent,
+    `${JSON.stringify(message("copy-conflict", { model: "different" }))}\n`,
+  );
+  const other = f.file("other.jsonl", [
+    header("o"),
+    message("bad", { usage: {} }),
+    message("nested", { role: "toolResult" }),
+    message("conflict"),
+  ]);
+  ledger.importFiles({ sessions: [parent, child, other] });
+  const ambiguous = f.file("ambiguous.jsonl", [
+    header("o"),
+    message("ambiguous"),
+  ]);
+  ledger.importFiles({ sessions: [ambiguous] });
+  appendFileSync(
+    other,
+    `${JSON.stringify(message("conflict", { model: "changed" }))}\n`,
+  );
+  ledger.importFiles({ sessions: [other] });
+  const isolated = f.file("isolated.jsonl", [
+    header("i"),
+    message("incomplete", { usage: {} }),
+    message("nested", { role: "toolResult" }),
+  ]);
+  ledger.importFiles({ sessions: [isolated] });
+  assert.deepEqual(ledger.modelUsage({}).coverage, {
+    includedEntries: 2,
+    excludedEntries: 9,
+    excludedByCertainty: {
+      copied: 1,
+      "lineage-unresolved": 1,
+      "lineage-conflict": 1,
+      "session-ambiguous": 3,
+      "identity-conflict": 1,
+      incomplete: 1,
+      "nested-unknown": 1,
+    },
+  });
+  assert.equal(
+    ledger
+      .modelUsage({})
+      .groups.reduce(
+        (sum, group) => sum + BigInt(group.tokens.totalTokens),
+        0n,
+      ),
+    38n,
+  );
+  appendFileSync(
+    parent,
+    `${JSON.stringify(message("copy", { model: "changed" }))}\n`,
+  );
+  ledger.importFiles({ sessions: [parent] });
+  assert.equal(ledger.modelUsage({}).coverage.includedEntries, 1);
+  ledger.close();
+});
+
+test("modelUsage uses one deferred WAL snapshot across independent commit", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  ledger.importFiles({
+    sessions: [f.file("s.jsonl", [header("s"), message("one")])],
+  });
+  const other = openLedger(f.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  ledger.db.prepare = (sql) => {
+    const stmt = prepare(sql);
+    if (sql !== "SELECT * FROM sources") return stmt;
+    return {
+      all: () => {
+        const rows = stmt.all();
+        other.db.exec("BEGIN IMMEDIATE");
+        other.db.prepare("UPDATE entries SET conflict=1").run();
+        other.db.exec("COMMIT");
+        return rows;
+      },
+    };
+  };
+  assert.equal(ledger.modelUsage({}).coverage.includedEntries, 1);
+  ledger.db.prepare = prepare;
+  assert.deepEqual(ledger.modelUsage({}).coverage, {
+    includedEntries: 0,
+    excludedEntries: 1,
+    excludedByCertainty: { "identity-conflict": 1 },
+  });
+  other.close();
+  ledger.close();
+});
+
+test("modelUsage generic failures roll back and corrupted own counters never become zero", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  ledger.importFiles({
+    sessions: [f.file("s.jsonl", [header("s"), message("one")])],
+  });
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  const expected = ledger.modelUsage({});
+  for (const failure of ["prepare", "read", "COMMIT", "ROLLBACK"]) {
+    ledger.db.prepare = (sql) => {
+      if (failure === "prepare" || failure === "ROLLBACK") {
+        throw new Error("private");
+      }
+      if (failure === "read") {
+        return {
+          all: () => {
+            throw new Error("private");
+          },
+        };
+      }
+      return prepare(sql);
+    };
+    ledger.db.exec = (sql) => {
+      if (sql === failure) throw new Error("private");
+      return exec(sql);
+    };
+    assert.throws(() => ledger.modelUsage({}), {
+      message: "Model usage operation failed",
+    });
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    if (failure === "ROLLBACK") exec("ROLLBACK");
+    assert.deepEqual(ledger.modelUsage({}), expected);
+  }
+  const original = prepare("SELECT data FROM entries").get().data;
+  for (const input of [null, -1, 0, 0.5, "10", Number.MAX_SAFE_INTEGER + 1]) {
+    prepare("UPDATE entries SET data=?").run(
+      JSON.stringify({ ...JSON.parse(original), input }),
+    );
+    assert.throws(() => ledger.modelUsage({}), {
+      message: "Model usage operation failed",
+    });
+  }
+  prepare("UPDATE entries SET data=?").run("{");
+  assert.throws(() => ledger.modelUsage({}), {
+    message: "Model usage operation failed",
+  });
+  prepare("UPDATE entries SET data=?").run(original);
+  assert.deepEqual(ledger.modelUsage({}), expected);
+  ledger.close();
+});
+
 const manualPrice = {
   provider: "synthetic",
   model: "fixture",
