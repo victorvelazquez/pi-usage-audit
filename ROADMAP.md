@@ -1,8 +1,54 @@
-# Hoja de ruta y avance
+# Avance del proyecto
 
-**Objetivo:** identificar qué agentes consumen más globalmente, por tokens y costo, para comparar modelos más económicos sin perder calidad. Proyecto, tarea y sesión son contexto secundario; no fragmentan el ranking inicial.
+**Queremos lograr:** abrir una aplicación local y ver qué agentes y modelos consumen más tokens y costo estimado, para decidir qué modelos conviene comparar. No cambiaremos modelos automáticamente ni inferiremos calidad sólo por consumo.
 
-## En qué estamos ahora
+## Dónde estamos hoy
+
+**El motor de datos funciona. La aplicación visual todavía no existe.**
+
+- **Última tarea terminada:** tokens globales por proveedor/modelo, integrada en `main` mediante PR #13.
+- **En curso:** simplificar este seguimiento. No hay una nueva función en implementación.
+- **Siguiente propuesta:** integrar un reporte global útil con agentes, modelos, tokens, costos estimados y datos faltantes. Alcance aún por acordar; no iniciado.
+- **Decisiones pendientes:** habilitar el dashboard y autorizar la selección de sesiones reales antes de trabajar en esos pasos.
+
+## Qué ya podés hacer
+
+| Listo | Resultado | Cómo se usa hoy |
+| --- | --- | --- |
+| ✅ Guardar e importar consumo | Datos locales durables, sin duplicar reimportaciones | CLI y API |
+| ✅ Ver consumo por agente | Ranking global de consumo propio confirmado y exclusiones visibles | CLI y API |
+| ✅ Ver tokens por modelo | Totales globales por proveedor/modelo | Sólo API |
+| ✅ Registrar precios y estimaciones | Tarifas versionadas y estimaciones históricas; suma de selecciones explícitas | Sólo API |
+
+**API** significa usar funciones desde código. **CLI** significa usar comandos de terminal. Tener la API no significa que ya exista una pantalla para usarla.
+
+## Qué falta para terminar
+
+Esta lista describe resultados del producto, no cantidad de PRs. El orden siguiente es una propuesta; no cambia el alcance acordado ni autoriza trabajo pendiente.
+
+| Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
+| --- | --- | --- |
+| Reporte global integrado | Comparar agentes/modelos por tokens y costos estimados, sin confundir faltantes con cero | Piezas existentes; integración pendiente |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | No iniciado; requiere habilitación |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
+| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
+| Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
+
+**Criterio de cierre propuesto:** poder importar sesiones seleccionadas, abrir la vista global, identificar quién consume más, consultar costos estimados con tarifas explícitas y reconocer datos faltantes. Debemos acordar si filtros avanzados y captura continua son obligatorios para la primera versión o posteriores; hoy no están retirados del alcance.
+
+## Cómo seguir el avance
+
+Leé sólo las secciones anteriores para conocer el estado. Al empezar y terminar cada tarea actualizaremos **última terminada**, **en curso**, **siguiente** y la tabla de pendientes. Una tarea se marca lista cuando está entregada, no sólo cuando se escribió código. No usamos un porcentaje: backend terminado no equivale a producto terminado.
+
+El historial de pruebas y revisiones se conserva abajo, separado del seguimiento diario.
+
+---
+
+## Historial técnico y evidencia (lectura opcional)
+
+Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
+
+### Entregas técnicas
 
 - **Terminado:** primera base de recolector por API y SQLite, integrada en `main` mediante PR #1. Evidencia del bloque: 12 pruebas sintéticas aprobadas, verificación independiente y revisión RDD cerrada.
 - **Entregado (1A + 1B):** PR #2 integrado en `main`, comprobado en el historial tras actualizar la base: `9f4745c`, commit del bloque `a100962`. Se conserva la evidencia previa; no se reabre esa revisión.
@@ -16,10 +62,10 @@
 - **Entregado (3, enumeración):** PR #10, main `8dcc385`, commit `5a617299619e`; revisión `review-7802c286f859ac36` aprobada con ack, sin correcciones; autoridad consumida. Target histórico `f57c418063f337c1c9c6ae0dc6b33e5bca0cc610f0c699753257f2512bd344f4`.
 - **Entregado (3, lector validado):** PR #11, main `4213aa4`, commit `b68a20c1621f`; evidencia histórica abajo.
 - **Entregado (3, resumen seleccionado):** PR #12, main `4f5af9d`, commit `14c4587f5fb9f9057d2b9059f7d3102b068fedaf`; evidencia histórica abajo.
-- **Bloque actual (4):** tokens globales propios por proveedor/modelo (`modelUsage({})`), opción elegida por el usuario; revisión/entrega del padre pendientes.
+- **Entregado (4, tokens por modelo):** `modelUsage({})`, PR #13 integrado en `main` mediante `dd4ee3f`, commit `ec9c0dc`. Revisión `review-4173b82ce0c1c96b` aprobada y reconocida; autoridad consumida.
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
-- **Siguiente:** revisión del padre y entrega sólo con autorización; sin publicación autorizada ahora. No se exige verificador independiente en esta unidad.
+- **Revisión cerrada del bloque 4:** captura nativa y reconocimiento completados; sin correcciones. Entrega realizada mediante PR #13. Esto no autoriza publicar unidades futuras.
 - **No iniciado:** dashboard y captura en vivo. No se han recolectado sesiones reales.
 
 ## Lista completa del MVP
@@ -30,18 +76,18 @@
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
-| 4. Análisis global | Parcial: ranking básico; tokens por proveedor/modelo en revisión | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
+| 4. Análisis global | Parcial: ranking básico y tokens por proveedor/modelo entregados; integración pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Bloque actual: 4 — tokens globales por proveedor/modelo
+## Bloque 4 entregado — tokens globales por proveedor/modelo
 
 - [x] `modelUsage({})` estricto antes de SQL; una clasificación dinámica dentro de un snapshot diferido, sin tareas ni escrituras.
 - [x] Sólo own: cuatro categorías y total almacenado con BigInt/strings; exclusiones por certeza, sin ceros ficticios ni costos.
 - [x] Identidades observadas literales/null; orden total descendente, desempate binario UTF-8 con null primero; sesiones no aditivas entre modelos.
 - [x] RED: cinco pruebas nuevas fallaron por API ausente; GREEN 5/5. Escritor: `npm test` 53/53, dos `node --check` y diff check aprobados; API sintética sin build/runtime adicional aplicable.
 - [x] Triangulación: suma exacta grande/cero, identidades/null/Unicode, todas las exclusiones, tareas tardías, copias/reinicio/estado intacto, commit WAL independiente y recuperación de fallos genéricos. Diagnósticos automáticos parciales; no se afirma LSP completo.
-- [ ] Revisión/entrega del padre pendientes; padre postformato: suite 53/53, sintaxis en dos archivos, diff check y LSP primario en dos archivos limpios; riesgo medio/escritor grande, sin verificador independiente separado afirmado ni nueva aprobación nativa.
+- [x] Padre postformato: suite 53/53, sintaxis en dos archivos, diff check y LSP primario en dos archivos limpios; sin verificador independiente separado afirmado. Revisión nativa aprobada y reconocida; PR #13 integrado.
 
 **Límites:** excepción explícita del usuario de exactamente 478 líneas formateadas incluidas pruebas/docs sólo para esta unidad; límite habitual de 400 para unidades futuras. Sin dinero, esquema, cambios de ranking/accounting, CLI/UI, captura, políticas automáticas ni datos reales. Rollback sólo de este diff de cuatro archivos; preservar bases, APIs anteriores y ambos fixtures ignorados.
 
