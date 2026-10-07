@@ -238,6 +238,208 @@ test("tokenEvolution UTC dates, exact totals, ownership and restart conservation
   }
 });
 
+test("openExistingLedger rejects missing and incompatible storage without creation or repair", () => {
+  const f = fixture();
+  const open = (path) => ledgerModule.openExistingLedger(path);
+  const empty = join(f.dir, "empty.sqlite");
+  const corrupt = join(f.dir, "corrupt.sqlite");
+  writeFileSync(empty, "");
+  writeFileSync(corrupt, "SYNTHETIC_CORRUPT");
+  const before = readdirSync(f.dir);
+  for (const path of [
+    undefined,
+    null,
+    1,
+    "",
+    ":memory:",
+    "file:test.sqlite?mode=rwc",
+    "FILE:test.sqlite",
+    join(f.dir, "missing.sqlite"),
+    join(f.dir, "missing ü #%25.sqlite"),
+    join(f.dir, "absent", "missing.sqlite"),
+    f.dir,
+    empty,
+    corrupt,
+  ]) {
+    assert.throws(
+      () => open(path),
+      (error) => {
+        assert.equal(error.message, "Existing ledger open failed");
+        assert.equal(error.cause, undefined);
+        return true;
+      },
+    );
+  }
+  assert.deepEqual(readdirSync(f.dir), before);
+  assert.equal(readFileSync(empty).length, 0);
+  assert.equal(readFileSync(corrupt, "utf8"), "SYNTHETIC_CORRUPT");
+  for (const [index, sql] of [
+    "DELETE FROM config",
+    "UPDATE config SET value='invalid'",
+    "DROP TABLE imported_estimates",
+    "DROP TABLE tasks; CREATE TABLE tasks (id TEXT PRIMARY KEY)",
+  ].entries()) {
+    const path = join(f.dir, `incompatible-${index}.sqlite`);
+    const writer = openLedger(path);
+    writer.db.exec(sql);
+    writer.close();
+    const bytes = readFileSync(path);
+    assert.throws(() => open(path), /^Error: Existing ledger open failed$/);
+    assert.deepEqual(readFileSync(path), bytes);
+  }
+});
+
+test("openExistingLedger encodes paths, preserves storage and persists atomic tariffs", (t) => {
+  const f = fixture();
+  const names = ["tarifas ü #%25.sqlite"];
+  if (process.platform !== "win32") names.push("tarifas?mode=rwc#ü.sqlite");
+  for (const name of names) {
+    const path = join(f.dir, name);
+    const writer = openLedger(path);
+    t.diagnostic(
+      `Node ${process.versions.node}; SQLite ${writer.db.prepare("SELECT sqlite_version() AS version").get().version}`,
+    );
+    const session = f.file("s.jsonl", [header("s"), message("a")]);
+    writer.importFiles({ sessions: [session], tasks: [f.task("t", session)] });
+    writer.db.exec(
+      "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE",
+    );
+    const state = () => [
+      writer.db.prepare("SELECT * FROM config").all(),
+      writer.db.prepare("SELECT * FROM entries").all(),
+      writer.db.prepare("SELECT * FROM sqlite_schema ORDER BY name").all(),
+      writer.db.prepare("PRAGMA journal_mode").get(),
+    ];
+    const before = state();
+    const bytes = readFileSync(path);
+    const files = readdirSync(f.dir);
+    const proto = DatabaseSync.prototype;
+    const prepare = proto.prepare;
+    let db;
+    proto.prepare = function (sql) {
+      db = this;
+      return prepare.call(this, sql);
+    };
+    let api;
+    try {
+      api = ledgerModule.openExistingLedger(path);
+      proto.prepare = prepare;
+      assert.deepEqual(Reflect.ownKeys(api).sort(), [
+        "addManualPrice",
+        "close",
+        "manualPrices",
+      ]);
+      assert.equal(db.isTransaction, false);
+      assert.deepEqual(state(), before);
+      assert.deepEqual(readFileSync(path), bytes);
+      assert.deepEqual(readdirSync(f.dir), files);
+      const canonical = { ...manualPrice, ratePerMillion: "1.000000" };
+      assert.deepEqual(api.addManualPrice(manualPrice), canonical);
+      assert.deepEqual(
+        api.addManualPrice({ ...manualPrice, ratePerMillion: "1.0" }),
+        canonical,
+      );
+      assert.throws(
+        () => api.addManualPrice({ ...manualPrice, ratePerMillion: "2" }),
+        /Manual price conflict/,
+      );
+      db.prepare = (sql) => {
+        const stmt = prepare.call(db, sql);
+        if (sql.includes("SELECT * FROM manual_prices")) {
+          stmt.get = () => {
+            throw new Error("SYNTHETIC_PRIVATE_SQL_PATH");
+          };
+        }
+        return stmt;
+      };
+      assert.throws(
+        () => api.addManualPrice({ ...manualPrice, category: "output" }),
+        /^Error: Manual price operation failed$/,
+      );
+      db.prepare = prepare;
+      assert.deepEqual(api.manualPrices(manualQuery), [canonical]);
+      assert.deepEqual(state(), before);
+      api.close();
+      api = ledgerModule.openExistingLedger(relative(".", path));
+      assert.deepEqual(api.manualPrices(manualQuery), [canonical]);
+      api.close();
+      api = null;
+      const reader = ledgerModule.openReadonlyLedger(path);
+      try {
+        assert.deepEqual(Reflect.ownKeys(reader).sort(), [
+          "close",
+          "dashboardReport",
+        ]);
+        const costs = reader.dashboardReport({ currency: "USD" }).costs;
+        assert.deepEqual(
+          costs.groups[0].quotes[0].quote.categories.input.price,
+          canonical,
+        );
+        assert.equal(
+          costs.groups[0].quotes[0].quote.categories.input.amount,
+          "0.000010000000",
+        );
+        assert.equal(costs.groups[0].total, null);
+      } finally {
+        reader.close();
+      }
+      assert.deepEqual(readdirSync(f.dir), files);
+    } finally {
+      proto.prepare = prepare;
+      api?.close();
+      writer.close();
+    }
+  }
+});
+
+test("openExistingLedger sanitizes opening failures and attempts cleanup", () => {
+  const f = fixture();
+  const writer = openLedger(f.db);
+  writer.close();
+  const proto = DatabaseSync.prototype;
+  const prepare = proto.prepare;
+  const exec = proto.exec;
+  const close = proto.close;
+  for (const phase of ["validation", "commit"]) {
+    let db;
+    let closed = false;
+    proto.prepare = function (sql) {
+      db = this;
+      if (phase === "validation") throw new Error("SYNTHETIC_PRIVATE_SQL_PATH");
+      return prepare.call(this, sql);
+    };
+    proto.exec = function (sql) {
+      db = this;
+      assert.match(sql, /^(BEGIN DEFERRED|COMMIT)$/);
+      if (sql === "COMMIT") {
+        if (phase === "commit") throw new Error("SYNTHETIC_PRIVATE_SQL_PATH");
+      }
+      return exec.call(this, sql);
+    };
+    proto.close = function () {
+      closed = true;
+      close.call(this);
+      throw new Error("SYNTHETIC_PRIVATE_CLOSE_PATH");
+    };
+    try {
+      assert.throws(
+        () => ledgerModule.openExistingLedger(f.db),
+        (error) => {
+          assert.equal(error.message, "Existing ledger open failed");
+          assert.equal(error.cause, undefined);
+          return true;
+        },
+      );
+      assert.equal(closed, true);
+      assert.equal(db.isOpen, false);
+    } finally {
+      proto.prepare = prepare;
+      proto.exec = exec;
+      proto.close = close;
+    }
+  }
+});
+
 test("readonly dashboard rejects absent and incompatible storage without repair", () => {
   const f = fixture();
   const open = (path) => ledgerModule.openReadonlyLedger(path);

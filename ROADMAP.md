@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, demo, API readonly, UI seleccionada, evolución y detalle por agente entregados. Guardado atómico de tarifas candidato; sin sesiones reales.**
+**Motor, demo, API readonly, UI seleccionada, evolución, detalle y guardado atómico entregados. Apertura RW existente candidata; sin sesiones reales.**
 
-- **Última tarea terminada:** detalle agente→proveedor/modelo, PR #22 integrado en `main` `73a1d63` (commit `5535d91`).
-- **En curso:** guardado atómico `addManualPrice`; candidato, revisión/entrega pendientes.
-- **Siguiente propuesta:** revisión de esta unidad por el padre; apertura RW de base existente sin creación antes del formulario, aún futuras.
+- **Última tarea terminada:** guardado atómico `addManualPrice`, PR #23 integrado (`5fca78d`); padre confirmó base `main` `533c56f`.
+- **En curso:** apertura RW de base existente sin creación; candidata, revisión/entrega pendientes.
+- **Siguiente propuesta:** revisión de esta unidad por el padre; formulario de tarifas aún futuro.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico candidato, apertura RW sin creación y formulario pendientes |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW sin creación candidata y formulario pendiente |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -80,7 +80,21 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución y detalle PR #22 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Guardado atómico addManualPrice — CANDIDATO sin revisión/entrega
+## Apertura RW existente sin creación — CANDIDATA sin revisión/entrega
+
+- [x] API mínima `openExistingLedger(path)`: sólo tarifas y cierre; URL interna escapada con `mode=rw`, sin stat/mkdir/DDL/migración ni configurar WAL.
+- [x] Validación compartida readonly, snapshot diferido cerrado antes de devolver API, errores sanitizados y cierre best-effort incluyendo construcción.
+- [x] Sintéticos: missing/padres ausentes, vacía/corrupta/legada/sin clave, Unicode/#/% y ruta relativa, conservación de filas/esquema/journal, persistencia/idempotencia/conflicto/rollback, reinicio readonly y cleanup fallido.
+- [ ] Revisión/entrega por el padre; formulario, HTTP/CLI/dashboard y datos reales fuera de esta unidad.
+- RED: `node --test --test-name-pattern=openExistingLedger test/audit.test.js`, 0/3 por API ausente. GREEN inicial 3/3; intento intermedio 2/3 por expectativa incorrecta de total completo con tarifas faltantes, corregida comprobando tarifa/input y total null.
+- GREEN final: `node --test --test-name-pattern=openExistingLedger test/audit.test.js` 3/3; Node 22.20.0 / SQLite 3.50.4 observados en Windows. Rama de fixtures con `?` sólo para plataformas que lo admiten, no ejecutada aquí.
+- Regresión: `node --test --test-name-pattern='openExistingLedger|readonly|addManualPrice|manual|tariffs' test/audit.test.js` 18/18; `npm test` 86/86; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Formato manual, sin formatter ni revisión nativa afirmada.
+- Previsión 280–370; final 287 líneas (272 adiciones + 15 eliminaciones), techo duro 400 incluidas pruebas/docs. Rollback sólo del diff de esta unidad en `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar entregas, bases y artefactos.
+- Runtime API sintético probado; UI N/A. Sin garantía de ausencia de sidecars naturales ni identidad ante sustitución hostil. Validación no ampliada a integridad completa/triggers/NOT NULL.
+
+## Guardado atómico addManualPrice — entregado PR #23 (`5fca78d`)
+
+La evidencia siguiente conserva el estado histórico previo a la integración.
 
 - Savepoint local: INSERT, confirmación y conflicto en una operación; compatible con `BEGIN IMMEDIATE` exterior, sin apropiarse de su commit/rollback.
 - API de seis campos, validación antes de SQL, tarifas append-only y firmas/errores de conflicto conservados; sin opener, formulario, CLI/dashboard/HTTP/esquema/deps ni datos reales.
@@ -356,7 +370,7 @@ La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la c
 - **Precios:** conservar versión o tarifa aplicada; distinguir estimación del runtime, estimación manual y factura/suscripción. Precio faltante no es costo cero; no mezclar monedas sin una política explícita.
 - **Análisis:** consumo propio como ranking global; total del árbol como métrica separada. Contar ejecuciones y resultados sólo cuando exista evidencia; no inferir éxito ni ahorro por tokens solamente.
 - **Contexto:** identidad estable de repositorio/worktrees y funcionalidad por tarea, heredable a hijos; fallback "Sin clasificar". Contexto secundario, no sustituto del ranking global.
-- **Dashboard:** snapshot localhost entregado; evolución UI B entregada PR #21 y detalle entregado PR #22; guardado atómico candidato, apertura RW sin creación y edición de precios pendientes.
+- **Dashboard:** snapshot localhost entregado; evolución UI B PR #21, detalle PR #22 y guardado atómico PR #23 entregados; apertura RW sin creación candidata y edición de precios pendiente.
 
 ## Cómo acompañar el avance
 
