@@ -26,9 +26,10 @@ export async function startDashboard({ db, currency, port = 0 }) {
     let html;
     try {
       const snapshot = ledger.dashboardReport({ currency });
-      html = renderDashboard(projectDemo(snapshot.runtime, snapshot.costs), {
-        selected: true,
-      });
+      html = renderDashboard(
+        projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
+        { selected: true },
+      );
     } finally {
       ledger.close();
     }

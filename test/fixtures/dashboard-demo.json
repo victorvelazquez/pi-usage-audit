@@ -91,6 +91,31 @@
       "unknownCurrencyEntries": 1
     }
   },
+  "evolution": {
+    "provenance": "imported-own-token-evolution",
+    "granularity": "day",
+    "timezone": "UTC",
+    "buckets": [
+      {
+        "day": "2026-01-01",
+        "entries": 5,
+        "totalTokens": "18014398509481985"
+      }
+    ],
+    "undated": {
+      "entries": 0,
+      "totalTokens": "0",
+      "missingTimestampEntries": 0,
+      "invalidTimestampEntries": 0
+    },
+    "coverage": {
+      "includedEntries": 5,
+      "excludedEntries": 1,
+      "excludedByCertainty": {
+        "incomplete": 1
+      }
+    }
+  },
   "currency": "EUR",
   "costs": [
     {

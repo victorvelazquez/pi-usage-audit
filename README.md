@@ -1,6 +1,6 @@
 # pi-usage-audit
 
-Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard, candidate evolution API.
+Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution API, candidate evolution UI.
 
 Project status and next steps: [roadmap and progress](ROADMAP.md).
 
@@ -39,7 +39,7 @@ Exit codes are 0 for help/success, 2 for arguments, 1 for sanitized operational 
 The same loopback, Host/Origin/Fetch-site restrictions and CSP protect both modes.
 
 The selected-base banner is not a claim of verified real-session data. One
-`dashboardReport({currency})` snapshot supplies runtime and costs together;
+`dashboardReport({currency})` snapshot supplies runtime, costs and evolution together;
 projection retains summaries, not IDs or selected prices, without repricing.
 The reader closes before listen, including report/render failures. HTML stays
 static until restart: no refresh, capture, discovery, external calls or tariff UI.
@@ -58,7 +58,8 @@ checked by reads. Missing, empty, corrupt or incompatible storage fails with
 `Readonly ledger open failed`, without directory creation, initialization or repair.
 
 `reader.dashboardReport({ currency: 'USD' })` returns `{ runtime, costs, evolution }`
-(`evolution` is a candidate addition); existing runtime/cost shapes are unchanged.
+(evolution delivered in PR #20, main `896fa46`, commit `e5049bd`);
+existing runtime/cost shapes are unchanged.
 All three reports use **one deferred transaction** spanning
 entries, lineage, task attribution and tariffs. Exactly one own currency key is
 required; three uppercase ASCII letters, no default/conversion. Invalid requests
@@ -145,7 +146,7 @@ new schema, task/attribution reads, costs, pricing or invoice inference. Operati
 and rollback errors are generic: `Model usage operation failed`. Existing APIs
 and CLI outputs are unchanged; no dashboard, live capture or automatic model policy.
 
-## Daily token evolution (unit A candidate, not delivered)
+## Daily token evolution (API A delivered PR #20)
 
 `ledger.tokenEvolution({})` requires an object with zero own keys, including
 symbols/nonenumerable keys; invalid requests fail before SQL (`Invalid token evolution`).
@@ -167,10 +168,24 @@ timezone: 'UTC', buckets, undated, coverage }` from one deferred read snapshot.
   operation, even undated: `Token evolution operation failed`. Results are detached;
   late ownership evidence affects fresh calls. No tariff or task attribution dependency.
 
-The candidate adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
+API A adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
 Readonly still exposes only `dashboardReport`/`close`, not independent `tokenEvolution`.
-No CLI/UI change: evolution UI is future unit B; API-only runtime validation is N/A.
-Synthetic tests only; no real-session, native-review or delivery claim.
+
+### Daily evolution dashboard (unit B candidate, not delivered)
+
+Both demo and selected-database SSR display an accessible captioned UTC table:
+day, entry count and exact token strings. Only observed ascending days appear;
+gaps are not filled and explicit zero remains visible. Undated entries/tokens are
+separate, with missing/invalid timestamp counts. Confirmed-own coverage and
+certainty exclusions are visible, nonadditive with agent/model views; excluded
+usage is not zero. No temporal costs, charts, filters or client JavaScript.
+Selected mode uses the existing joint snapshot, deeply projected before closing;
+changes to dates/tokens after startup never refresh HTML. Demo uses the same seed
+as fixture equivalence tests. Only synthetic CLI/HTTP validation; no real sessions
+or visual-browser validation. Native review and delivery remain parent-owned.
+Rollback only this unit's diff in `src/dashboard-report.js`, `src/dashboard.js`,
+`test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
+`ROADMAP.md`; preserve delivered API A, prior work, bases and test artifacts.
 
 ## Global runtime report (API and CLI)
 

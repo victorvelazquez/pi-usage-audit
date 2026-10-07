@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, demo, API readonly y UI de base seleccionada entregados. Evolución API A candidata sin entregar; sin validación de sesiones reales.**
+**Motor, demo, API readonly, UI seleccionada y evolución API A entregados. Evolución UI B candidata sin entregar; sin validación de sesiones reales.**
 
-- **Última tarea terminada:** UI de base seleccionada B, PR #19 integrado en `main` `f8c87b2`.
-- **En curso:** nueva unidad A evolución diaria por API; candidata sin entregar.
-- **Siguiente propuesta:** revisar A; UI de evolución B futura y formulario pendientes.
+- **Última tarea terminada:** evolución API A, PR #20 integrado en `main` `896fa46` (commit `e5049bd`).
+- **En curso:** evolución diaria UTC UI B; candidata implementada, revisión/entrega pendientes.
+- **Siguiente propuesta:** revisión nativa de B por el padre; después acordar detalle/formulario.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API candidata, UI futura y formulario pendientes |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20 entregada, UI B candidata y formulario pendiente |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -76,11 +76,24 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
-| 4. Análisis global | Parcial: tokens/runtime/costos entregados; evolución pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
+| 4. Análisis global | Parcial: tokens/runtime/costos/evolución API entregados; evolución UI candidata | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
-| 6. Dashboard localhost | Demo, API readonly y UI seleccionada entregados; evolución API candidata y UI futura | Vista global primero, filtros y detalle después; formulario manual de precios |
+| 6. Dashboard localhost | Demo, API readonly y UI seleccionada entregados; evolución API entregada y UI B candidata | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Unidad A evolución diaria — CANDIDATA sin entregar
+## Unidad B evolución diaria SSR — CANDIDATA sin entregar
+
+- [x] Demo y base seleccionada: tabla con caption, scope col, scroll, días UTC/entradas/tokens exactos; sólo días observados, sin rellenar huecos, cero visible.
+- [x] Proyección profunda de evolution del snapshot conjunto existente; sin tocar ledger/API/esquema/dependencias. Undated separado con missing/invalid y cobertura/exclusiones no aditivas.
+- [x] Pruebas sintéticas: seed original/fixture equivalente, vacío, fechas múltiples, huecos, cero, precisión grande, sólo undated, escape/clones y cambios de fecha/tokens posteriores sin refresco.
+- [ ] Revisión nativa y entrega por el padre; no se afirma aprobación. Sin sesiones reales ni validación visual de browser.
+- RED: `node --test test/dashboard.test.js`, 4/10; seis fallos por proyección/caption ausentes tras corregir uso de dashboardReport (sólo disponible readonly). GREEN enfocado 10/10.
+- Verificación: `node --test test/dashboard.test.js` 10/10; `npm test` 78/78. Runtime CLI/HTTP sintético en ambos modos: caption/tokens/banner, CSP/barreras, puerto ocupado y señales; snapshot cerrado y estático tras cambiar fechas/tokens.
+- Diagnósticos automáticos de edición JS/JSON/Markdown limpios; LSP primario no disponible al escritor, pendiente del padre. Formato final manual conforme al estilo existente; sin comando de formatter suministrado. Diff 248 líneas (222 adiciones + 26 eliminaciones); `git diff --check` aprobado.
+- Rollback exclusivamente del diff B en `src/dashboard-report.js`, `src/dashboard.js`, `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`. Preservar API A entregada, bases y temporales. Techo duro 400 líneas formateadas, sin quitar cobertura.
+
+## Unidad A evolución diaria — entregada PR #20 (`896fa46`, commit `e5049bd`)
+
+La evidencia siguiente conserva el estado histórico del escritor previo a la integración.
 
 - `tokenEvolution({})` global own, buckets diarios UTC ascendentes y undated; strings/BigInt exactos, conservación con runtime y cobertura dinámica antes de fechas.
 - Sólo timestamp exterior canónico; sin inferencias, días rellenados, tarifas, categorías extra, filtros, cambios CLI/UI/esquema/dependencias ni datos reales.
@@ -99,7 +112,7 @@ La evidencia siguiente conserva el estado histórico del escritor previo a la in
 - RED observado: dashboard 5/7, dos fallos por función ausente. GREEN enfocado 7/7; CLI/HTTP sintéticos, cierre, conservación de bytes, fallo de apertura/reporte/puerto y cambios posteriores sin refresco.
 - Verificación: `node --test test/dashboard.test.js` 7/7; `npm test` 73/73; `node --check src/dashboard.js`, `node --check src/dashboard-report.js`, `node --check test/dashboard.test.js` aprobados. Padre: suite 73/73, tres comprobaciones de sintaxis y LSP primario en tres archivos limpios; `lens_diagnostics` sin bloqueos. Sin build definido.
 - Diff final formateado: 303 líneas (263 adiciones + 40 eliminaciones), medido con `git diff --numstat`; `git diff --check` aprobado. Techo 400 incluidos tests/docs, sin heredar excepciones históricas. SQLite puede usar WAL/SHM; sin validación real ni visual de browser.
-- Rollback sólo del diff B de `src/dashboard.js`, `src/dashboard-report.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar bases, temporales preexistentes y API PR #18. Entrega histórica completada en PR #19; esta evidencia no revisa la evolución candidata.
+- Rollback sólo del diff B de `src/dashboard.js`, `src/dashboard-report.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar bases, temporales preexistentes y API PR #18. Entrega histórica completada en PR #19; esta evidencia no revisa la evolución UI candidata.
 
 ## Unidad A readonly — entregada PR #18 (`7d924e4`)
 
@@ -315,7 +328,7 @@ La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la c
 - **Precios:** conservar versión o tarifa aplicada; distinguir estimación del runtime, estimación manual y factura/suscripción. Precio faltante no es costo cero; no mezclar monedas sin una política explícita.
 - **Análisis:** consumo propio como ranking global; total del árbol como métrica separada. Contar ejecuciones y resultados sólo cuando exista evidencia; no inferir éxito ni ahorro por tokens solamente.
 - **Contexto:** identidad estable de repositorio/worktrees y funcionalidad por tarea, heredable a hijos; fallback "Sin clasificar". Contexto secundario, no sustituto del ranking global.
-- **Dashboard:** B autorizada como candidato de snapshot localhost; evolución, detalle y edición de precios siguen pendientes de habilitación.
+- **Dashboard:** snapshot localhost entregado; evolución UI B candidata autorizada, detalle y edición de precios pendientes de habilitación.
 
 ## Cómo acompañar el avance
 
