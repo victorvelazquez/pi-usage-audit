@@ -711,6 +711,22 @@ test("costReport strict requests, detached empty result and generic recovery", (
       { currency: "usd" },
       { currency: "USD\n" },
       { currency: "USD", at: "now" },
+      { session: "s" },
+      ...[
+        undefined,
+        null,
+        1,
+        [],
+        {},
+        "",
+        "x".repeat(513),
+        "😀".repeat(257),
+      ].map((session) => ({ currency: "USD", session })),
+      { currency: "USD", session: "s", extra: 1 },
+      { currency: "USD", session: "s", [Symbol()]: 1 },
+      Object.defineProperty({ currency: "USD", session: "s" }, "hidden", {
+        value: 1,
+      }),
       { currency: "USD", [Symbol()]: 1 },
       Object.create({ currency: "USD" }),
     ]) {
@@ -718,6 +734,21 @@ test("costReport strict requests, detached empty result and generic recovery", (
     }
     ledger.db.exec = exec;
     const empty = ledger.costReport({ currency: "USD" });
+    for (const session of ["unknown", " ", "x".repeat(512), "😀".repeat(256)])
+      assert.deepEqual(ledger.costReport({ currency: "USD", session }), empty);
+    const hidden = Object.defineProperties(
+      {},
+      { currency: { value: "USD" }, session: { value: "unknown" } },
+    );
+    assert.deepEqual(ledger.costReport(hidden), empty);
+    assert.deepEqual(
+      ledger.costReport(
+        Object.assign(Object.create({ session: "ignored" }), {
+          currency: "USD",
+        }),
+      ),
+      empty,
+    );
     assert.deepEqual(empty.groups, []);
     assert.deepEqual(empty.coverage, {
       includedEntries: 0,
@@ -728,7 +759,7 @@ test("costReport strict requests, detached empty result and generic recovery", (
       throw new Error("PRIVATE_SENTINEL");
     };
     assert.throws(
-      () => ledger.costReport({ currency: "USD" }),
+      () => ledger.costReport({ currency: "USD", session: "unknown" }),
       /^Error: Cost report operation failed$/,
     );
     ledger.db.exec = exec;
@@ -865,6 +896,23 @@ test("costReport exact grouped quotes, dates, exclusions and late attribution", 
     assert.equal(joint[0].agent, "a");
     assert.equal(joint[0].entries, 2);
     assert.equal(joint[0].total, "18014398509481981981985.601490518018");
+    const selected = ledger.costReport({ currency: "USD", session: "other" });
+    assert.deepEqual(selected.groups, [joint[0]]);
+    assert.deepEqual(selected.coverage, {
+      includedEntries: 2,
+      excludedEntries: 0,
+      excludedByCertainty: {},
+    });
+    const own = ledger.costReport({ currency: "USD", session: "s" });
+    assert.equal(
+      own.groups.find((g) => g.model === "zero").total,
+      "0.000000000000",
+    );
+    assert.equal(
+      own.groups.find((g) => g.model === "fixture" && g.provider).total,
+      null,
+    );
+    assert.deepEqual(own.coverage.excludedByCertainty, { "nested-unknown": 1 });
     assert.equal(
       joint.find((g) => g.agent === "z" && g.model === "fixture").total,
       null,
@@ -881,6 +929,103 @@ test("costReport exact grouped quotes, dates, exclusions and late attribution", 
       "invalid-counters",
     ]);
     assert.equal(invalid.total, null);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("costReport session literal selection follows full lineage and stays detached", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  try {
+    const parent = f.file("parent.jsonl", [header("Parent"), message("a")]);
+    const child = f.file("child.jsonl", [
+      header(" Child ", { parentSession: parent }),
+      message("a"),
+      message("new"),
+    ]);
+    const unrelated = f.file("other.jsonl", [header("child"), message("b")]);
+    ledger.importFiles({ sessions: [child, unrelated] });
+    const request = { currency: "EUR", session: " Child " };
+    assert.deepEqual(ledger.costReport(request).coverage, {
+      includedEntries: 0,
+      excludedEntries: 2,
+      excludedByCertainty: { "lineage-unresolved": 2 },
+    });
+    ledger.importFiles({ sessions: [parent] });
+    const rows = () =>
+      ["entries", "sources", "tasks", "manual_prices"].map((table) =>
+        ledger.db.prepare(`SELECT * FROM ${table}`).all(),
+      );
+    const before = rows();
+    const report = ledger.costReport(request);
+    assert.equal(report.currency, "EUR");
+    assert.deepEqual(report.groups, []);
+    assert.deepEqual(report.coverage, {
+      includedEntries: 0,
+      excludedEntries: 2,
+      excludedByCertainty: { copied: 1, "lineage-unresolved": 1 },
+    });
+    for (const session of ["Child", " Child", " child "])
+      assert.deepEqual(ledger.costReport({ ...request, session }).coverage, {
+        includedEntries: 0,
+        excludedEntries: 0,
+        excludedByCertainty: {},
+      });
+    const selected = ledger.costReport({ ...request, session: "Parent" });
+    assert.equal(selected.groups[0].entries, 1);
+    assert.equal(selected.groups[0].total, null);
+    assert.equal(selected.groups[0].quotes[0].session, "Parent");
+    assert.deepEqual(rows(), before);
+    selected.groups[0].quotes[0].observation.usage.input = 999;
+    Object.defineProperty(report.coverage.excludedByCertainty, "copied", {
+      value: 999,
+    });
+    assert.equal(
+      ledger.costReport(request).coverage.excludedByCertainty.copied,
+      1,
+    );
+    assert.equal(
+      ledger.costReport({ ...request, session: "Parent" }).groups[0].quotes[0]
+        .observation.usage.input,
+      10,
+    );
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.equal(
+      ledger.costReport(request).coverage.excludedByCertainty.copied,
+      1,
+    );
+    assert.equal(
+      ledger.costReport({ currency: "EUR" }).coverage.includedEntries,
+      2,
+    );
+    const ambiguous = f.file("ambiguous.jsonl", [
+      header("child"),
+      message("c"),
+    ]);
+    ledger.importFiles({ sessions: [ambiguous] });
+    assert.deepEqual(
+      ledger.costReport({ ...request, session: "child" }).coverage,
+      {
+        includedEntries: 0,
+        excludedEntries: 2,
+        excludedByCertainty: { "session-ambiguous": 2 },
+      },
+    );
+    const changed = f.file("parent.jsonl", [
+      header("Parent"),
+      message("a", { usage: { ...usage, input: 11, totalTokens: 20 } }),
+    ]);
+    ledger.importFiles({ sessions: [changed] });
+    assert.deepEqual(
+      ledger.costReport({ ...request, session: "Parent" }).coverage,
+      {
+        includedEntries: 0,
+        excludedEntries: 1,
+        excludedByCertainty: { "identity-conflict": 1 },
+      },
+    );
   } finally {
     ledger.close();
   }
@@ -917,11 +1062,12 @@ test("costReport single snapshot includes attribution and tariff selection", () 
       }
       return stmt;
     };
-    const first = ledger.costReport({ currency: "USD" }).groups[0];
+    const first = ledger.costReport({ currency: "USD", session: "s" })
+      .groups[0];
     assert.equal(fired, true);
     assert.equal(first.agent, "a");
     assert.equal(first.total, null);
-    const next = ledger.costReport({ currency: "USD" }).groups[0];
+    const next = ledger.costReport({ currency: "USD", session: "s" }).groups[0];
     assert.equal(next.agent, "b");
     assert.equal(next.total, "0.000019000000");
     assert.equal(first.quotes[0].quote.categories.input.price, null);
