@@ -1,0 +1,149 @@
+{
+  "agents": [
+    {
+      "agent": "<demo>",
+      "entries": 2,
+      "sessions": 2,
+      "totalTokens": "18014398509481982"
+    },
+    {
+      "agent": "unknown",
+      "entries": 2,
+      "sessions": 2,
+      "totalTokens": "3"
+    },
+    {
+      "agent": "zero",
+      "entries": 1,
+      "sessions": 1,
+      "totalTokens": "0"
+    }
+  ],
+  "models": [
+    {
+      "provider": "synthetic",
+      "model": "priced",
+      "entries": 2,
+      "sessions": 2,
+      "tokens": {
+        "input": "18014398509481982",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "18014398509481982"
+      }
+    },
+    {
+      "provider": "synthetic",
+      "model": "unpriced",
+      "entries": 1,
+      "sessions": 1,
+      "tokens": {
+        "input": "2",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "2"
+      }
+    },
+    {
+      "provider": null,
+      "model": null,
+      "entries": 1,
+      "sessions": 1,
+      "tokens": {
+        "input": "1",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "1"
+      }
+    },
+    {
+      "provider": "synthetic",
+      "model": "zero",
+      "entries": 1,
+      "sessions": 1,
+      "tokens": {
+        "input": "0",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "0"
+      }
+    }
+  ],
+  "coverage": {
+    "includedEntries": 5,
+    "excludedEntries": 1,
+    "excludedByCertainty": {
+      "incomplete": 1
+    }
+  },
+  "runtime": {
+    "currency": null,
+    "total": null,
+    "totalUnavailableReason": "runtime-currency-not-recorded",
+    "amounts": [0],
+    "coverage": {
+      "recordedEntries": 1,
+      "missingEntries": 4,
+      "unknownCurrencyEntries": 1
+    }
+  },
+  "currency": "EUR",
+  "costs": [
+    {
+      "agent": "<demo>",
+      "provider": "synthetic",
+      "model": "priced",
+      "entries": 2,
+      "total": "18014398509.481982000000",
+      "coverage": {
+        "complete": true,
+        "completeQuotes": 2,
+        "incompleteEntries": 0
+      },
+      "reasons": []
+    },
+    {
+      "agent": "unknown",
+      "provider": null,
+      "model": null,
+      "entries": 1,
+      "total": null,
+      "coverage": {
+        "complete": false,
+        "completeQuotes": 0,
+        "incompleteEntries": 1
+      },
+      "reasons": ["invalid-provider", "invalid-model"]
+    },
+    {
+      "agent": "unknown",
+      "provider": "synthetic",
+      "model": "unpriced",
+      "entries": 1,
+      "total": null,
+      "coverage": {
+        "complete": false,
+        "completeQuotes": 0,
+        "incompleteEntries": 1
+      },
+      "reasons": ["missingPrices: input, output, cacheRead, cacheWrite"]
+    },
+    {
+      "agent": "zero",
+      "provider": "synthetic",
+      "model": "zero",
+      "entries": 1,
+      "total": "0.000000000000",
+      "coverage": {
+        "complete": true,
+        "completeQuotes": 1,
+        "incompleteEntries": 0
+      },
+      "reasons": []
+    }
+  ]
+}
