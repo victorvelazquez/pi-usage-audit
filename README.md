@@ -7,8 +7,9 @@ Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API deliv
 in PR #24 (main `8cfb899`); semantic validation delivered in PR #26 (`7d37f7c`).
 Opt-in HTTP saving delivered in PR #27 (main `64c81bb`).
 The manual tariff form is delivered in PR #28 (main `bc79558`).
-Session-scoped runtime reporting is an API implementation candidate; its new
-verification, independent review and delivery remain parent-owned.
+Session-scoped runtime reporting API is delivered in PR #29 (main `619654b`,
+commit `4a3eb2e`). The CLI session filter is a new implementation candidate;
+its review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
 
@@ -80,7 +81,7 @@ pages allow same-origin connections. Demo/readonly CSP and behavior stay unchang
 PR #28 delivered this form after independent synthetic verification in Edge 154
 (12 groups; suite 99/99) and native review `review-78b87faea124bc1e`, approved and
 acknowledged before delivery. This historical evidence does not review or approve
-the current session-filter candidate. No real sessions are authorized.
+the current CLI session-filter candidate. No real sessions are authorized.
 
 ## Readonly dashboard reports (API delivered PR #18)
 
@@ -245,15 +246,16 @@ Historical rollback surface for this detail unit: `src/dashboard-report.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
 `ROADMAP.md`; preserve delivered evolution, databases and test artifacts.
 
-## Global runtime report (API and CLI)
+## Runtime report (API delivered PR #29; CLI session filter candidate)
 
 ```sh
 node src/cli.js report --db /explicit/existing.sqlite
+node src/cli.js report --db /explicit/existing.sqlite --session 'literal-id'
 node src/cli.js report --help
 ```
 
 Or call `ledger.runtimeReport({})` for the unchanged global report.
-The session-filter API candidate also accepts `ledger.runtimeReport({ session: 'id' })`:
+The delivered API also accepts `ledger.runtimeReport({ session: 'id' })`:
 exactly one own `session` key, a nonempty string of at most 512 UTF-16 code units.
 Matching is literal, with no trim or case folding. Extra own keys, including
 symbols/nonenumerable keys, and invalid values fail before SQL:
@@ -266,8 +268,18 @@ read or imported automatically. All views, exclusions and missing/recorded count
 then describe only selected rows. An unknown ID returns the existing empty shape
 with zero counts and null currency/total. Eligibility, attribution and exact token
 sums are unchanged; reports remain detached, nonmutating and snapshot-consistent.
-This candidate adds no CLI/dashboard filter, repository/worktree mapping, schema,
-pricing change or real-session authorization. Review/delivery are not claimed.
+CLI `report --session` passes this request directly to the API, without JSON
+post-filtering. Omission preserves `{}` global behavior. The flag accepts one
+literal nonempty ID of at most 512 UTF-16 code units, without trim/case folding;
+unlike repeatable import `--session` file paths, duplicate report selectors fail.
+Missing, empty or oversized values fail before storage opens. The existing parser
+rejects values starting with `--` and does not support `--flag=value`, so such IDs
+cannot be selected through this CLI. `costs` still rejects `--session`.
+No dashboard filter, repository/worktree mapping, schema, pricing change or
+real-session authorization is added. This CLI candidate is not reviewed/delivered.
+Historical API #29 writer evidence: suite 100/100; native review
+`review-ac9fb5a8946953ce` approved and acknowledged before delivery. That evidence
+does not review this CLI candidate.
 
 - Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
 - `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.
