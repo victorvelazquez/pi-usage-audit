@@ -1,3 +1,5 @@
+import { manualPriceForm } from "./manual-price-form.js";
+
 const tokenKeys = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
 
 function groupUsage(quotes) {
@@ -134,14 +136,21 @@ ${
     : "<p>Sin filas</p>"
 }</section>`;
 }
-export function renderDashboard(demo, { selected = false } = {}) {
+export function renderDashboard(
+  demo,
+  { selected = false, allowManualPrices = false } = {},
+) {
+  const editable = selected && allowManualPrices === true;
   const coverage = demo.coverage;
   const evolution = demo.evolution;
   const banner = selected
     ? "BASE SELECCIONADA — snapshot local, sin captura"
     : "DEMO — datos sintéticos, sin captura";
   const description = selected
-    ? "Snapshot estático al arrancar de la base existente seleccionada. Sin refresco, captura ni validación de sesiones reales. Lectura SQLite readonly: puede usar WAL/SHM. Sin inicialización, reparación ni escrituras por API."
+    ? "Snapshot estático al arrancar de la base existente seleccionada. Sin refresco, captura ni validación de sesiones reales. Lectura SQLite readonly: puede usar WAL/SHM. Sin inicialización ni reparación." +
+      (editable
+        ? " Guardado manual opt-in habilitado."
+        : " Sin escrituras por API.")
     : "Snapshot sintético fijo. Sin bases reales, escrituras, llamadas externas ni facturación.";
   return `<!doctype html><html lang="es"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -223,5 +232,6 @@ ${table(
   ["Importe"],
   demo.runtime.amounts.map((amount) => [amount]),
 )}
+${editable ? manualPriceForm : ""}
 </main></html>`;
 }

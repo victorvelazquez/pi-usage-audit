@@ -1,7 +1,13 @@
 import http from "node:http";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { projectDemo, renderDashboard } from "./dashboard-report.js";
+import { manualPriceScript } from "./manual-price-form.js";
+
+const manualScriptHash = createHash("sha256")
+  .update(manualPriceScript)
+  .digest("base64");
 
 class ManualPriceRequestError extends Error {
   constructor(status) {
@@ -150,7 +156,7 @@ export async function startDashboard({
       const snapshot = ledger.dashboardReport({ currency });
       html = renderDashboard(
         projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
-        { selected: true },
+        { selected: true, allowManualPrices },
       );
     } finally {
       ledger.close();
@@ -201,7 +207,11 @@ async function serve(html, port, writeDb) {
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+      `default-src 'none'; ${
+        writeDb === undefined
+          ? "script-src 'none'; connect-src 'none'"
+          : `script-src 'sha256-${manualScriptHash}'; connect-src 'self'`
+      }; frame-src 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`,
     );
     const host = `127.0.0.1:${server.address().port}`;
     if (writeDb !== undefined && req.method === "POST") {
