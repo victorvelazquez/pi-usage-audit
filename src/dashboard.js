@@ -12,7 +12,7 @@ class ManualPriceRequestError extends Error {
 }
 
 // Internal parser for future opt-in wiring; neither server calls this.
-// Returns untrusted JSON: validate before any future RW/storage use.
+// Returns the canonical six-field price without opening storage.
 // Failures destroy the request/connection; callers must not reuse it.
 export async function parseManualPriceRequest(req, expectedOrigin) {
   const deny = (status) => {
@@ -101,7 +101,18 @@ export async function parseManualPriceRequest(req, expectedOrigin) {
   } catch {
     deny(400);
   }
-  return value;
+  let validateManualPrice;
+  try {
+    ({ validateManualPrice } = await import("./ledger.js"));
+  } catch (error) {
+    req.destroy();
+    throw error; // Loading failures are operational, not invalid input.
+  }
+  try {
+    return validateManualPrice(value);
+  } catch {
+    deny(400);
+  }
 }
 
 export async function startDemo(port) {
