@@ -1,7 +1,7 @@
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { renderDashboard } from "./dashboard-report.js";
+import { projectDemo, renderDashboard } from "./dashboard-report.js";
 
 export async function startDemo(port) {
   let html;
@@ -14,6 +14,31 @@ export async function startDemo(port) {
   } catch {
     throw new Error("Demo unavailable");
   }
+  return serve(html, port);
+}
+
+export async function startDashboard({ db, currency, port = 0 }) {
+  try {
+    if (typeof db !== "string" || !db || !/^[A-Z]{3}$/.test(currency ?? ""))
+      throw new Error();
+    const { openReadonlyLedger } = await import("./ledger.js");
+    const ledger = openReadonlyLedger(db);
+    let html;
+    try {
+      const snapshot = ledger.dashboardReport({ currency });
+      html = renderDashboard(projectDemo(snapshot.runtime, snapshot.costs), {
+        selected: true,
+      });
+    } finally {
+      ledger.close();
+    }
+    return await serve(html, port);
+  } catch {
+    throw new Error("Dashboard unavailable");
+  }
+}
+
+async function serve(html, port) {
   const server = http.createServer((req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
@@ -51,45 +76,59 @@ export async function startDemo(port) {
 function parse(args) {
   if (args.length === 1 && args[0] === "--help") return null;
   const seen = new Set();
-  let port = 0;
+  const options = { port: 0 };
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
-    if (seen.has(flag) || !["--demo", "--port"].includes(flag))
+    if (
+      seen.has(flag) ||
+      !["--demo", "--port", "--db", "--currency"].includes(flag)
+    )
       throw new Error();
     seen.add(flag);
     if (flag === "--port") {
       const value = args[++i];
       if (!/^(0|[1-9]\d{0,4})$/.test(value ?? "") || Number(value) > 65535)
         throw new Error();
-      port = Number(value);
+      options.port = Number(value);
+    } else if (flag !== "--demo") {
+      const value = args[++i];
+      if (!value || value.startsWith("--")) throw new Error();
+      options[flag.slice(2)] = value;
     }
   }
-  if (!seen.has("--demo")) throw new Error();
-  return port;
+  options.demo = seen.has("--demo");
+  if (options.demo) {
+    if (seen.has("--db") || seen.has("--currency")) throw new Error();
+  } else if (!options.db || !/^[A-Z]{3}$/.test(options.currency ?? "")) {
+    throw new Error();
+  }
+  return options;
 }
 async function main() {
-  let port;
+  let options;
   try {
-    port = parse(process.argv.slice(2));
+    options = parse(process.argv.slice(2));
   } catch {
-    console.error("Invalid demo arguments");
+    console.error("Invalid dashboard arguments");
     process.exitCode = 2;
     return;
   }
-  if (port === null) {
+  if (options === null) {
     console.log(
-      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --help",
+      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N]\n       node src/dashboard.js --help",
     );
     return;
   }
   try {
-    const server = await startDemo(port);
+    const server = options.demo
+      ? await startDemo(options.port)
+      : await startDashboard(options);
     const close = () => server.close();
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
     console.log(`http://127.0.0.1:${server.address().port}/`);
   } catch {
-    console.error("Demo unavailable");
+    console.error(options.demo ? "Demo unavailable" : "Dashboard unavailable");
     process.exitCode = 1;
   }
 }

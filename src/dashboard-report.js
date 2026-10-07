@@ -65,11 +65,17 @@ function table(title, headings, rows) {
     .join("");
   return `<section><h2>${escape(title)}</h2><div class="scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${rows.length ? "" : "<p>Sin filas</p>"}</section>`;
 }
-export function renderDashboard(demo) {
+export function renderDashboard(demo, { selected = false } = {}) {
   const coverage = demo.coverage;
+  const banner = selected
+    ? "BASE SELECCIONADA — snapshot local, sin captura"
+    : "DEMO — datos sintéticos, sin captura";
+  const description = selected
+    ? "Snapshot estático al arrancar de la base existente seleccionada. Sin refresco, captura ni validación de sesiones reales. Lectura SQLite readonly: puede usar WAL/SHM. Sin inicialización, reparación ni escrituras por API."
+    : "Snapshot sintético fijo. Sin bases reales, escrituras, llamadas externas ni facturación.";
   return `<!doctype html><html lang="es"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Consumo local — demo</title><style>
+<title>Consumo local — ${selected ? "base seleccionada" : "demo"}</title><style>
 body { font: 16px system-ui; margin: 2rem; background: #f7f9fc; color: #172338; }
 main { max-width: 1200px; margin: auto; }
 aside { padding: 1rem; background: #ffe59a; font-weight: bold; }
@@ -78,9 +84,9 @@ section { margin-top: 2rem; }
 table { border-collapse: collapse; width: 100%; background: white; }
 th, td { text-align: left; border: 1px solid #ccd3df; padding: .6rem; }
 td { font-variant-numeric: tabular-nums; }
-</style><main><aside>DEMO — datos sintéticos, sin captura</aside>
+</style><main><aside>${escape(banner)}</aside>
 <h1>Agentes, modelos y costos estimados</h1>
-<p>Snapshot sintético fijo. Sin bases reales, escrituras, llamadas externas ni facturación.</p>
+<p>${escape(description)}</p>
 <p>Agentes, modelos y costos describen las mismas entradas: vistas no aditivas.
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
 <p>Entradas propias confirmadas: ${escape(coverage.includedEntries)}.
