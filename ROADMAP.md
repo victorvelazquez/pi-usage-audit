@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, dashboard, formulario opt-in y runtime/costos/evolución API por sesión entregados; compuesto API candidato, sin sesiones reales.**
+**Motor, dashboard, formulario opt-in y APIs por sesión (incluido compuesto) entregados; selector de arranque candidato, sin sesiones reales.**
 
-- **Última tarea terminada:** filtro evolución API por sesión, PR #32 integrada; base `main` `b537af8`, commit `b3f9aa1` (historial Git comprobado).
-- **En curso:** selector literal opcional en `dashboardReport({currency,session})`, compuesto coherente; candidato no revisado ni entregado.
-- **Siguiente propuesta:** filtro UI; propuesta sin autorización.
+- **Última tarea terminada:** filtro compuesto API por sesión, PR #33 integrada; base `main` `02aaa49`, commit `fab58d5` (contexto de entrega del padre).
+- **En curso:** selector literal al arrancar dashboard (`--session`/`startDashboard`), sin interacción en pantalla; candidato no revisado ni entregado.
+- **Siguiente propuesta:** filtros interactivos o contexto avanzado; propuesta sin autorización.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -30,7 +30,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
-| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto candidato, sin filtro UI ni mapping de repositorios |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar candidato, sin filtro interactivo ni mapping de repositorios |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
@@ -77,7 +77,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
-| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32; compuesto candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
+| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33; selector de arranque candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
 ## Admisión HTTP y cuerpo limitado — entregada PR #25 (inactiva)
@@ -142,7 +142,10 @@ nuevo candidato compuesto; se conserva el estado previo a integrar PR #32.
 - No cambios dashboard compuesto/UI/CLI/otros reportes, esquema/deps, captura ni datos reales. Browser/build N/A por API; tests funcionales sintéticos. Revisión y entrega posteriores no autorizadas por esta unidad.
 - Rollback sólo de esta unidad en `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar entregas, bases y artefactos. Techo 400 líneas formateadas incluyendo tests/docs.
 
-## Filtro compuesto dashboard API por sesión — candidato no revisado ni entregado
+## Filtro compuesto dashboard API por sesión — entregado PR #33 (`02aaa49`, commit `fab58d5`)
+
+Entrega informada por el padre sobre la base limpia. La evidencia siguiente es
+histórica del escritor; no revisa ni aprueba el selector de arranque actual.
 
 - `{currency}` global compatible; selector propio opcional literal no vacío ≤512 UTF-16, sin trim/casefold/normalización. Extras propios (símbolos/no enumerables incluidos) fallan antes de SQL.
 - Propagación a runtime/costos/evolución en un único snapshot diferido existente; linaje completo antes de selección, padres externos como evidencia. Desconocido: shapes vacíos y moneda explícita. Fronteras readonly/openLedger intactas.
@@ -150,7 +153,18 @@ nuevo candidato compuesto; se conserva el estado previo a integrar PR #32.
 - Sintéticos: equivalencia standalone/global, literalidad/Unicode/límites, BigInt, copias/padre externo, vacío, detached/reinicio/no mutación, fallos read/commit/rollback sanitizados y recuperación. Commit independiente entre subreportes para global y dos sesiones.
 - Verificación: `npm test` 109/109; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Diff final: 250 líneas (220 adiciones + 30 eliminaciones). Browser/build N/A: API sin nueva frontera UI; runtime funcional sintético en tests.
 - Diagnósticos de edición: último JS/Markdown limpio; ejecuciones previas avisaron cobertura parcial y ocho hallazgos de estilo en tests preexistentes fuera del diff. Sin herramienta LSP independiente disponible ni aprobación nativa afirmada.
-- UI sólo propuesta, sin autorización; sin HTTP/CLI/esquema/deps/captura/datos reales. Rollback sólo de este diff en `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar entregas/bases/artefactos. Techo duro 400 líneas formateadas incluyendo tests/docs.
+- Esta entrega no añadió UI/HTTP/CLI/esquema/deps/captura/datos reales. Rollback histórico sólo de este diff en `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar entregas/bases/artefactos. Techo duro 400 líneas formateadas incluyendo tests/docs.
+
+## Selector de sesión al arrancar dashboard — candidato no revisado ni entregado
+
+- CLI único `--session ID` y API opcional `session`: literal no vacío ≤512 UTF-16; sin trim/casefold/normalización, validación antes de storage/listen. CLI conserva rechazo de valores `--` y no admite demo + sesión.
+- Delegación directa a compuesto PR #33; global/demo intactos, ID desconocido vacío. Sin postfiltro, clasificación duplicada ni IDs/paths en la proyección/etiqueta SSR.
+- Snapshot estático, cierre readonly antes de listen y reinicio para cambiar alcance. Tarifas opt-in/POST independientes del alcance; sin rutas ni CSP nuevos.
+- Pruebas sintéticas reutilizan seed/barreras: equivalencia API/CLI, literalidad/límites/tipos, grandes/cero/null, padre externo, cierre/inmutabilidad y formulario/CSP/demo. No sesiones reales ni validación visual nueva.
+- RED enfocado: etiqueta/ayuda ausentes (1/3 pasa); RED prestorage: 9 lecturas frente a 0 esperadas. GREEN enfocado 3/3. Primer intento corrigió un nombre de columna del seed antes del RED funcional; no cambios al ledger.
+- Verificación del escritor: dashboard 27/27, `npm test` 111/111 y `node --check` de los tres JS aprobados. Diagnósticos de edición JS/Markdown limpios; no revisión nativa ni entrega afirmada.
+- Verificación posterior: suite 111/111, sintaxis de tres JS, LSP primario, diagnósticos y diff check limpios; 290 líneas antes de esta nota. ASSESS: medio, under_budget, sin verificador separado exigido. Browser real bloqueado por `window_not_focused`; visual pendiente, sin aprobación nativa ni entrega.
+- Rollback sólo del diff actual en `src/dashboard.js`, `src/dashboard-report.js`, `test/dashboard.test.js`, `README.md` y `ROADMAP.md`; preservar entregas, bases y artefactos. Techo duro 400 líneas formateadas incluyendo tests/docs; revisión/entrega parent-owned.
 
 ## Formulario manual — entregado PR #28 (`bc79558`)
 

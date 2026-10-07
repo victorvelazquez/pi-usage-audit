@@ -799,6 +799,7 @@ test("opt-in prices persist canonical retries, conflicts and explicit currency",
   const server = await dashboard.startDashboard({
     db: path,
     currency: "USD",
+    session: "unknown-session",
     allowManualPrices: true,
   });
   try {
@@ -1064,6 +1065,184 @@ test("HTTP loopback, exact route, headers and origin boundaries", async () => {
   }
 });
 
+test("dashboard session API and CLI equal the joint projected snapshot", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  const writer = seeded(path);
+  const literal = " 私😀e\u0301 ";
+  writer.db
+    .prepare("UPDATE sources SET session=? WHERE session='a'")
+    .run(literal);
+  writer.db
+    .prepare("UPDATE entries SET session=? WHERE session='a'")
+    .run(literal);
+  writer.db.exec(`INSERT INTO sources VALUES ('child', 'child', 'b');
+    INSERT INTO entries SELECT 'child', entry, data, evidence, conflict FROM entries WHERE session='b'`);
+  writer.close();
+  const reader = ledgerModule.openReadonlyLedger(path);
+  try {
+    for (const session of [
+      undefined,
+      literal,
+      literal.trim(),
+      literal.normalize("NFC"),
+      literal.toUpperCase(),
+      "c",
+      "d",
+      "e",
+      "f",
+      "child",
+      "absent",
+      " ",
+      "😀".repeat(256),
+    ]) {
+      const options = { db: path, currency: "EUR" };
+      const query = { currency: "EUR" };
+      if (session !== undefined) options.session = query.session = session;
+      const snapshot = reader.dashboardReport(query);
+      const projected = projectDemo(
+        snapshot.runtime,
+        snapshot.costs,
+        snapshot.evolution,
+      );
+      const expected = renderDashboard(projected, {
+        selected: true,
+        sessionSelected: session !== undefined,
+      });
+      assert.ok(!JSON.stringify(projected).includes(literal));
+      let closes = 0;
+      const close = DatabaseSync.prototype.close;
+      const listen = http.Server.prototype.listen;
+      t.mock.method(DatabaseSync.prototype, "close", function () {
+        closes++;
+        return close.call(this);
+      });
+      t.mock.method(http.Server.prototype, "listen", function (...args) {
+        assert.equal(closes, 1);
+        return listen.apply(this, args);
+      });
+      const server = await dashboard.startDashboard(options);
+      t.mock.restoreAll();
+      try {
+        const page = await request(server.address().port);
+        assert.equal(page.body, expected);
+        assert.match(
+          page.body,
+          session === undefined
+            ? /Alcance global/
+            : /Sesión seleccionada al arrancar/,
+        );
+        assert.ok(!page.body.includes(literal));
+        if (session === literal) {
+          assert.ok(page.body.includes("9007199254740991"));
+          assert.ok(page.body.includes("9007199254.740991000000"));
+        }
+        if (session === "c") assert.ok(page.body.includes("0.000000000000"));
+        if (session === "e")
+          assert.ok(page.body.includes("Desconocido (null)"));
+        if (
+          [
+            "absent",
+            literal.trim(),
+            literal.normalize("NFC"),
+            literal.toUpperCase(),
+          ].includes(session)
+        )
+          assert.equal(projected.coverage.includedEntries, 0);
+        if (session === "child") {
+          assert.equal(projected.coverage.includedEntries, 0);
+          assert.equal(projected.coverage.excludedByCertainty.copied, 1);
+        }
+        const port = server.address().port;
+        assert.equal((await request(port, "/?session=c")).status, 404);
+        assert.equal(
+          (await request(port, "/manual-prices", { method: "POST" })).status,
+          405,
+        );
+        assert.ok(
+          page.headers["content-security-policy"].includes(
+            "script-src 'none'; connect-src 'none'",
+          ),
+        );
+        if (session === literal) {
+          const later = openLedger(path);
+          later.db
+            .prepare("UPDATE tasks SET agent=? WHERE id='a'")
+            .run("later");
+          later.close();
+          assert.equal((await request(port)).body, expected);
+          const reset = openLedger(path);
+          reset.db
+            .prepare("UPDATE tasks SET agent=? WHERE id='a'")
+            .run("<demo>");
+          reset.close();
+        }
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+      const args = ["--db", path, "--currency", "EUR"];
+      if (session !== undefined) args.push("--session", session);
+      const child = spawn(process.execPath, ["src/dashboard.js", ...args], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const exited = once(child, "exit");
+      try {
+        const output = await Promise.race([
+          once(child.stdout, "data"),
+          exited.then(() => {
+            throw new Error("CLI failed before listen");
+          }),
+        ]);
+        const port = Number(new URL(output[0].toString().trim()).port);
+        assert.equal((await request(port)).body, expected);
+      } finally {
+        child.kill("SIGTERM");
+        await exited;
+      }
+    }
+  } finally {
+    reader.close();
+  }
+});
+
+test("dashboard session invalid API values fail before storage and listen", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  seeded(path).close();
+  let reads = 0;
+  t.mock.method(DatabaseSync.prototype, "prepare", () => {
+    reads++;
+    throw new Error("PRIVATE_STORAGE_ERROR");
+  });
+  let listens = 0;
+  t.mock.method(http.Server.prototype, "listen", () => {
+    listens++;
+    throw new Error("PRIVATE_LISTEN_ERROR");
+  });
+  for (const session of [
+    "",
+    "x".repeat(513),
+    "😀".repeat(256) + "x",
+    null,
+    1,
+    true,
+    [],
+    {},
+    new String("a"),
+  ]) {
+    await assert.rejects(
+      dashboard.startDashboard({ db: path, currency: "EUR", session }),
+      { message: "Dashboard unavailable" },
+    );
+  }
+  assert.equal(reads, 0);
+  assert.equal(listens, 0);
+});
+
 test("selected database snapshot closes before listen and stays static", async (t) => {
   const dir = mkdtempSync("test/.runtime-dashboard-");
   const path = join(dir, "synthetic.sqlite");
@@ -1195,12 +1374,22 @@ test("CLI help and invalid requests are sanitized before startup", () => {
   assert.equal(help.status, 0);
   assert.ok(help.stdout.includes("--demo"));
   assert.ok(help.stdout.includes("--allow-manual-prices"));
+  assert.ok(help.stdout.includes("--session ID"));
   assert.ok(help.stdout.includes("--db FILE --currency CODE"));
   const dir = mkdtempSync("test/.runtime-dashboard-");
   const missing = join(dir, "PRIVATE_PATH.sqlite");
   for (const args of [
     [],
     ["--allow-manual-prices"],
+    ["--demo", "--session", "PRIVATE_SESSION"],
+    ...[
+      ["--session"],
+      ["--session", ""],
+      ["--session", "x".repeat(513)],
+      ["--session", "--literal"],
+      ["--session", "a", "--session", "b"],
+      ["--session=a"],
+    ].map((flags) => ["--db", "PRIVATE_PATH", "--currency", "EUR", ...flags]),
     ["--demo", "--allow-manual-prices"],
     ["--db", "PRIVATE_PATH", "--currency", "EUR", "--allow-manual-prices=true"],
     [
@@ -1241,7 +1430,7 @@ test("CLI help and invalid requests are sanitized before startup", () => {
     );
     assert.equal(result.status, 2);
     assert.equal(result.stdout, "");
-    assert.ok(!result.stderr.includes("PRIVATE_PATH"));
+    assert.equal(result.stderr, "Invalid dashboard arguments\n");
     assert.equal(existsSync(missing), false);
   }
 });
@@ -1260,6 +1449,7 @@ test("manual form gating and exact script CSP", async () => {
             db: path,
             currency: "EUR",
             allowManualPrices: mode,
+            session: "unknown-session",
           });
     try {
       const page = await request(server.address().port);

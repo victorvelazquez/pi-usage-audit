@@ -12,7 +12,8 @@ commit `4a3eb2e`). The CLI session filter is delivered in PR #30 (main `63bdcdb`
 commit `3cefedb`). The cost API session filter is delivered in PR #31 (main
 `00d82b1`, commit `df78f9e`). The evolution API session filter is delivered in
 PR #32 (main `b537af8`, commit `b3f9aa1`). The composite dashboard session filter
-is the current candidate; its review and delivery remain parent-owned.
+is delivered in PR #33 (main `02aaa49`, commit `fab58d5`). Startup dashboard
+session selection is the current candidate; review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
 
@@ -40,19 +41,32 @@ Demo delivered in PR #17 (`8873088`); selected-database UI delivered in PR #19 (
 ```sh
 node src/dashboard.js --db /explicit/existing.sqlite --currency EUR
 node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --port 8080
+node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --session 'literal-id'
 ```
 
 Currency is required: exactly three uppercase ASCII letters, without inference or
-conversion. Demo cannot combine with database/currency flags. Duplicate, missing
+conversion. Demo cannot combine with database/currency/session flags. Duplicate, missing
 or invalid arguments fail before opening storage or listening; help opens neither.
 Exit codes are 0 for help/success, 2 for arguments, 1 for sanitized operational errors.
 The same loopback, Host/Origin/Fetch-site restrictions and CSP protect both modes.
 
 The selected-base banner is not a claim of verified real-session data. One
 `dashboardReport({currency})` snapshot supplies runtime, costs and evolution together;
+the startup selector delegates `{currency,session}` to the same composite API.
 projection retains summaries, not IDs or selected prices, without repricing.
 The reader closes before listen, including report/render failures. HTML stays
 static until restart: no refresh, capture, discovery or external calls.
+The candidate accepts optional `startDashboard({ db, currency, port, session,
+allowManualPrices })` or one `--session ID` flag. Session is literal, nonempty,
+≤512 UTF-16 code units, without trim/case folding/Unicode normalization; invalid
+API values fail before storage/listen with `Dashboard unavailable`. Omission
+(including API `undefined`) preserves global scope; unknown IDs yield empty views.
+CLI rejects duplicate/missing/empty/oversized values and values beginning with
+`--` (no equals syntax), with `Invalid dashboard arguments` and exit 2.
+SSR labels global or selected-session scope without printing the ID or path;
+no selector control or query route exists. Restart to change the static snapshot.
+The selector never filters HTML/JSON or reclassifies lineage. Tariff opt-in and
+the existing POST remain database-wide, independent of report scope.
 Default/demo pages have no form, client scripts or network writes.
 Opening never creates/initializes/repairs a base. SQLite readonly may use WAL/SHM;
 this is not a guarantee of zero physical filesystem effects. Labels remain
@@ -84,7 +98,7 @@ pages allow same-origin connections. Demo/readonly CSP and behavior stay unchang
 PR #28 delivered this form after independent synthetic verification in Edge 154
 (12 groups; suite 99/99) and native review `review-78b87faea124bc1e`, approved and
 acknowledged before delivery. This historical evidence does not review or approve
-the current composite dashboard session-filter candidate. No real sessions are authorized.
+the current startup dashboard session-selector candidate. No real sessions are authorized.
 
 ## Readonly dashboard reports (API delivered PR #18)
 
@@ -100,7 +114,7 @@ checked by reads. Missing, empty, corrupt or incompatible storage fails with
 existing runtime/cost shapes are unchanged.
 All three reports use **one deferred transaction** spanning
 entries, lineage, task attribution and tariffs. Own currency is required:
-three uppercase ASCII letters, no default/conversion. The candidate additionally
+three uppercase ASCII letters, no default/conversion. PR #33 additionally
 accepts `reader.dashboardReport({ currency: 'USD', session: 'literal-id' })`.
 Only these own keys are allowed, including nonenumerable keys; extra own keys
 (including symbols) are rejected. Session is nonempty, ≤512 UTF-16 code units,
@@ -228,8 +242,8 @@ unchanged; the selector performs no writes or tariff/task reads.
 API A adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
 Readonly still exposes only `dashboardReport`/`close`, not independent `tokenEvolution`.
 This filter is delivered in PR #32 (`b537af8`, commit `b3f9aa1`). Composite
-filtering is the current API candidate; CLI/UI stay unchanged. UI filtering is
-only a next-step proposal, not authorized by this unit.
+filtering is delivered in PR #33 (`02aaa49`, commit `fab58d5`). Startup CLI/API
+selection for the dashboard is the current candidate, not an interactive UI filter.
 
 ### Daily evolution dashboard (delivered PR #21)
 
@@ -304,7 +318,7 @@ No dashboard filter, repository/worktree mapping, schema, pricing change or
 real-session authorization is added. CLI delivered in PR #30 (main `63bdcdb`).
 Historical API #29 writer evidence: suite 100/100; native review
 `review-ac9fb5a8946953ce` approved and acknowledged before delivery. That evidence
-does not review the current composite dashboard session-filter candidate.
+does not review the current startup dashboard session-selector candidate.
 
 - Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
 - `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.

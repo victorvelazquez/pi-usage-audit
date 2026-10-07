@@ -135,14 +135,22 @@ export async function startDemo(port) {
   return serve(html, port);
 }
 
+function validSession(session) {
+  return (
+    typeof session === "string" && session.length > 0 && session.length <= 512
+  );
+}
+
 export async function startDashboard({
   db,
   currency,
+  session,
   port = 0,
   allowManualPrices = false,
 }) {
   try {
     if (
+      (session !== undefined && !validSession(session)) ||
       typeof allowManualPrices !== "boolean" ||
       typeof db !== "string" ||
       !db ||
@@ -153,10 +161,16 @@ export async function startDashboard({
     const ledger = openReadonlyLedger(db);
     let html;
     try {
-      const snapshot = ledger.dashboardReport({ currency });
+      const snapshot = ledger.dashboardReport(
+        session === undefined ? { currency } : { currency, session },
+      );
       html = renderDashboard(
         projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
-        { selected: true, allowManualPrices },
+        {
+          selected: true,
+          sessionSelected: session !== undefined,
+          allowManualPrices,
+        },
       );
     } finally {
       ledger.close();
@@ -255,6 +269,7 @@ function parse(args) {
         "--port",
         "--db",
         "--currency",
+        "--session",
         "--allow-manual-prices",
       ].includes(flag)
     )
@@ -269,13 +284,23 @@ function parse(args) {
       options.allowManualPrices = true;
     } else if (flag !== "--demo") {
       const value = args[++i];
-      if (!value || value.startsWith("--")) throw new Error();
+      if (
+        !value ||
+        value.startsWith("--") ||
+        (flag === "--session" && !validSession(value))
+      )
+        throw new Error();
       options[flag.slice(2)] = value;
     }
   }
   options.demo = seen.has("--demo");
   if (options.demo) {
-    if (seen.has("--db") || seen.has("--currency") || options.allowManualPrices)
+    if (
+      seen.has("--db") ||
+      seen.has("--currency") ||
+      seen.has("--session") ||
+      options.allowManualPrices
+    )
       throw new Error();
   } else if (!options.db || !/^[A-Z]{3}$/.test(options.currency ?? "")) {
     throw new Error();
@@ -293,7 +318,7 @@ async function main() {
   }
   if (options === null) {
     console.log(
-      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N] [--allow-manual-prices]\n       node src/dashboard.js --help",
+      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N] [--session ID] [--allow-manual-prices]\n       node src/dashboard.js --help",
     );
     return;
   }
