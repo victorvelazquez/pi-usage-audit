@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**Motor, demo sintético y API readonly entregados. UI de base seleccionada B candidata sin entregar; sin validación de sesiones reales.**
+**Motor, demo, API readonly y UI de base seleccionada entregados. Evolución API A candidata sin entregar; sin validación de sesiones reales.**
 
-- **Última tarea terminada:** unidad A API readonly + reporte atómico, PR #18 integrado en `main` `7d924e4`.
-- **En curso:** unidad B UI mediante base/moneda explícitas; candidata sin entregar.
-- **Siguiente propuesta:** verificar y entregar B; evolución y formulario pendientes.
-- **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; B no los autoriza.
+- **Última tarea terminada:** UI de base seleccionada B, PR #19 integrado en `main` `f8c87b2`.
+- **En curso:** nueva unidad A evolución diaria por API; candidata sin entregar.
+- **Siguiente propuesta:** revisar A; UI de evolución B futura y formulario pendientes.
+- **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
 
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17 y API readonly PR #18 entregados; UI B candidata, evolución y formulario pendientes |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API candidata, UI futura y formulario pendientes |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -66,7 +66,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
 - **Revisión cerrada del bloque 4:** captura nativa y reconocimiento completados; sin correcciones. Entrega realizada mediante PR #13. Esto no autoriza publicar unidades futuras.
-- **Entregado:** demo PR #17 (`8873088`) y API readonly A PR #18 (`7d924e4`). UI B candidata sin entregar. Captura en vivo no iniciada; sin sesiones reales.
+- **Entregado:** demo PR #17 (`8873088`), API readonly A PR #18 (`7d924e4`) y UI seleccionada B PR #19 (`f8c87b2`). Captura en vivo no iniciada; sin sesiones reales.
 
 ## Lista completa del MVP
 
@@ -78,9 +78,20 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos entregados; evolución pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
-| 6. Dashboard localhost | Demo y API readonly entregados; UI B candidata sin entregar | Vista global primero, filtros y detalle después; formulario manual de precios |
+| 6. Dashboard localhost | Demo, API readonly y UI seleccionada entregados; evolución API candidata y UI futura | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Unidad B dashboard seleccionado — candidata sin entregar
+## Unidad A evolución diaria — CANDIDATA sin entregar
+
+- `tokenEvolution({})` global own, buckets diarios UTC ascendentes y undated; strings/BigInt exactos, conservación con runtime y cobertura dinámica antes de fechas.
+- Sólo timestamp exterior canónico; sin inferencias, días rellenados, tarifas, categorías extra, filtros, cambios CLI/UI/esquema/dependencias ni datos reales.
+- `dashboardReport` incluye evolution en la transacción diferida conjunta; readonly conserva sólo dashboardReport/close.
+- RED: `node --test --test-name-pattern=tokenEvolution test/audit.test.js`, 0/2 por API ausente. GREEN: patrón `tokenEvolution|readonly dashboard|dashboardReport`, 5/5; recuperación, reinicio, cero/grandes, fechas, copias y commit independiente con conteos constantes.
+- Verificación: `npm test` 75/75; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Diff final tras formato: 345 líneas (327 adiciones + 18 eliminaciones), medido por el padre. Padre: suite 75/75, sintaxis de ambos JS y LSP primario en ambos archivos limpios; `lens_diagnostics` sin errores. Revisión/entrega pendientes; runtime N/A API-only sintética, evolución UI B futura.
+- Rollback sólo de este diff en `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar PR #19, APIs, bases y temporales. Techo duro 400 líneas formateadas incluidas pruebas/docs.
+
+## Unidad B dashboard seleccionado — entregada PR #19 (`f8c87b2`)
+
+La evidencia siguiente conserva el estado histórico del escritor previo a la integración.
 
 - Base existente `--db` y `--currency` explícitas; demo conservado e incompatible con ambas. Ayuda/invalid no abren base ni listener.
 - Un `dashboardReport` conjunto proyectado al SSR; cierre antes de listen y ante fallos. Snapshot estático, sin repricing, refresco ni captura.
@@ -88,7 +99,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 - RED observado: dashboard 5/7, dos fallos por función ausente. GREEN enfocado 7/7; CLI/HTTP sintéticos, cierre, conservación de bytes, fallo de apertura/reporte/puerto y cambios posteriores sin refresco.
 - Verificación: `node --test test/dashboard.test.js` 7/7; `npm test` 73/73; `node --check src/dashboard.js`, `node --check src/dashboard-report.js`, `node --check test/dashboard.test.js` aprobados. Padre: suite 73/73, tres comprobaciones de sintaxis y LSP primario en tres archivos limpios; `lens_diagnostics` sin bloqueos. Sin build definido.
 - Diff final formateado: 303 líneas (263 adiciones + 40 eliminaciones), medido con `git diff --numstat`; `git diff --check` aprobado. Techo 400 incluidos tests/docs, sin heredar excepciones históricas. SQLite puede usar WAL/SHM; sin validación real ni visual de browser.
-- Rollback sólo del diff B de `src/dashboard.js`, `src/dashboard-report.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar bases, temporales preexistentes y API PR #18. Entrega y acciones git siguen pendientes.
+- Rollback sólo del diff B de `src/dashboard.js`, `src/dashboard-report.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar bases, temporales preexistentes y API PR #18. Entrega histórica completada en PR #19; esta evidencia no revisa la evolución candidata.
 
 ## Unidad A readonly — entregada PR #18 (`7d924e4`)
 

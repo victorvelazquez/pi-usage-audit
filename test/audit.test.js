@@ -61,6 +61,183 @@ function fixture() {
   return { dir, db, file, task };
 }
 
+test("tokenEvolution strict empty requests, detached results and recovery", () => {
+  const ledger = openLedger(":memory:");
+  const exec = ledger.db.exec.bind(ledger.db);
+  try {
+    assert.equal(typeof ledger.tokenEvolution, "function");
+    ledger.db.exec = () => assert.fail("invalid reached SQL");
+    for (const value of [
+      undefined,
+      null,
+      [],
+      { day: "now" },
+      { [Symbol()]: 1 },
+      Object.defineProperty({}, "hidden", { value: 1 }),
+    ])
+      assert.throws(
+        () => ledger.tokenEvolution(value),
+        /Invalid token evolution/,
+      );
+    ledger.db.exec = exec;
+    const empty = ledger.tokenEvolution({});
+    assert.deepEqual(empty, {
+      provenance: "imported-own-token-evolution",
+      granularity: "day",
+      timezone: "UTC",
+      buckets: [],
+      undated: {
+        entries: 0,
+        totalTokens: "0",
+        missingTimestampEntries: 0,
+        invalidTimestampEntries: 0,
+      },
+      coverage: {
+        includedEntries: 0,
+        excludedEntries: 0,
+        excludedByCertainty: {},
+      },
+    });
+    assert.deepEqual(
+      ledger.tokenEvolution(Object.create({ ignored: true })),
+      empty,
+    );
+    empty.buckets.push({ day: "fake" });
+    assert.deepEqual(ledger.tokenEvolution({}).buckets, []);
+    ledger.db.exec = () => {
+      throw new Error("PRIVATE_SENTINEL");
+    };
+    assert.throws(
+      () => ledger.tokenEvolution({}),
+      /^Error: Token evolution operation failed$/,
+    );
+    ledger.db.exec = exec;
+    assert.deepEqual(ledger.tokenEvolution({}).buckets, []);
+  } finally {
+    ledger.db.exec = exec;
+    ledger.close();
+  }
+});
+
+test("tokenEvolution UTC dates, exact totals, ownership and restart conservation", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  try {
+    const huge = {
+      input: Number.MAX_SAFE_INTEGER,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: Number.MAX_SAFE_INTEGER,
+    };
+    const dated = (id, timestamp, tokens = usage) => ({
+      ...message(id, { usage: tokens, timestamp: "2020-01-01T00:00:00.000Z" }),
+      timestamp,
+    });
+    const path = f.file("s.jsonl", [
+      header("s"),
+      dated("later", "2024-03-01T00:00:00.000Z", huge),
+      dated("leap", "2024-02-29T23:59:59.999Z", huge),
+      dated("zero", "2024-02-28T00:00:00.000Z", {
+        ...huge,
+        input: 0,
+        totalTokens: 0,
+      }),
+      dated("early", "0001-01-01T00:00:00.000Z"),
+      dated("last", "9999-12-31T23:59:59.999Z"),
+      dated("missing", null),
+      dated("absent", undefined),
+      ...[
+        "2023-02-29T00:00:00.000Z",
+        "2024-02-29T00:00:00Z",
+        "2024-02-29T01:00:00.000+01:00",
+        "0000-01-01T00:00:00.000Z",
+        "2024-04-31T00:00:00.000Z",
+      ].map((date, i) => dated(`bad-${i}`, date)),
+      message("nested", { role: "toolResult" }),
+      message("incomplete", { usage: {} }),
+    ]);
+    const child = f.file("child.jsonl", [
+      header("child", { parentSession: path }),
+      dated("leap", "2024-02-29T23:59:59.999Z", huge),
+      dated("unresolved", null),
+      dated("later", "invalid", huge),
+    ]);
+    ledger.importFiles({ sessions: [child] });
+    assert.equal(ledger.tokenEvolution({}).coverage.includedEntries, 0);
+    ledger.importFiles({ sessions: [path] });
+    const report = ledger.tokenEvolution({});
+    assert.deepEqual(report.buckets, [
+      { day: "0001-01-01", entries: 1, totalTokens: "19" },
+      { day: "2024-02-28", entries: 1, totalTokens: "0" },
+      { day: "2024-02-29", entries: 1, totalTokens: "9007199254740991" },
+      { day: "2024-03-01", entries: 1, totalTokens: "9007199254740991" },
+      { day: "9999-12-31", entries: 1, totalTokens: "19" },
+    ]);
+    assert.deepEqual(report.undated, {
+      entries: 7,
+      totalTokens: "133",
+      missingTimestampEntries: 2,
+      invalidTimestampEntries: 5,
+    });
+    const runtime = ledger.runtimeReport({});
+    assert.deepEqual(report.coverage, runtime.coverage);
+    assert.deepEqual(report.coverage.excludedByCertainty, {
+      copied: 1,
+      "lineage-unresolved": 1,
+      "lineage-conflict": 1,
+      "nested-unknown": 1,
+      incomplete: 1,
+    });
+    assert.equal(
+      report.buckets.reduce((n, row) => n + row.entries, 0) +
+        report.undated.entries,
+      12,
+    );
+    assert.equal(
+      report.buckets.reduce(
+        (n, row) => n + BigInt(row.totalTokens),
+        BigInt(report.undated.totalTokens),
+      ),
+      runtime.agents.reduce((n, row) => n + BigInt(row.totalTokens), 0n),
+    );
+    ledger.importFiles({
+      sessions: [path, child],
+      tasks: [f.task("late", path)],
+    });
+    assert.deepEqual(ledger.tokenEvolution({}), report);
+    report.buckets[0].totalTokens = "0";
+    report.undated.totalTokens = "0";
+    assert.equal(ledger.tokenEvolution({}).buckets[0].totalTokens, "19");
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.equal(ledger.tokenEvolution({}).buckets[0].totalTokens, "19");
+    assert.equal(ledger.tokenEvolution({}).undated.totalTokens, "133");
+    const original = ledger.db
+      .prepare("SELECT data FROM entries WHERE entry='missing'")
+      .get().data;
+    for (const patch of [
+      { totalTokens: 20 },
+      { input: -1 },
+      { output: null },
+    ]) {
+      ledger.db
+        .prepare("UPDATE entries SET data=? WHERE entry='missing'")
+        .run(JSON.stringify({ ...JSON.parse(original), ...patch }));
+      assert.throws(
+        () => ledger.tokenEvolution({}),
+        /^Error: Token evolution operation failed$/,
+      );
+    }
+    ledger.db
+      .prepare("UPDATE entries SET data=? WHERE entry='missing'")
+      .run(original);
+    assert.equal(ledger.tokenEvolution({}).undated.totalTokens, "133");
+  } finally {
+    ledger.close();
+  }
+});
+
 test("readonly dashboard rejects absent and incompatible storage without repair", () => {
   const f = fixture();
   const open = (path) => ledgerModule.openReadonlyLedger(path);
@@ -188,11 +365,12 @@ test("readonly dashboard allowlist, strict validation, preservation and recovery
     assert.equal(first.runtime.agents[0].totalTokens, "19");
     assert.equal(first.costs.groups[0].total, null);
     assert.deepEqual(transactions, ["BEGIN DEFERRED", "COMMIT"]);
+    assert.deepEqual(first.evolution, writer.tokenEvolution({}));
     const hidden = Object.defineProperty({}, "currency", { value: "USD" });
     assert.deepEqual(reader.dashboardReport(hidden), first);
     let sources = 0;
     proto.prepare = function (sql) {
-      if (sql === "SELECT * FROM sources" && ++sources === 2) {
+      if (sql === "SELECT * FROM sources" && ++sources === 3) {
         throw new Error("SYNTHETIC_PRIVATE_PATH");
       }
       return prepare.call(this, sql);
@@ -265,7 +443,12 @@ test("dashboardReport holds one snapshot across constant-count writer commit bet
         const row = writer.db
           .prepare("SELECT data FROM entries WHERE session='s'")
           .get();
-        const data = { ...JSON.parse(row.data), input: 20, totalTokens: 29 };
+        const data = {
+          ...JSON.parse(row.data),
+          input: 20,
+          totalTokens: 29,
+          timestamp: "2026-02-01T00:00:00.000Z",
+        };
         writer.db
           .prepare("UPDATE entries SET data=? WHERE session='s'")
           .run(JSON.stringify(data));
@@ -276,7 +459,11 @@ test("dashboardReport holds one snapshot across constant-count writer commit bet
       return prepare.call(this, sql);
     };
     const first = reader.dashboardReport({ currency: "USD" });
-    assert.equal(sources, 2);
+    assert.equal(sources, 3);
+    assert.deepEqual(first.evolution.buckets, [
+      { day: "2026-01-01", entries: 2, totalTokens: "38" },
+    ]);
+    assert.deepEqual(first.evolution.coverage, first.runtime.coverage);
     assert.equal(
       first.runtime.agents.find((row) => row.agent === "old").totalTokens,
       "19",
@@ -289,6 +476,10 @@ test("dashboardReport holds one snapshot across constant-count writer commit bet
     assert.deepEqual(first.runtime.coverage, first.costs.coverage);
     assert.deepEqual(counts(), before);
     const next = reader.dashboardReport({ currency: "USD" });
+    assert.deepEqual(next.evolution.buckets, [
+      { day: "2026-02-01", entries: 1, totalTokens: "29" },
+    ]);
+    assert.deepEqual(next.evolution.coverage, next.runtime.coverage);
     assert.equal(next.runtime.agents[0].agent, "new");
     assert.equal(next.runtime.agents[0].totalTokens, "29");
     assert.equal(next.costs.groups[0].total, "0.000058000000");

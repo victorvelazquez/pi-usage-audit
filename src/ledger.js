@@ -559,6 +559,7 @@ function createLedgerApi(db, secret) {
             return {
               runtime: api.runtimeReport({}),
               costs: api.costReport(request),
+              evolution: api.tokenEvolution({}),
             };
           } finally {
             dashboardReading = false;
@@ -566,6 +567,84 @@ function createLedgerApi(db, secret) {
         });
       } catch {
         throw new Error("Dashboard report operation failed");
+      }
+    },
+    tokenEvolution: (value) => {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Reflect.ownKeys(value).length !== 0
+      )
+        throw new Error("Invalid token evolution");
+      try {
+        return reportTransaction(() => {
+          const buckets = new Map();
+          const excluded = new Map();
+          const undated = {
+            entries: 0,
+            totalTokens: 0n,
+            missingTimestampEntries: 0,
+            invalidTimestampEntries: 0,
+          };
+          let includedEntries = 0;
+          let excludedEntries = 0;
+          for (const row of snapshot()) {
+            if (row.certainty !== "own") {
+              excludedEntries++;
+              excluded.set(
+                row.certainty,
+                (excluded.get(row.certainty) ?? 0) + 1,
+              );
+              continue;
+            }
+            const tokens = [...priceCategories, "totalTokens"].map((key) => {
+              if (counter(row[key]) === null)
+                throw new Error("Invalid stored counter");
+              return BigInt(row[key]);
+            });
+            if (
+              tokens.slice(0, 4).reduce((sum, n) => sum + n, 0n) !== tokens[4]
+            )
+              throw new Error("Invalid stored total");
+            includedEntries++;
+            if (!canonicalUtc(row.timestamp)) {
+              undated.entries++;
+              undated.totalTokens += tokens[4];
+              if (row.timestamp === null) undated.missingTimestampEntries++;
+              else undated.invalidTimestampEntries++;
+              continue;
+            }
+            const day = row.timestamp.slice(0, 10);
+            if (!buckets.has(day))
+              buckets.set(day, { day, entries: 0, totalTokens: 0n });
+            const bucket = buckets.get(day);
+            bucket.entries++;
+            bucket.totalTokens += tokens[4];
+          }
+          return {
+            provenance: "imported-own-token-evolution",
+            granularity: "day",
+            timezone: "UTC",
+            buckets: [...buckets.values()]
+              .sort((a, b) => a.day.localeCompare(b.day))
+              .map((row) => ({
+                ...row,
+                totalTokens: row.totalTokens.toString(),
+              })),
+            undated: {
+              ...undated,
+              totalTokens: undated.totalTokens.toString(),
+            },
+            coverage: {
+              includedEntries,
+              excludedEntries,
+              excludedByCertainty: Object.fromEntries(excluded),
+            },
+          };
+        });
+      } catch {
+        throw new Error("Token evolution operation failed");
       }
     },
     costReport: (value) => {
