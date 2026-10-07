@@ -146,6 +146,119 @@ test("CLI report validates without storage and reports separate-process imports"
   }
 });
 
+test("CLI report session validates before storage and documents lexical limits", () => {
+  const f = fixture();
+  for (const flags of [
+    ["--session"],
+    ["--session", ""],
+    ["--session", "x", "--session", "y"],
+    ["--session", "x".repeat(513)],
+    ["--session", "😀".repeat(256) + "x"],
+    ["--session", "--literal"],
+    ["--session=x"],
+    ["--task", "x"],
+  ]) {
+    const result = f.run("report", "--db", f.db, ...flags);
+    assert.equal(result.status, 2, JSON.stringify(flags));
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /Invalid arguments/);
+    assert.equal(existsSync(join(f.dir, "db")), false);
+    assert.equal(existsSync(join(f.home, ".local")), false);
+  }
+  const help = f.run("report", "--help");
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /report --db existing.sqlite \[--session id\]/);
+  assert.match(help.stdout, /512 UTF-16/);
+  assert.equal(existsSync(join(f.dir, "db")), false);
+  const missing = f.run("report", "--db", f.db, "--session", "s");
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /Report failed/);
+  assert.equal(existsSync(join(f.dir, "db")), false);
+});
+
+test("CLI report session matches API, isolates coverage and preserves literal IDs", () => {
+  const f = fixture();
+  const ids = ["s", "S", " s ", " ", "x".repeat(512), "😀".repeat(256)];
+  const paths = ids.map((id, index) => {
+    const row = message("one");
+    row.message.model = `fixture-${index}`;
+    if (index === 0) row.message.usage.cost = { total: 0 };
+    return f.file(`s-${index}.jsonl`, [header(id), row]);
+  });
+  const imported = json(
+    f.run("import", "--db", f.db, ...paths.flatMap((p) => ["--session", p])),
+  );
+  assert.equal(imported.report.inserted, ids.length);
+  const ledger = openLedger(f.db);
+  try {
+    assert.deepEqual(
+      json(f.run("report", "--db", f.db)),
+      ledger.runtimeReport({}),
+    );
+    for (const id of [...ids, "unknown"]) {
+      const actual = json(f.run("report", "--db", f.db, "--session", id));
+      assert.deepEqual(actual, ledger.runtimeReport({ session: id }));
+      assert.equal(actual.coverage.includedEntries, id === "unknown" ? 0 : 1);
+      assert.equal(actual.coverage.excludedEntries, 0);
+      assert.equal(actual.agents.length, id === "unknown" ? 0 : 1);
+      assert.equal(actual.models.length, id === "unknown" ? 0 : 1);
+      assert.equal(actual.runtime.coverage.recordedEntries, id === "s" ? 1 : 0);
+      assert.equal(
+        actual.runtime.coverage.missingEntries,
+        id === "s" || id === "unknown" ? 0 : 1,
+      );
+      assert.equal(actual.runtime.total, null);
+      assert.equal(actual.runtime.currency, null);
+    }
+  } finally {
+    ledger.close();
+  }
+  const corrupt = f.file("PRIVATE_SENTINEL.sqlite", [{ invalid: true }]);
+  const failed = f.run(
+    "report",
+    "--db",
+    corrupt,
+    "--session",
+    "PRIVATE_SENTINEL",
+  );
+  assert.equal(failed.status, 1);
+  assert.equal(failed.stdout, "");
+  assert.match(failed.stderr, /Report failed/);
+  assert.equal(failed.stderr.includes("PRIVATE_SENTINEL"), false);
+  assert.equal(existsSync(join(f.home, ".local")), false);
+});
+
+test("CLI report session retains external parent classification before selection", () => {
+  const f = fixture();
+  const parent = f.file("parent.jsonl", [header("parent"), message("copy")]);
+  const child = f.file("child.jsonl", [
+    header("child", { parentSession: parent }),
+    message("copy"),
+    message("unresolved"),
+  ]);
+  json(f.run("import", "--db", f.db, "--session", parent, "--session", child));
+  const ledger = openLedger(f.db);
+  try {
+    const selected = json(f.run("report", "--db", f.db, "--session", "child"));
+    assert.deepEqual(selected, ledger.runtimeReport({ session: "child" }));
+    assert.deepEqual(selected.coverage, {
+      includedEntries: 0,
+      excludedEntries: 2,
+      excludedByCertainty: { copied: 1, "lineage-unresolved": 1 },
+    });
+    assert.deepEqual(selected.agents, []);
+    assert.deepEqual(selected.models, []);
+    assert.deepEqual(selected.runtime.observations, []);
+    assert.equal(selected.runtime.coverage.missingEntries, 0);
+    assert.equal(
+      json(f.run("report", "--db", f.db)).coverage.includedEntries,
+      1,
+    );
+  } finally {
+    ledger.close();
+  }
+});
+
 test("CLI help and invalid arguments never create default or explicit storage", () => {
   const f = fixture();
   for (const args of [

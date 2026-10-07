@@ -1,8 +1,11 @@
 const help = `Usage: node src/cli.js import [--db path] --session path [--session path ...]
        node src/cli.js import [--db path] --task path [--task path ...]
-       node src/cli.js report --db existing.sqlite
+       node src/cli.js report --db existing.sqlite [--session id]
        node src/cli.js costs --db existing.sqlite --currency USD
-Sessions and tasks may be combined. Only explicitly selected files are read.
+Import sessions and tasks may be combined; file flags are repeatable.
+Only explicitly selected files are read.
+Report --session: one literal nonempty ID, at most 512 UTF-16 code units.
+Values starting with -- are rejected; --flag=value syntax is not supported.
 Default database: ~/.local/state/pi-usage-audit/usage.sqlite
 --help: show help without opening storage.
 `;
@@ -22,7 +25,7 @@ function parse(args) {
         options.command === "costs"
           ? ["--db", "--currency"]
           : options.command === "report"
-            ? ["--db"]
+            ? ["--db", "--session"]
             : ["--db", "--session", "--task"]
       ).includes(flag)
     )
@@ -40,6 +43,10 @@ function parse(args) {
       )
         throw new Error("arguments");
       options.currency = value;
+    } else if (options.command === "report" && flag === "--session") {
+      if (options.session !== undefined || value.length > 512)
+        throw new Error("arguments");
+      options.session = value;
     } else options[flag === "--session" ? "sessions" : "tasks"].push(value);
   }
   if (
@@ -71,7 +78,13 @@ else if (options) {
     const { openLedger } = await import("./ledger.js");
     ledger = openLedger(options.db);
     if (options.command === "report") {
-      console.log(JSON.stringify(ledger.runtimeReport({})));
+      console.log(
+        JSON.stringify(
+          ledger.runtimeReport(
+            options.session === undefined ? {} : { session: options.session },
+          ),
+        ),
+      );
     } else if (options.command === "costs") {
       console.log(
         JSON.stringify(ledger.costReport({ currency: options.currency })),
