@@ -138,8 +138,11 @@ ${
 }
 export function renderDashboard(
   demo,
-  { selected = false, allowManualPrices = false } = {},
+  { selected = false, sessionSelected = false, allowManualPrices = false } = {},
 ) {
+  const scope = sessionSelected
+    ? "Sesión seleccionada al arrancar"
+    : "Alcance global";
   const editable = selected && allowManualPrices === true;
   const coverage = demo.coverage;
   const evolution = demo.evolution;
@@ -166,6 +169,7 @@ td { font-variant-numeric: tabular-nums; }
 </style><main><aside>${escape(banner)}</aside>
 <h1>Agentes, modelos y costos estimados</h1>
 <p>${escape(description)}</p>
+${selected ? `<p>${scope}. Reiniciar para cambiar el alcance.</p>` : ""}
 <p>Agentes, modelos y costos describen las mismas entradas: vistas no aditivas.
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
 <p>Entradas propias confirmadas: ${escape(coverage.includedEntries)}.
