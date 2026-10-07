@@ -943,6 +943,13 @@ test("runtimeReport strict requests, empty result and generic recovery", () => {
       null,
       [],
       { x: 1 },
+      { session: "" },
+      { session: "x".repeat(513) },
+      { session: 1 },
+      { session: null },
+      { session: "s", extra: true },
+      { session: "s", [Symbol()]: 1 },
+      Object.defineProperty({ session: "s" }, "x", { value: 1 }),
       { [Symbol()]: 1 },
       Object.defineProperty({}, "x", { value: 1 }),
     ]) {
@@ -953,6 +960,14 @@ test("runtimeReport strict requests, empty result and generic recovery", () => {
     }
     ledger.db.exec = exec;
     const empty = ledger.runtimeReport({});
+    assert.deepEqual(ledger.runtimeReport({ session: "unknown" }), empty);
+    assert.deepEqual(ledger.runtimeReport({ session: "x".repeat(512) }), empty);
+    assert.deepEqual(
+      ledger.runtimeReport(
+        Object.defineProperty({}, "session", { value: "s" }),
+      ),
+      empty,
+    );
     assert.deepEqual(empty.agents, []);
     assert.deepEqual(empty.models, []);
     assert.deepEqual(empty.runtime.coverage, {
@@ -964,7 +979,7 @@ test("runtimeReport strict requests, empty result and generic recovery", () => {
       throw new Error("PRIVATE_SENTINEL");
     };
     assert.throws(
-      () => ledger.runtimeReport({}),
+      () => ledger.runtimeReport({ session: "s" }),
       /^Error: Runtime report operation failed$/,
     );
     ledger.db.exec = exec;
@@ -1097,6 +1112,134 @@ test("runtimeReport exact views, individual amounts, continuation, detach and re
   }
 });
 
+test("runtimeReport session scope preserves literal IDs and full lineage", () => {
+  const f = fixture();
+  const huge = Number.MAX_SAFE_INTEGER - 3;
+  const use = (input, amount) => ({
+    input,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: input,
+    ...(amount === undefined ? {} : { cost: { total: amount } }),
+  });
+  const selected = f.file("selected.jsonl", [
+    header(" S "),
+    message("one", { usage: use(huge, 0) }),
+    message("two", { usage: use(huge) }),
+    message("zero", { usage: use(0) }),
+  ]);
+  const outside = f.file("outside.jsonl", [header("S"), message("other")]);
+  const child = f.file("child.jsonl", [
+    header("child", { parentSession: selected }),
+    message("one", { usage: use(huge, 0) }),
+    message("new"),
+  ]);
+  const ambiguous = ["amb-a.jsonl", "amb-b.jsonl"].map((name) =>
+    f.file(name, [header("amb"), message("same")]),
+  );
+  let ledger = openLedger(f.db);
+  try {
+    ledger.importFiles({
+      sessions: [selected, outside, child, ...ambiguous],
+      tasks: [f.task("t", selected, "red"), f.task("u", selected, "red")],
+    });
+    const before = ledger.db.prepare("SELECT * FROM entries").all();
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    const global = ledger.runtimeReport({});
+    const result = ledger.runtimeReport({ session: " S " });
+    assert.deepEqual(result.coverage, {
+      includedEntries: 3,
+      excludedEntries: 0,
+      excludedByCertainty: {},
+    });
+    assert.deepEqual(result.agents, [
+      {
+        agent: "red",
+        entries: 3,
+        sessions: 1,
+        totalTokens: (BigInt(huge) * 2n).toString(),
+      },
+    ]);
+    assert.equal(result.models[0].tokens.input, (BigInt(huge) * 2n).toString());
+    assert.equal(result.models[0].entries, 3);
+    assert.equal(result.models[0].sessions, 1);
+    assert.deepEqual(result.runtime.coverage, {
+      recordedEntries: 1,
+      missingEntries: 2,
+      unknownCurrencyEntries: 1,
+    });
+    assert.equal(result.runtime.currency, null);
+    assert.equal(result.runtime.total, null);
+    assert.equal(result.runtime.observations[0].amount, 0);
+    assert.equal(result.runtime.observations[0].session, " S ");
+    assert.equal(
+      ledger.runtimeReport({ session: "S" }).agents[0].agent,
+      "unknown",
+    );
+    assert.equal(
+      ledger.runtimeReport({ session: "s" }).coverage.includedEntries,
+      0,
+    );
+    const copied = ledger.runtimeReport({ session: "child" });
+    assert.deepEqual(copied.coverage, {
+      includedEntries: 0,
+      excludedEntries: 2,
+      excludedByCertainty: { copied: 1, "lineage-unresolved": 1 },
+    });
+    assert.deepEqual(copied.agents, []);
+    assert.deepEqual(copied.models, []);
+    assert.equal(copied.runtime.coverage.missingEntries, 0);
+    assert.deepEqual(
+      ledger.runtimeReport({ session: "amb" }).coverage.excludedByCertainty,
+      { "session-ambiguous": 1 },
+    );
+    assert.deepEqual(ledger.runtimeReport({}), global);
+    assert.deepEqual(ledger.db.prepare("SELECT * FROM entries").all(), before);
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    result.agents[0].agent = "mutated";
+    result.models[0].tokens.input = "0";
+    result.runtime.observations[0].amount = 999;
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.equal(
+      ledger.runtimeReport({ session: " S " }).agents[0].agent,
+      "red",
+    );
+    assert.equal(
+      ledger.runtimeReport({ session: " S " }).runtime.observations[0].amount,
+      0,
+    );
+    ledger.importFiles({ tasks: [f.task("u", selected, "blue")] });
+    assert.equal(
+      ledger.runtimeReport({ session: " S " }).agents[0].agent,
+      "unknown",
+    );
+    const other = before.find((row) => row.session === "S");
+    ledger.db
+      .prepare("UPDATE entries SET data=? WHERE session=? AND entry=?")
+      .run(
+        JSON.stringify({ ...JSON.parse(other.data), input: -1 }),
+        other.session,
+        other.entry,
+      );
+    assert.doesNotThrow(() => ledger.runtimeReport({ session: " S " }));
+    assert.throws(
+      () => ledger.runtimeReport({ session: "S" }),
+      /^Error: Runtime report operation failed$/,
+    );
+    assert.throws(
+      () => ledger.runtimeReport({}),
+      /Runtime report operation failed/,
+    );
+  } finally {
+    ledger.close();
+  }
+});
+
 test("runtimeReport one snapshot across independent entry and task commit", () => {
   const f = fixture();
   const path = f.file("source.jsonl", [header("s"), message("one")]);
@@ -1126,7 +1269,7 @@ test("runtimeReport one snapshot across independent entry and task commit", () =
       }
       return stmt;
     };
-    const report = ledger.runtimeReport({});
+    const report = ledger.runtimeReport({ session: "s" });
     assert.deepEqual(report.agents, [
       { agent: "red", entries: 1, sessions: 1, totalTokens: "19" },
     ]);

@@ -6,8 +6,9 @@ Project status and next steps: [roadmap and progress](ROADMAP.md).
 Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API delivered
 in PR #24 (main `8cfb899`); semantic validation delivered in PR #26 (`7d37f7c`).
 Opt-in HTTP saving delivered in PR #27 (main `64c81bb`).
-The manual tariff form is an implementation candidate pending parent verification,
-review and delivery; it is not yet delivered.
+The manual tariff form is delivered in PR #28 (main `bc79558`).
+Session-scoped runtime reporting is an API implementation candidate; its new
+verification, independent review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
 
@@ -52,9 +53,10 @@ Default/demo pages have no form, client scripts or network writes.
 Opening never creates/initializes/repairs a base. SQLite readonly may use WAL/SHM;
 this is not a guarantee of zero physical filesystem effects. Labels remain
 user-provided metadata: do not store secrets in them. Validation uses synthetic
-bases only; real-session and visual browser validation remain pending.
+bases only; real-session validation remains pending. The opt-in form's synthetic
+actual-browser verification completed in Edge 154 before PR #28 delivery.
 
-### Opt-in manual tariff form (candidate)
+### Opt-in manual tariff form (delivered PR #28)
 
 ```sh
 node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --allow-manual-prices
@@ -75,8 +77,10 @@ identity/currency/category/effective time; another effective time is another ver
 Saving never reprices or refreshes the static cost snapshot. Estimates are not
 invoices. The trusted inline script has an exact CSP SHA-256 hash; only opted-in
 pages allow same-origin connections. Demo/readonly CSP and behavior stay unchanged.
-Synthetic tests cover this candidate; actual-browser verification and independent
-review/delivery remain parent-owned. No real sessions are authorized.
+PR #28 delivered this form after independent synthetic verification in Edge 154
+(12 groups; suite 99/99) and native review `review-78b87faea124bc1e`, approved and
+acknowledged before delivery. This historical evidence does not review or approve
+the current session-filter candidate. No real sessions are authorized.
 
 ## Readonly dashboard reports (API delivered PR #18)
 
@@ -248,9 +252,22 @@ node src/cli.js report --db /explicit/existing.sqlite
 node src/cli.js report --help
 ```
 
-Or call `ledger.runtimeReport({})`. Exactly zero own keys are required, including
-symbols/nonenumerable keys; invalid requests fail before SQL: `Invalid runtime report`.
+Or call `ledger.runtimeReport({})` for the unchanged global report.
+The session-filter API candidate also accepts `ledger.runtimeReport({ session: 'id' })`:
+exactly one own `session` key, a nonempty string of at most 512 UTF-16 code units.
+Matching is literal, with no trim or case folding. Extra own keys, including
+symbols/nonenumerable keys, and invalid values fail before SQL:
+`Invalid runtime report`. A nonenumerable own session key is accepted.
 The result is `{ provenance: 'imported-own-runtime-report', agents, models, runtime, coverage }`.
+
+Classification uses the complete imported lineage snapshot **before** filtering.
+Parent evidence outside the selected session remains available; no parents are
+read or imported automatically. All views, exclusions and missing/recorded counts
+then describe only selected rows. An unknown ID returns the existing empty shape
+with zero counts and null currency/total. Eligibility, attribution and exact token
+sums are unchanged; reports remain detached, nonmutating and snapshot-consistent.
+This candidate adds no CLI/dashboard filter, repository/worktree mapping, schema,
+pricing change or real-session authorization. Review/delivery are not claimed.
 
 - Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
 - `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.
