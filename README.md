@@ -1,6 +1,6 @@
 # pi-usage-audit
 
-Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; synthetic localhost dashboard candidate.
+Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard, candidate evolution API.
 
 Project status and next steps: [roadmap and progress](ROADMAP.md).
 
@@ -23,9 +23,9 @@ Manual group costs show explicit EUR, complete coverage or null with API reasons
 known zero is distinct from missing. No subtotal, global money total or money ranking.
 Runtime amounts remain separate with unknown currency/total. No conversion or invoice claim.
 Fixture equivalence is tested against a fixed in-memory synthetic ledger.
-Demo delivered in PR #17 (`8873088`); selected-database UI is a candidate, not delivered.
+Demo delivered in PR #17 (`8873088`); selected-database UI delivered in PR #19 (`f8c87b2`).
 
-## Selected-database dashboard (candidate)
+## Selected-database dashboard (delivered PR #19)
 
 ```sh
 node src/dashboard.js --db /explicit/existing.sqlite --currency EUR
@@ -57,8 +57,9 @@ no database handle, imports or pricing writes. Opening uses `readOnly: true` and
 checked by reads. Missing, empty, corrupt or incompatible storage fails with
 `Readonly ledger open failed`, without directory creation, initialization or repair.
 
-`reader.dashboardReport({ currency: 'USD' })` returns `{ runtime, costs }`, the
-existing runtime/cost report shapes from **one deferred transaction** spanning
+`reader.dashboardReport({ currency: 'USD' })` returns `{ runtime, costs, evolution }`
+(`evolution` is a candidate addition); existing runtime/cost shapes are unchanged.
+All three reports use **one deferred transaction** spanning
 entries, lineage, task attribution and tariffs. Exactly one own currency key is
 required; three uppercase ASCII letters, no default/conversion. Invalid requests
 fail before SQL (`Invalid dashboard report`); operational failures reject the
@@ -143,6 +144,33 @@ late lineage/conflicts affect fresh calls. Results are detached, with no writes,
 new schema, task/attribution reads, costs, pricing or invoice inference. Operational
 and rollback errors are generic: `Model usage operation failed`. Existing APIs
 and CLI outputs are unchanged; no dashboard, live capture or automatic model policy.
+
+## Daily token evolution (unit A candidate, not delivered)
+
+`ledger.tokenEvolution({})` requires an object with zero own keys, including
+symbols/nonenumerable keys; invalid requests fail before SQL (`Invalid token evolution`).
+It returns `{ provenance: 'imported-own-token-evolution', granularity: 'day',
+timezone: 'UTC', buckets, undated, coverage }` from one deferred read snapshot.
+
+- Only dynamically confirmed-own entries contribute, classified before dates.
+  Coverage matches runtime: `includedEntries`, `excludedEntries`, `excludedByCertainty`.
+- Buckets are `{ day, entries, totalTokens }`, ascending UTC `YYYY-MM-DD`.
+  Totals use BigInt and exact decimal strings, including explicit zero; counts
+  describe persisted records, not calls. No gap filling, costs or token subsets.
+- Only persisted outer `entry.timestamp` is used: canonical real UTC
+  `YYYY-MM-DDTHH:mm:ss.sssZ`, years 0001–9999. No message/header/current-time fallback.
+  Null is missing; every other noncanonical value is invalid, including offsets.
+- `undated` has `entries`, `totalTokens`, `missingTimestampEntries` and
+  `invalidTimestampEntries`. Buckets plus undated conserve runtime own entries/tokens.
+  Empty storage has no buckets, zero counts and string `"0"` undated tokens.
+- Invalid stored own counters or inconsistent category/total sums reject the entire
+  operation, even undated: `Token evolution operation failed`. Results are detached;
+  late ownership evidence affects fresh calls. No tariff or task attribution dependency.
+
+The candidate adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
+Readonly still exposes only `dashboardReport`/`close`, not independent `tokenEvolution`.
+No CLI/UI change: evolution UI is future unit B; API-only runtime validation is N/A.
+Synthetic tests only; no real-session, native-review or delivery claim.
 
 ## Global runtime report (API and CLI)
 
