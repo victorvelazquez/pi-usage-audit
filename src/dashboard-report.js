@@ -1,11 +1,12 @@
 const tokenKeys = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
 
 // Copy public summaries only: never retain session/entry IDs or selected prices.
-export function projectDemo(report, costs) {
+export function projectDemo(report, costs, evolution) {
   return {
     agents: structuredClone(report.agents),
     models: structuredClone(report.models),
     coverage: structuredClone(report.coverage),
+    evolution: structuredClone(evolution),
     runtime: {
       currency: report.runtime.currency,
       total: report.runtime.total,
@@ -63,10 +64,11 @@ function table(title, headings, rows) {
         `<tr>${row.map((value) => `<td>${escape(value)}</td>`).join("")}</tr>`,
     )
     .join("");
-  return `<section><h2>${escape(title)}</h2><div class="scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${rows.length ? "" : "<p>Sin filas</p>"}</section>`;
+  return `<section><h2>${escape(title)}</h2><div class="scroll"><table><caption>${escape(title)}</caption><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${rows.length ? "" : "<p>Sin filas</p>"}</section>`;
 }
 export function renderDashboard(demo, { selected = false } = {}) {
   const coverage = demo.coverage;
+  const evolution = demo.evolution;
   const banner = selected
     ? "BASE SELECCIONADA — snapshot local, sin captura"
     : "DEMO — datos sintéticos, sin captura";
@@ -91,6 +93,37 @@ td { font-variant-numeric: tabular-nums; }
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
 <p>Entradas propias confirmadas: ${escape(coverage.includedEntries)}.
 Excluidas (no son cero): ${escape(coverage.excludedEntries)}.</p>
+<p>Evolución de tokens propios confirmados, por día UTC observado; sin rellenar huecos.
+Agentes, modelos y evolución son vistas no aditivas; sin costos temporales.</p>
+${table(
+  "Evolución diaria — UTC",
+  ["Día UTC", "Entradas", "Tokens exactos"],
+  evolution.buckets.map(({ day, entries, totalTokens }) => [
+    day,
+    entries,
+    totalTokens,
+  ]),
+)}
+${table(
+  "Sin fecha — separado de los días UTC",
+  ["Entradas", "Tokens exactos", "Timestamp ausente", "Timestamp inválido"],
+  [
+    [
+      evolution.undated.entries,
+      evolution.undated.totalTokens,
+      evolution.undated.missingTimestampEntries,
+      evolution.undated.invalidTimestampEntries,
+    ],
+  ],
+)}
+<p>Entradas incluidas en evolución: ${escape(evolution.coverage.includedEntries)}.
+Excluidas de evolución (no son cero): ${escape(evolution.coverage.excludedEntries)}.
+Cobertura no aditiva con las otras vistas. Sin fecha no se asigna a un día.</p>
+${table(
+  "Exclusiones de evolución por certeza",
+  ["Certeza", "Entradas"],
+  Object.entries(evolution.coverage.excludedByCertainty),
+)}
 ${table("Exclusiones por certeza", ["Certeza", "Entradas"], Object.entries(coverage.excludedByCertainty))}
 ${table(
   "Agentes — orden por tokens",

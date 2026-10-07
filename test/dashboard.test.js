@@ -69,10 +69,7 @@ test("fixture equals projection of immutable synthetic API reports", () => {
   const ledger = seeded();
   try {
     const before = ledger.db.prepare("SELECT * FROM entries").all();
-    const demo = projectDemo(
-      ledger.runtimeReport({}),
-      ledger.costReport({ currency: "EUR" }),
-    );
+    const demo = projection(ledger);
     assert.deepEqual(demo, fixture());
     assert.deepEqual(ledger.db.prepare("SELECT * FROM entries").all(), before);
     const html = renderDashboard(demo);
@@ -88,6 +85,11 @@ test("fixture equals projection of immutable synthetic API reports", () => {
     ]) {
       assert.ok(html.includes(value), value);
     }
+    assert.match(html, /<caption>Evolución diaria — UTC<\/caption>/);
+    assert.match(
+      html,
+      /<td>2026-01-01<\/td><td>5<\/td><td>18014398509481985<\/td>/,
+    );
     assert.ok(!html.includes("PRIVATE_ID"));
     assert.ok(!JSON.stringify(demo).includes("PRIVATE_ID"));
     assert.ok(html.includes("&lt;demo&gt;"));
@@ -103,9 +105,12 @@ test("empty reports and escaping preserve unknown, zero and exact strings", () =
     const empty = projectDemo(
       ledger.runtimeReport({}),
       ledger.costReport({ currency: "EUR" }),
+      ledger.tokenEvolution({}),
     );
     assert.ok(renderDashboard(empty).includes("Sin filas"));
     assert.equal(empty.runtime.total, null);
+    assert.deepEqual(empty.evolution.buckets, []);
+    assert.match(renderDashboard(empty), /Sin fecha.*<td>0<\/td><td>0<\/td>/s);
     const demo = fixture();
     demo.agents[0].agent = `<script>&"'`;
     const html = renderDashboard(demo);
@@ -113,6 +118,105 @@ test("empty reports and escaping preserve unknown, zero and exact strings", () =
     assert.ok(!html.includes("<script>"));
     assert.ok(html.includes("runtime-currency-not-recorded"));
     assert.ok(!html.includes("USD"));
+  } finally {
+    ledger.close();
+  }
+});
+
+function retime(ledger, session, timestamp) {
+  ledger.db
+    .prepare(
+      "UPDATE entries SET data=json_set(data, '$.timestamp', ?) WHERE session=?",
+    )
+    .run(timestamp, session);
+}
+function projection(ledger) {
+  return projectDemo(
+    ledger.runtimeReport({}),
+    ledger.costReport({ currency: "EUR" }),
+    ledger.tokenEvolution({}),
+  );
+}
+
+test("daily evolution preserves observed UTC days, gaps, zero and coverage", () => {
+  const ledger = seeded();
+  try {
+    retime(ledger, "a", "2026-01-03T23:59:59.999Z");
+    retime(ledger, "b", "2026-01-03T00:00:00.000Z");
+    retime(ledger, "c", "2026-01-05T00:00:00.000Z");
+    retime(ledger, "f", "invalid-excluded-date");
+    const demo = projection(ledger);
+    assert.deepEqual(demo.evolution.buckets, [
+      { day: "2026-01-01", entries: 2, totalTokens: "3" },
+      { day: "2026-01-03", entries: 2, totalTokens: "18014398509481982" },
+      { day: "2026-01-05", entries: 1, totalTokens: "0" },
+    ]);
+    assert.deepEqual(demo.evolution.coverage, demo.coverage);
+    const html = renderDashboard(demo);
+    assert.ok(!html.includes("2026-01-02"));
+    assert.ok(!html.includes("2026-01-04"));
+    assert.match(html, /<td>2026-01-05<\/td><td>1<\/td><td>0<\/td>/);
+    assert.ok(html.includes("18014398509481982"));
+    assert.ok(!/1\.8014|18\.01|18M/.test(html));
+    assert.ok(html.includes("Excluidas de evolución (no son cero): 1"));
+    assert.ok(html.includes("incomplete"));
+  } finally {
+    ledger.close();
+  }
+});
+
+test("only undated evolution distinguishes missing and invalid timestamps", () => {
+  const ledger = seeded();
+  try {
+    for (const session of ["a", "b"]) retime(ledger, session, null);
+    for (const session of ["c", "d", "e"])
+      retime(ledger, session, "2026-01-01T00:00:00+00:00");
+    const demo = projection(ledger);
+    assert.deepEqual(demo.evolution.buckets, []);
+    assert.deepEqual(demo.evolution.undated, {
+      entries: 5,
+      totalTokens: "18014398509481985",
+      missingTimestampEntries: 2,
+      invalidTimestampEntries: 3,
+    });
+    const html = renderDashboard(demo);
+    assert.match(
+      html,
+      /Sin fecha.*<td>5<\/td><td>18014398509481985<\/td><td>2<\/td><td>3<\/td>/s,
+    );
+    assert.ok(html.includes("Sin filas"));
+    assert.ok(html.includes("vistas no aditivas"));
+  } finally {
+    ledger.close();
+  }
+});
+
+test("evolution projection deeply detaches summaries and escapes every value", () => {
+  const ledger = seeded();
+  try {
+    const snapshot = {
+      runtime: ledger.runtimeReport({}),
+      costs: ledger.costReport({ currency: "EUR" }),
+      evolution: ledger.tokenEvolution({}),
+    };
+    const before = structuredClone(snapshot.evolution);
+    const demo = projectDemo(
+      snapshot.runtime,
+      snapshot.costs,
+      snapshot.evolution,
+    );
+    demo.evolution.buckets[0].day = `<script>&"'`;
+    demo.evolution.undated.totalTokens = "<undated>";
+    demo.evolution.coverage.excludedByCertainty.incomplete = "<excluded>";
+    const html = renderDashboard(demo);
+    assert.ok(html.includes("&lt;script&gt;&amp;&quot;&#39;"));
+    assert.ok(html.includes("&lt;undated&gt;"));
+    assert.ok(html.includes("&lt;excluded&gt;"));
+    assert.ok(!html.includes("<script"));
+    assert.deepEqual(snapshot.evolution, before);
+    assert.ok(
+      !/<script|<canvas|<svg|<input|<select/.test(renderDashboard(fixture())),
+    );
   } finally {
     ledger.close();
   }
@@ -227,6 +331,8 @@ test("selected database snapshot closes before listen and stays static", async (
     const writer = openLedger(path);
     try {
       writer.db.exec("UPDATE tasks SET agent='later-synthetic-agent'");
+      writer.db.exec(`UPDATE entries SET data = json_set(data,
+        '$.timestamp', '2026-02-01T00:00:00.000Z', '$.input', 7, '$.totalTokens', 7)`);
     } finally {
       writer.close();
     }
@@ -370,6 +476,9 @@ test("CLI effective URL, occupied port and signal shutdown", async () => {
       const page = await request(port);
       assert.equal(page.status, 200);
       assert.ok(page.body.includes(banner));
+      assert.match(page.body, /<caption>Evolución diaria — UTC<\/caption>/);
+      assert.ok(page.body.includes("18014398509481985"));
+      assert.ok(!page.body.includes("<script"));
       const busy = cli([...args, "--port", String(port)]);
       assert.equal(busy.status, 1);
       assert.ok(busy.stderr.trim().endsWith(error));
