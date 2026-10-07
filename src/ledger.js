@@ -248,13 +248,14 @@ function validateManual(value, keys, error = "Invalid manual price") {
     if (!text(id) || id.trim() !== id || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(id))
       invalid();
   }
-  if (keys.length === 1) return { id: value.id };
+  if (keys.length === 1 && keys[0] === "id") return { id: value.id };
   if (
     typeof value.currency !== "string" ||
     value.currency.length !== 3 ||
     !/^[A-Z]{3}$/.test(value.currency)
   )
     invalid();
+  if (keys.length === 1) return { currency: value.currency };
   if (keys.includes("at")) {
     if (!canonicalUtc(value.at)) invalid();
     const usage = value.usage;
@@ -314,6 +315,88 @@ export function openLedger(path = defaultDatabasePath()) {
   const secret = db
     .prepare("SELECT value FROM config WHERE key=?")
     .get("fingerprint-key").value;
+  const { dashboardReport: _dashboardReport, ...api } = createLedgerApi(
+    db,
+    secret,
+  );
+  return api;
+}
+
+export function openReadonlyLedger(path) {
+  let db;
+  try {
+    if (typeof path !== "string" || !path || path === ":memory:")
+      throw new Error();
+    db = new DatabaseSync(path, { readOnly: true, timeout: 5000 });
+    db.exec("BEGIN DEFERRED");
+    const schema = [
+      ["config", "key value", "TEXT TEXT", "key"],
+      ["sources", "path session parent", "TEXT TEXT TEXT", "path"],
+      [
+        "entries",
+        "session entry data evidence conflict",
+        "TEXT TEXT TEXT TEXT INTEGER",
+        "session entry",
+      ],
+      [
+        "tasks",
+        "id path agent project feature parent",
+        "TEXT TEXT TEXT TEXT TEXT TEXT",
+        "id",
+      ],
+      ["imports", "id report", "INTEGER TEXT", "id"],
+      [
+        "manual_prices",
+        "provider model category currency effectiveFrom ratePerMillion",
+        "TEXT TEXT TEXT TEXT TEXT TEXT",
+        "provider model category currency effectiveFrom",
+      ],
+      ["manual_estimates", "id request estimate", "TEXT TEXT TEXT", "id"],
+      ["imported_estimates", "id request estimate", "TEXT TEXT TEXT", "id"],
+    ];
+    for (const [table, names, types, keys] of schema) {
+      const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+      const tableRow = db
+        .prepare("SELECT type FROM sqlite_schema WHERE name=?")
+        .get(table);
+      if (tableRow?.type !== "table") throw new Error();
+      names.split(" ").forEach((name, index) => {
+        const column = columns.find((column) => column.name === name);
+        if (
+          !column ||
+          column.type !== types.split(" ")[index] ||
+          column.pk !== keys.split(" ").indexOf(name) + 1
+        )
+          throw new Error();
+      });
+      if (
+        columns.filter((column) => column.pk).length !== keys.split(" ").length
+      )
+        throw new Error();
+    }
+    const secret = db
+      .prepare("SELECT value FROM config WHERE key=?")
+      .get("fingerprint-key")?.value;
+    if (
+      typeof secret !== "string" ||
+      secret.length !== 64 ||
+      !/^[a-f0-9]{64}$/.test(secret)
+    )
+      throw new Error();
+    db.exec("COMMIT");
+    const api = createLedgerApi(db, secret);
+    return { dashboardReport: api.dashboardReport, close: api.close };
+  } catch {
+    try {
+      db?.close();
+    } catch {
+      // Preserve the sanitized opening error.
+    }
+    throw new Error("Readonly ledger open failed");
+  }
+}
+
+function createLedgerApi(db, secret) {
   const read = (path) => {
     try {
       return readFileSync(path, "utf8");
@@ -332,6 +415,10 @@ export function openLedger(path = defaultDatabasePath()) {
       throw error;
     }
   };
+  // Only the synchronous dashboard operation may reuse its private transaction.
+  let dashboardReading = false;
+  const reportTransaction = (fn) =>
+    dashboardReading ? fn() : readTransaction(fn);
   const snapshot = () => {
     const sources = db.prepare("SELECT * FROM sources").all();
     const entries = db
@@ -459,6 +546,28 @@ export function openLedger(path = defaultDatabasePath()) {
     db,
     close: () => db.close(),
     attribution,
+    dashboardReport: (value) => {
+      const request = validateManual(
+        value,
+        ["currency"],
+        "Invalid dashboard report",
+      );
+      try {
+        return readTransaction(() => {
+          dashboardReading = true;
+          try {
+            return {
+              runtime: api.runtimeReport({}),
+              costs: api.costReport(request),
+            };
+          } finally {
+            dashboardReading = false;
+          }
+        });
+      } catch {
+        throw new Error("Dashboard report operation failed");
+      }
+    },
     costReport: (value) => {
       if (
         !value ||
@@ -473,7 +582,7 @@ export function openLedger(path = defaultDatabasePath()) {
         throw new Error("Invalid cost report");
       const currency = value.currency;
       try {
-        return readTransaction(() => {
+        return reportTransaction(() => {
           const groups = new Map();
           const actors = new Map();
           const coverage = {
@@ -1029,7 +1138,7 @@ export function openLedger(path = defaultDatabasePath()) {
         throw new Error("Invalid runtime report");
       }
       try {
-        return readTransaction(() => {
+        return reportTransaction(() => {
           const categories = [
             "input",
             "output",

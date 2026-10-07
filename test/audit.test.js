@@ -7,11 +7,13 @@ import {
   writeFileSync,
   readFileSync,
   appendFileSync,
+  readdirSync,
 } from "node:fs";
 import { resolve, join, relative, isAbsolute } from "node:path";
 import { fork, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { openLedger, defaultDatabasePath } from "../src/ledger.js";
+import * as ledgerModule from "../src/ledger.js";
 
 const usage = {
   input: 10,
@@ -58,6 +60,249 @@ function fixture() {
     ]);
   return { dir, db, file, task };
 }
+
+test("readonly dashboard rejects absent and incompatible storage without repair", () => {
+  const f = fixture();
+  const open = (path) => ledgerModule.openReadonlyLedger(path);
+  const missing = join(f.dir, "absent", "audit.sqlite");
+  const empty = join(f.dir, "empty.sqlite");
+  const corrupt = join(f.dir, "corrupt.sqlite");
+  writeFileSync(empty, "");
+  writeFileSync(corrupt, "SYNTHETIC_CORRUPT");
+  const before = readdirSync(f.dir);
+  for (const path of [
+    undefined,
+    "",
+    ":memory:",
+    missing,
+    f.dir,
+    empty,
+    corrupt,
+  ])
+    assert.throws(() => open(path), /^Error: Readonly ledger open failed$/);
+  assert.deepEqual(readdirSync(f.dir), before);
+  assert.equal(readFileSync(empty).length, 0);
+  assert.equal(readFileSync(corrupt, "utf8"), "SYNTHETIC_CORRUPT");
+  for (const [index, sql] of [
+    "DELETE FROM config",
+    "UPDATE config SET value='invalid'",
+    "DROP TABLE tasks; CREATE TABLE tasks (id TEXT PRIMARY KEY)",
+    "DROP TABLE entries; CREATE TABLE entries (session TEXT, entry TEXT, data TEXT, evidence TEXT, conflict INTEGER)",
+  ].entries()) {
+    const path = join(f.dir, `incompatible-${index}.sqlite`);
+    const writer = openLedger(path);
+    try {
+      writer.db.exec(sql);
+      const bytes = readFileSync(path);
+      assert.throws(() => open(path), /^Error: Readonly ledger open failed$/);
+      assert.deepEqual(readFileSync(path), bytes);
+    } finally {
+      writer.close();
+    }
+  }
+});
+
+test("readonly dashboard allowlist, strict validation, preservation and recovery", () => {
+  const f = fixture();
+  const writer = openLedger(f.db);
+  const proto = DatabaseSync.prototype;
+  const prepare = proto.prepare;
+  const exec = proto.exec;
+  let reader;
+  try {
+    reader = ledgerModule.openReadonlyLedger(f.db);
+    const empty = reader.dashboardReport({ currency: "USD" });
+    assert.deepEqual(empty.runtime.agents, []);
+    assert.deepEqual(empty.costs.groups, []);
+    reader.close();
+    reader = null;
+    const path = f.file("s.jsonl", [header("s"), message("a")]);
+    writer.importFiles({ sessions: [path], tasks: [f.task("t", path)] });
+    const rows = () =>
+      [
+        "config",
+        "sources",
+        "entries",
+        "tasks",
+        "imports",
+        "manual_prices",
+        "manual_estimates",
+        "imported_estimates",
+      ].map((table) => writer.db.prepare(`SELECT * FROM ${table}`).all());
+    const before = rows();
+    const bytes = readFileSync(f.db);
+    const queries = [];
+    const transactions = [];
+    let readonlyDb;
+    let failOpen = true;
+    proto.prepare = function (sql) {
+      readonlyDb = this;
+      if (failOpen) {
+        failOpen = false;
+        throw new Error("SYNTHETIC_PRIVATE_PATH");
+      }
+      queries.push(sql);
+      assert.match(sql, /^(SELECT|PRAGMA table_info)/);
+      return prepare.call(this, sql);
+    };
+    proto.exec = function (sql) {
+      transactions.push(sql);
+      assert.match(sql, /^(BEGIN DEFERRED|COMMIT|ROLLBACK)$/);
+      return exec.call(this, sql);
+    };
+    assert.throws(
+      () => ledgerModule.openReadonlyLedger(f.db),
+      /^Error: Readonly ledger open failed$/,
+    );
+    assert.equal(readonlyDb.isOpen, false);
+    reader = ledgerModule.openReadonlyLedger(f.db);
+    assert.deepEqual(Reflect.ownKeys(reader).sort(), [
+      "close",
+      "dashboardReport",
+    ]);
+    assert.throws(
+      () => exec.call(readonlyDb, "DELETE FROM entries"),
+      /readonly/i,
+    );
+    queries.length = 0;
+    transactions.length = 0;
+    for (const value of [
+      undefined,
+      null,
+      [],
+      {},
+      { currency: "usd" },
+      { currency: "USD\n" },
+      { currency: "USD", extra: 1 },
+      { currency: "USD", [Symbol()]: 1 },
+      Object.create({ currency: "USD" }),
+      Object.defineProperty({ currency: "USD" }, "hidden", { value: 1 }),
+    ])
+      assert.throws(
+        () => reader.dashboardReport(value),
+        /Invalid dashboard report/,
+      );
+    assert.deepEqual(queries, []);
+    assert.deepEqual(transactions, []);
+    const first = reader.dashboardReport({ currency: "USD" });
+    assert.equal(first.runtime.agents[0].totalTokens, "19");
+    assert.equal(first.costs.groups[0].total, null);
+    assert.deepEqual(transactions, ["BEGIN DEFERRED", "COMMIT"]);
+    const hidden = Object.defineProperty({}, "currency", { value: "USD" });
+    assert.deepEqual(reader.dashboardReport(hidden), first);
+    let sources = 0;
+    proto.prepare = function (sql) {
+      if (sql === "SELECT * FROM sources" && ++sources === 2) {
+        throw new Error("SYNTHETIC_PRIVATE_PATH");
+      }
+      return prepare.call(this, sql);
+    };
+    assert.throws(
+      () => reader.dashboardReport({ currency: "USD" }),
+      /^Error: Dashboard report operation failed$/,
+    );
+    assert.deepEqual(reader.dashboardReport({ currency: "USD" }), first);
+    first.runtime.agents[0].totalTokens = "0";
+    assert.equal(
+      reader.dashboardReport({ currency: "USD" }).runtime.agents[0].totalTokens,
+      "19",
+    );
+    reader.close();
+    assert.throws(
+      () => reader.dashboardReport({ currency: "USD" }),
+      /^Error: Dashboard report operation failed$/,
+    );
+    reader = null;
+    proto.prepare = prepare;
+    proto.exec = exec;
+    assert.deepEqual(rows(), before);
+    assert.deepEqual(readFileSync(f.db), bytes);
+  } finally {
+    proto.prepare = prepare;
+    proto.exec = exec;
+    reader?.close();
+    writer.close();
+  }
+});
+
+test("dashboardReport holds one snapshot across constant-count writer commit between reports", () => {
+  const f = fixture();
+  const writer = openLedger(f.db);
+  const proto = DatabaseSync.prototype;
+  const prepare = proto.prepare;
+  let reader;
+  try {
+    const path = f.file("s.jsonl", [header("s"), message("a")]);
+    const child = f.file("child.jsonl", [header("child"), message("b")]);
+    writer.importFiles({
+      sessions: [path, child],
+      tasks: [f.task("t", path, "old")],
+    });
+    for (const category of ["input", "output", "cacheRead", "cacheWrite"])
+      writer.addManualPrice({
+        provider: "synthetic",
+        model: "fixture",
+        category,
+        currency: "USD",
+        effectiveFrom: "2025-01-01T00:00:00.000Z",
+        ratePerMillion: "1",
+      });
+    const counts = () =>
+      ["entries", "sources", "tasks", "manual_prices"].map(
+        (table) =>
+          writer.db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n,
+      );
+    const before = counts();
+    reader = ledgerModule.openReadonlyLedger(f.db);
+    let sources = 0;
+    proto.prepare = function (sql) {
+      if (
+        this !== writer.db &&
+        sql === "SELECT * FROM sources" &&
+        ++sources === 2
+      ) {
+        writer.db.exec("BEGIN IMMEDIATE");
+        const row = writer.db
+          .prepare("SELECT data FROM entries WHERE session='s'")
+          .get();
+        const data = { ...JSON.parse(row.data), input: 20, totalTokens: 29 };
+        writer.db
+          .prepare("UPDATE entries SET data=? WHERE session='s'")
+          .run(JSON.stringify(data));
+        writer.db.exec(`UPDATE tasks SET agent='new';
+          UPDATE manual_prices SET ratePerMillion='2.000000';
+          UPDATE sources SET parent='missing' WHERE session='child'; COMMIT`);
+      }
+      return prepare.call(this, sql);
+    };
+    const first = reader.dashboardReport({ currency: "USD" });
+    assert.equal(sources, 2);
+    assert.equal(
+      first.runtime.agents.find((row) => row.agent === "old").totalTokens,
+      "19",
+    );
+    assert.equal(
+      first.costs.groups.find((row) => row.agent === "old").total,
+      "0.000019000000",
+    );
+    assert.equal(first.costs.coverage.includedEntries, 2);
+    assert.deepEqual(first.runtime.coverage, first.costs.coverage);
+    assert.deepEqual(counts(), before);
+    const next = reader.dashboardReport({ currency: "USD" });
+    assert.equal(next.runtime.agents[0].agent, "new");
+    assert.equal(next.runtime.agents[0].totalTokens, "29");
+    assert.equal(next.costs.groups[0].total, "0.000058000000");
+    assert.deepEqual(next.runtime.coverage, next.costs.coverage);
+    assert.equal(
+      next.costs.coverage.excludedByCertainty["lineage-unresolved"],
+      1,
+    );
+  } finally {
+    proto.prepare = prepare;
+    reader?.close();
+    writer.close();
+  }
+});
 
 test("costReport strict requests, detached empty result and generic recovery", () => {
   const f = fixture();

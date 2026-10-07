@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**El motor de datos funciona. Hay un candidato visual demo sintético; no está entregado ni conectado a datos reales.**
+**El motor de datos y el demo visual sintético están entregados. La conexión readonly API es candidata; no hay UI conectada a datos reales.**
 
-- **Última tarea terminada:** costos comparativos API/CLI, PR #16 integrado en `main` `64ce935`.
-- **En curso:** dashboard demo localhost SSR; candidato sin entregar, revisión y validación visual pendientes.
-- **Siguiente propuesta:** conectar datos mediante selección explícita; no autorizado.
-- **Decisiones pendientes:** autorizar conexión y selección de sesiones reales antes de trabajar en esos pasos.
+- **Última tarea terminada:** dashboard demo sintético, PR #17 integrado en `main` `8873088`.
+- **En curso:** unidad A API readonly + reporte atómico; candidato sin entregar.
+- **Siguiente propuesta:** unidad B conexión UI mediante selección explícita; pendiente, fuera de A.
+- **Decisiones pendientes:** autorizar unidad B y sesiones reales antes de trabajar en esos pasos.
 
 ## Qué ya podés hacer
 
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo sintético candidato; datos reales, evolución y formulario pendientes |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo entregado PR #17; API readonly A candidata, UI B, evolución y formulario pendientes |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -66,7 +66,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
 - **Revisión cerrada del bloque 4:** captura nativa y reconocimiento completados; sin correcciones. Entrega realizada mediante PR #13. Esto no autoriza publicar unidades futuras.
-- **Candidato actual:** dashboard demo sintético; no entregado. Captura en vivo no iniciada; sin sesiones reales.
+- **Entregado:** dashboard demo sintético, PR #17 integrado en `8873088`. Unidad A readonly candidata; unidad B UI pendiente. Captura en vivo no iniciada; sin sesiones reales.
 
 ## Lista completa del MVP
 
@@ -78,9 +78,18 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos entregados; evolución pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
-| 6. Dashboard localhost | Demo sintético candidato; conexión real no autorizada | Vista global primero, filtros y detalle después; formulario manual de precios |
+| 6. Dashboard localhost | Demo entregado; API readonly A candidata, UI B pendiente | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Dashboard demo — candidato sin entregar
+## Unidad A readonly — candidato sin entregar
+
+- Apertura existente explícita sin init/repair ni API de escritura; SQLite puede usar WAL/SHM.
+- Runtime/costos en un snapshot diferido; moneda estricta antes de SQL y errores sanitizados.
+- Pruebas sólo sintéticas: rechazos, conservación, recuperación y commit independiente entre informes con conteos constantes. RED 0/3 por opener ausente; GREEN 3/3 y suite 71/71.
+- Techo 400 líneas formateadas incluidas pruebas/docs. Rollback sólo del diff de `src/ledger.js`, `test/audit.test.js`, `README.md` y `ROADMAP.md`; preservar bases y temporales preexistentes. UI B fuera de alcance.
+
+## Dashboard demo — entregado PR #17 (`8873088`)
+
+La evidencia siguiente conserva el estado histórico del escritor previo a la integración.
 
 - SSR sin JS cliente ni dependencias; servidor sólo fixture, bind 127.0.0.1 y puerto efectivo explícito.
 - Fixture proyectado desde APIs existentes sobre ledger sintético en memoria; sin IDs privados ni recálculo de precios.

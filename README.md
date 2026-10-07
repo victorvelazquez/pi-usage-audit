@@ -23,7 +23,27 @@ Manual group costs show explicit EUR, complete coverage or null with API reasons
 known zero is distinct from missing. No subtotal, global money total or money ranking.
 Runtime amounts remain separate with unknown currency/total. No conversion or invoice claim.
 Fixture equivalence is tested against a fixed in-memory synthetic ledger.
-Visual browser verification and candidate review/delivery remain parent-owned.
+Demo delivered in PR #17 (`8873088`); real-data UI connection remains pending.
+
+## Readonly dashboard reports (API only)
+
+`openReadonlyLedger(filename)` from `src/ledger.js` requires an explicit existing
+SQLite file initialized by `openLedger`. It returns only `{ dashboardReport, close }`:
+no database handle, imports or pricing writes. Opening uses `readOnly: true` and
+`timeout: 5000`; schema columns/primary keys and the stored fingerprint key are
+checked by reads. Missing, empty, corrupt or incompatible storage fails with
+`Readonly ledger open failed`, without directory creation, initialization or repair.
+
+`reader.dashboardReport({ currency: 'USD' })` returns `{ runtime, costs }`, the
+existing runtime/cost report shapes from **one deferred transaction** spanning
+entries, lineage, task attribution and tariffs. Exactly one own currency key is
+required; three uppercase ASCII letters, no default/conversion. Invalid requests
+fail before SQL (`Invalid dashboard report`); operational failures reject the
+whole result (`Dashboard report operation failed`). Close the reader in `finally`.
+
+Readonly does not mean filesystem-immutable: SQLite may create/use WAL/SHM
+sidecars. No WAL configuration, `immutable` mode, key writes or repair occurs.
+This API candidate does not connect the dashboard UI or authorize real sessions.
 
 ## Quick start
 
