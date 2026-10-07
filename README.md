@@ -3,7 +3,8 @@
 Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution UI and agent detail.
 
 Project status and next steps: [roadmap and progress](ROADMAP.md).
-Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API below is a candidate, not delivered.
+Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API delivered
+in PR #24 (main `8cfb899`). HTTP saving is **not enabled**.
 
 ## Synthetic dashboard demo
 
@@ -193,7 +194,7 @@ Rollback only that unit's diff in `src/dashboard-report.js`, `src/dashboard.js`,
 ### Agent → provider/model detail (delivered PR #22)
 
 Delivered on `main` `73a1d63`, commit `5535d91`. The verification notes below
-are historical; they do not review the current existing-file RW candidate.
+are historical; they do not review the current HTTP admission candidate.
 
 Native `details`/`summary` replaces the flat manual-cost table in both modes.
 Each agent opens nested native provider/model disclosures, each with a captioned
@@ -291,10 +292,10 @@ validation remains before SQL, with unchanged canonical retries and append-only
 conflicts. Operational/cleanup errors expose only `Manual price operation failed`.
 If SQLite cleanup itself fails, the caller must recover or close the handle;
 rollback cannot be guaranteed when SQLite refuses it. This is not filesystem
-immutability, a new opener or a tariff form. The existing-file RW candidate below
-reuses this behavior; the form remains future work.
+immutability, a new opener or a tariff form. The delivered existing-file RW API
+below reuses this behavior; the form remains future work.
 
-### Existing-file tariff writer (candidate, not delivered)
+### Existing-file tariff writer (delivered PR #24)
 
 `openExistingLedger(filename)` from `src/ledger.js` returns only
 `{ addManualPrice, manualPrices, close }`. Use the same catalogue requests above
@@ -313,6 +314,20 @@ The validator checks existing columns/types/primary keys, not full integrity,
 NOT NULL constraints or triggers. SQLite may naturally use journal/WAL/SHM sidecars;
 this does not protect file identity against hostile replacement. Synthetic API
 runtime tests only: no HTTP, dashboard form, CLI change or real-session validation.
+
+### HTTP admission preparation (inactive candidate)
+
+`parseManualPriceRequest` in `src/dashboard.js` is an **internal** parser for
+future opt-in wiring, not a user API. No production route or CLI flag calls it:
+all dashboard modes remain GET-only and cannot save prices. It checks exact
+loopback Host/mandatory Origin, POST `/manual-prices` and JSON headers; buffers
+at most 8192 declared/actual bytes with fatal UTF-8 and an absolute five-second
+deadline. Errors contain only a sanitized type/status; rejection closes the
+request connection and removes body listeners/timer. It never opens storage.
+Returned JSON is **untrusted**, with no shape/field validation or canonicalization:
+future callers MUST validate it before any RW/storage use. Tests use a harness only.
+Semantic six-field validation/canonicalization, explicit CLI/API opt-in, HTTP
+persistence and the form are future units, each within 400 changed lines.
 
 ### Read-only manual quote
 

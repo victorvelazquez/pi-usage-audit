@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, demo, API readonly, UI seleccionada, evolución, detalle y guardado atómico entregados. Apertura RW existente candidata; sin sesiones reales.**
+**Motor, dashboard y apertura RW existente entregados; guardado HTTP deshabilitado, sin sesiones reales.**
 
-- **Última tarea terminada:** guardado atómico `addManualPrice`, PR #23 integrado (`5fca78d`); padre confirmó base `main` `533c56f`.
-- **En curso:** apertura RW de base existente sin creación; candidata, revisión/entrega pendientes.
-- **Siguiente propuesta:** revisión de esta unidad por el padre; formulario de tarifas aún futuro.
+- **Última tarea terminada:** apertura RW existente, PR #24 integrado; base `main` `8cfb899`.
+- **En curso:** primera unidad candidata: admisión HTTP/cuerpo limitado, helper interno sin conectar al servidor ni guardar.
+- **Siguiente propuesta:** validación semántica/canonicalización, opt-in CLI/API y persistencia HTTP, formulario; unidades separadas de hasta 400 líneas.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW sin creación candidata y formulario pendiente |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna candidata, opt-in/guardado y formulario pendientes |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -80,7 +80,20 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución y detalle PR #22 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Apertura RW existente sin creación — CANDIDATA sin revisión/entrega
+## Admisión HTTP y cuerpo limitado — CANDIDATA inactiva
+
+- [x] Helper interno sin almacenamiento ni cambios a rutas GET-only; Host/Origin exactos obligatorios, duplicados rechazados, Fetch-site sólo same-origin, POST/ruta/JSON estrictos.
+- [x] 8192 bytes declarados/reales, UTF-8 fatal, JSON estricto, plazo absoluto 5s y cleanup en éxito/rechazo/abort/error/close/timeout. Devuelve JSON no confiable: validar antes de cualquier RW futuro.
+- [x] Pruebas sintéticas y harness loopback chunked; regresión demo/readonly 405 sin guardar. No sesiones reales ni revisión nativa afirmada.
+- [ ] Validación semántica de seis campos/canonicalización, opt-in CLI/API y persistencia HTTP, formulario: unidades futuras separadas, hasta 400 líneas cada una.
+- RED histórico: patrón `price HTTP`, 0/1 por helper ausente. Nuevo RED: rechazo de JSON válido no semántico (1 pasa/4 fallan; harness agotó 60s). GREEN actual 5/5: JSON no confiable intacto, admisión, parsing, lifecycle y loopback; sin pruebas semánticas.
+- Verificación: `node --test test/dashboard.test.js` 17/17; `npm test` 91/91; `node --check src/dashboard.js` y `node --check test/dashboard.test.js` aprobados. Timers Node mockeados sin parámetro configurable por request; clearTimeout y listeners comprobados.
+- Diff anterior autoformateado: 475 líneas, no 344; alcance reducido retirando validación semántica y sus pruebas, sin comprimir código ni quitar cobertura HTTP. Final tras herramientas: 384 líneas (372 adiciones + 12 eliminaciones), bajo 400; `git diff --check` aprobado. Verificación sintética no equivale a aprobación nativa.
+- Techo duro 400 líneas incluidas pruebas/docs por unidad; sin ledger/esquema/deps/formulario. Rollback sólo este diff en dashboard, su test, README y ROADMAP; preservar bases y entregas.
+
+## Apertura RW existente sin creación — entregada PR #24 (main `8cfb899`)
+
+La evidencia siguiente conserva el estado histórico previo a la integración.
 
 - [x] API mínima `openExistingLedger(path)`: sólo tarifas y cierre; URL interna escapada con `mode=rw`, sin stat/mkdir/DDL/migración ni configurar WAL.
 - [x] Validación compartida readonly, snapshot diferido cerrado antes de devolver API, errores sanitizados y cierre best-effort incluyendo construcción.
@@ -370,7 +383,7 @@ La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la c
 - **Precios:** conservar versión o tarifa aplicada; distinguir estimación del runtime, estimación manual y factura/suscripción. Precio faltante no es costo cero; no mezclar monedas sin una política explícita.
 - **Análisis:** consumo propio como ranking global; total del árbol como métrica separada. Contar ejecuciones y resultados sólo cuando exista evidencia; no inferir éxito ni ahorro por tokens solamente.
 - **Contexto:** identidad estable de repositorio/worktrees y funcionalidad por tarea, heredable a hijos; fallback "Sin clasificar". Contexto secundario, no sustituto del ranking global.
-- **Dashboard:** snapshot localhost entregado; evolución UI B PR #21, detalle PR #22 y guardado atómico PR #23 entregados; apertura RW sin creación candidata y edición de precios pendiente.
+- **Dashboard:** snapshot localhost entregado; evolución UI B PR #21, detalle PR #22 y guardado atómico PR #23 entregados; apertura RW PR #24 entregada; admisión HTTP interna candidata y guardado opt-in/formulario pendientes.
 
 ## Cómo acompañar el avance
 
