@@ -280,6 +280,10 @@ function validateManual(value, keys, error = "Invalid manual price") {
   return { ...value, ratePerMillion: `${whole}.${fraction.padEnd(6, "0")}` };
 }
 
+export function validateManualPrice(value) {
+  return validateManual(value, manualKeys);
+}
+
 export function openLedger(path = defaultDatabasePath()) {
   mkdirSync(dirname(resolve(path)), { recursive: true });
   const db = new DatabaseSync(path);
@@ -785,7 +789,7 @@ function createLedgerApi(db, secret) {
       }
     },
     addManualPrice: (value) => {
-      const price = validateManual(value, manualKeys);
+      const price = validateManualPrice(value);
       const key = manualKeys.slice(0, -1).map((field) => price[field]);
       const conflict = new Error("Manual price conflict");
       let active = false;

@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, dashboard y apertura RW existente entregados; guardado HTTP deshabilitado, sin sesiones reales.**
+**Motor, dashboard, apertura RW y admisión HTTP interna entregados; guardado HTTP deshabilitado, sin sesiones reales.**
 
-- **Última tarea terminada:** apertura RW existente, PR #24 integrado; base `main` `8cfb899`.
-- **En curso:** primera unidad candidata: admisión HTTP/cuerpo limitado, helper interno sin conectar al servidor ni guardar.
-- **Siguiente propuesta:** validación semántica/canonicalización, opt-in CLI/API y persistencia HTTP, formulario; unidades separadas de hasta 400 líneas.
+- **Última tarea terminada:** admisión HTTP/cuerpo limitado interna e inactiva, PR #25 integrada; base `main` `799cf42`.
+- **En curso:** validación semántica/canonicalización implementada e inactiva; pendiente revisión/entrega, sin conectar al servidor ni guardar.
+- **Siguiente propuesta:** opt-in CLI/API y persistencia HTTP; después formulario, en unidades separadas de hasta 400 líneas.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna candidata, opt-in/guardado y formulario pendientes |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 entregada; validación semántica, opt-in/guardado y formulario pendientes |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -80,7 +80,9 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución y detalle PR #22 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Admisión HTTP y cuerpo limitado — CANDIDATA inactiva
+## Admisión HTTP y cuerpo limitado — entregada PR #25 (inactiva)
+
+Integrada en `main` `799cf42`; revisión nativa aprobada y reconocida antes de la entrega. La evidencia siguiente conserva el estado histórico de implementación.
 
 - [x] Helper interno sin almacenamiento ni cambios a rutas GET-only; Host/Origin exactos obligatorios, duplicados rechazados, Fetch-site sólo same-origin, POST/ruta/JSON estrictos.
 - [x] 8192 bytes declarados/reales, UTF-8 fatal, JSON estricto, plazo absoluto 5s y cleanup en éxito/rechazo/abort/error/close/timeout. Devuelve JSON no confiable: validar antes de cualquier RW futuro.
@@ -91,6 +93,15 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 - Diff anterior autoformateado: 475 líneas, no 344; alcance reducido retirando validación semántica y sus pruebas, sin comprimir código ni quitar cobertura HTTP. Final tras herramientas: 384 líneas (372 adiciones + 12 eliminaciones), bajo 400; `git diff --check` aprobado. Verificación sintética no equivale a aprobación nativa.
 - Techo duro 400 líneas incluidas pruebas/docs por unidad; sin ledger/esquema/deps/formulario. Rollback sólo este diff en dashboard, su test, README y ROADMAP; preservar bases y entregas.
 
+## Validación semántica de tarifas — candidata inactiva
+
+- [x] Parser devuelve seis campos canónicos mediante wrapper puro `validateManualPrice`; contrato privado existente compartido con `addManualPrice`, sin duplicar reglas ni abrir almacenamiento.
+- [x] Import diferido sólo en semántica; rechazos 400 sanitizados destruyen request, fallos de carga conservan naturaleza operacional. Demo/readonly siguen GET-only.
+- [x] Sintéticos: cero/mínimo/máximo, categorías, UTC, identidades, moneda, decimales, claves faltantes/extra/`__proto__`, tipos y claves propias no enumerables/símbolos; lifecycle y loopback conservados.
+- [ ] Revisión/entrega por el padre; opt-in, persistencia HTTP, formulario y sesiones reales no autorizados aquí.
+- RED enfocado: 4/7 pasan, 3 fallan por canonicalización/rechazo/wrapper ausentes. GREEN enfocado: 7/7 (22 éxitos canónicos y 103 rechazos semánticos); dashboard 19/19, `npm test` 93/93 y sintaxis de los tres JS aprobados. Sin revisión nativa afirmada.
+- Rollback sólo del diff de esta unidad en `src/ledger.js`, `src/dashboard.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar los cambios previos del padre. Techo duro 400 líneas formateadas contando esos cambios.
+
 ## Apertura RW existente sin creación — entregada PR #24 (main `8cfb899`)
 
 La evidencia siguiente conserva el estado histórico previo a la integración.
@@ -98,7 +109,7 @@ La evidencia siguiente conserva el estado histórico previo a la integración.
 - [x] API mínima `openExistingLedger(path)`: sólo tarifas y cierre; URL interna escapada con `mode=rw`, sin stat/mkdir/DDL/migración ni configurar WAL.
 - [x] Validación compartida readonly, snapshot diferido cerrado antes de devolver API, errores sanitizados y cierre best-effort incluyendo construcción.
 - [x] Sintéticos: missing/padres ausentes, vacía/corrupta/legada/sin clave, Unicode/#/% y ruta relativa, conservación de filas/esquema/journal, persistencia/idempotencia/conflicto/rollback, reinicio readonly y cleanup fallido.
-- [ ] Revisión/entrega por el padre; formulario, HTTP/CLI/dashboard y datos reales fuera de esta unidad.
+- [x] Revisión nativa aprobada y reconocida; entrega mediante PR #24. Formulario, HTTP/CLI/dashboard y datos reales fuera de esta unidad.
 - RED: `node --test --test-name-pattern=openExistingLedger test/audit.test.js`, 0/3 por API ausente. GREEN inicial 3/3; intento intermedio 2/3 por expectativa incorrecta de total completo con tarifas faltantes, corregida comprobando tarifa/input y total null.
 - GREEN final: `node --test --test-name-pattern=openExistingLedger test/audit.test.js` 3/3; Node 22.20.0 / SQLite 3.50.4 observados en Windows. Rama de fixtures con `?` sólo para plataformas que lo admiten, no ejecutada aquí.
 - Regresión: `node --test --test-name-pattern='openExistingLedger|readonly|addManualPrice|manual|tariffs' test/audit.test.js` 18/18; `npm test` 86/86; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Formato manual, sin formatter ni revisión nativa afirmada.
@@ -383,7 +394,7 @@ La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la c
 - **Precios:** conservar versión o tarifa aplicada; distinguir estimación del runtime, estimación manual y factura/suscripción. Precio faltante no es costo cero; no mezclar monedas sin una política explícita.
 - **Análisis:** consumo propio como ranking global; total del árbol como métrica separada. Contar ejecuciones y resultados sólo cuando exista evidencia; no inferir éxito ni ahorro por tokens solamente.
 - **Contexto:** identidad estable de repositorio/worktrees y funcionalidad por tarea, heredable a hijos; fallback "Sin clasificar". Contexto secundario, no sustituto del ranking global.
-- **Dashboard:** snapshot localhost entregado; evolución UI B PR #21, detalle PR #22 y guardado atómico PR #23 entregados; apertura RW PR #24 entregada; admisión HTTP interna candidata y guardado opt-in/formulario pendientes.
+- **Dashboard:** snapshot localhost entregado; evolución UI B PR #21, detalle PR #22 y guardado atómico PR #23 entregados; apertura RW PR #24 entregada; admisión HTTP interna PR #25 entregada; validación semántica y guardado opt-in/formulario pendientes.
 
 ## Cómo acompañar el avance
 

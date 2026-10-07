@@ -315,7 +315,7 @@ NOT NULL constraints or triggers. SQLite may naturally use journal/WAL/SHM sidec
 this does not protect file identity against hostile replacement. Synthetic API
 runtime tests only: no HTTP, dashboard form, CLI change or real-session validation.
 
-### HTTP admission preparation (inactive candidate)
+### HTTP price validation preparation (inactive candidate)
 
 `parseManualPriceRequest` in `src/dashboard.js` is an **internal** parser for
 future opt-in wiring, not a user API. No production route or CLI flag calls it:
@@ -324,10 +324,14 @@ loopback Host/mandatory Origin, POST `/manual-prices` and JSON headers; buffers
 at most 8192 declared/actual bytes with fatal UTF-8 and an absolute five-second
 deadline. Errors contain only a sanitized type/status; rejection closes the
 request connection and removes body listeners/timer. It never opens storage.
-Returned JSON is **untrusted**, with no shape/field validation or canonicalization:
-future callers MUST validate it before any RW/storage use. Tests use a harness only.
-Semantic six-field validation/canonicalization, explicit CLI/API opt-in, HTTP
-persistence and the form are future units, each within 400 changed lines.
+The parser now returns exactly the six canonical manual-price fields, reusing
+`validateManualPrice(value)` from `src/ledger.js`: no coercion or extra/missing keys;
+identities stay literal, currency/category/UTC dates are strict, decimal strings
+become six-fractional-digit rates. Semantic rejection is sanitized status 400 and
+destroys the request. Ledger loading is deferred to semantics; loading failures
+remain operational errors, not bad-input errors. The pure validator opens no storage.
+Tests use synthetic streams and a loopback harness only. Explicit CLI/API opt-in,
+HTTP persistence and the form remain future units, each within 400 changed lines.
 
 ### Read-only manual quote
 

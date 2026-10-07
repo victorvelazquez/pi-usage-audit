@@ -8,12 +8,20 @@ import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import http from "node:http";
 import { PassThrough } from "node:stream";
+import * as ledgerModule from "../src/ledger.js";
 import { openLedger } from "../src/ledger.js";
 import { projectDemo, renderDashboard } from "../src/dashboard-report.js";
 import { startDemo } from "../src/dashboard.js";
 
 const priceOrigin = "http://127.0.0.1:1234";
-const priceValue = { text: "模型", ratePerMillion: "1.2" };
+const priceValue = {
+  provider: "synthetic",
+  model: "模型",
+  category: "input",
+  currency: "EUR",
+  effectiveFrom: "2024-02-29T00:00:00.000Z",
+  ratePerMillion: "1.200000",
+};
 function priceRequest(headers = {}, method = "POST", url = "/manual-prices") {
   const req = new PassThrough();
   req.method = method;
@@ -32,12 +40,139 @@ const priceError = (status) => ({
   message: "Manual price request rejected",
 });
 
-test("price HTTP parsing returns untrusted JSON unchanged", async () => {
-  for (const value of [priceValue, null, [], 1, "text", {}]) {
+test("price HTTP manual semantics returns canonical six-field records", async () => {
+  for (const [rate, canonical] of [
+    ["0", "0.000000"],
+    ["0.0", "0.000000"],
+    ["1.2", "1.200000"],
+    ["0.000001", "0.000001"],
+    ["999999999999.999999", "999999999999.999999"],
+  ]) {
+    for (const category of ["input", "output", "cacheRead", "cacheWrite"]) {
+      const value = { ...priceValue, category, ratePerMillion: rate };
+      const req = priceRequest();
+      const result = dashboard.parseManualPriceRequest(req, priceOrigin);
+      req.end(JSON.stringify(value));
+      assert.deepEqual(await result, { ...value, ratePerMillion: canonical });
+    }
+  }
+  for (const effectiveFrom of [
+    "0001-01-01T00:00:00.000Z",
+    "9999-12-31T23:59:59.999Z",
+  ]) {
+    const value = {
+      ...priceValue,
+      provider: "Synthetic Provider",
+      model: "模型/Case-sensitive",
+      effectiveFrom,
+    };
     const req = priceRequest();
     const result = dashboard.parseManualPriceRequest(req, priceOrigin);
     req.end(JSON.stringify(value));
     assert.deepEqual(await result, value);
+  }
+});
+
+test("price HTTP manual semantics rejects shape, types and invalid field edges", async () => {
+  const invalid = [null, [], 1, "PRIVATE_VALUE", true, {}];
+  for (const key of Object.keys(priceValue)) {
+    const missing = { ...priceValue };
+    delete missing[key];
+    invalid.push(missing);
+    for (const value of [null, [], {}, 1, true])
+      invalid.push({ ...priceValue, [key]: value });
+  }
+  invalid.push({ ...priceValue, extra: "PRIVATE_VALUE" });
+  invalid.push(
+    JSON.parse(
+      JSON.stringify(priceValue).replace(
+        /}$/,
+        ',"__proto__":{"polluted":true}}',
+      ),
+    ),
+  );
+  for (const key of ["provider", "model"]) {
+    for (const value of [
+      "",
+      " leading",
+      "trailing ",
+      "x".repeat(513),
+      "a\u0000b",
+      "a\nb",
+      "a\u007fb",
+      "a\u200bb",
+      "a\u2028b",
+      "a\u2029b",
+    ])
+      invalid.push({ ...priceValue, [key]: value });
+  }
+  for (const [key, values] of [
+    ["category", ["", "INPUT", "reasoning", "cacheWrite1h", "input "]],
+    ["currency", ["", "eur", "EU", "EURO", " EUR", "EUＲ", "EUR\n"]],
+    [
+      "effectiveFrom",
+      [
+        "",
+        "0000-01-01T00:00:00.000Z",
+        "2023-02-29T00:00:00.000Z",
+        "2024-02-30T00:00:00.000Z",
+        "2024-13-01T00:00:00.000Z",
+        "2024-01-01T24:00:00.000Z",
+        "2024-01-01T00:00:60.000Z",
+        "2024-01-01",
+        "2024-01-01T00:00:00Z",
+        "2024-01-01T00:00:00.000+00:00",
+        "2024-01-01T00:00:00.000Z\n",
+      ],
+    ],
+    [
+      "ratePerMillion",
+      [
+        "",
+        "-1",
+        "+1",
+        "01",
+        "00.1",
+        ".1",
+        "1.",
+        "1e2",
+        "1,2",
+        " 1",
+        "1 ",
+        "1\n",
+        "NaN",
+        "Infinity",
+        "0.0000001",
+        "1000000000000",
+      ],
+    ],
+  ]) {
+    for (const value of values) invalid.push({ ...priceValue, [key]: value });
+  }
+  for (const value of invalid) {
+    const req = priceRequest();
+    const result = dashboard.parseManualPriceRequest(req, priceOrigin);
+    req.end(JSON.stringify(value));
+    await assert.rejects(result, priceError(400));
+    assert.ok(req.destroyed);
+    for (const event of ["data", "end", "aborted", "error", "close"])
+      assert.equal(req.listenerCount(event), 0);
+  }
+  assert.equal(Object.prototype.polluted, undefined);
+});
+
+test("manual price pure validator is detached and rejects extra own keys", () => {
+  const value = { ...priceValue, ratePerMillion: "0" };
+  const result = ledgerModule.validateManualPrice(value);
+  assert.deepEqual(result, { ...value, ratePerMillion: "0.000000" });
+  assert.notEqual(result, value);
+  assert.equal(value.ratePerMillion, "0");
+  for (const key of [Symbol("extra"), "extra"]) {
+    const extra = { ...priceValue };
+    Object.defineProperty(extra, key, { value: "PRIVATE_VALUE" });
+    assert.throws(() => ledgerModule.validateManualPrice(extra), {
+      message: "Invalid manual price",
+    });
   }
 });
 
@@ -217,9 +352,9 @@ test("price HTTP loopback chunked harness and production writes remain disabled"
     });
   try {
     const body = Buffer.from(JSON.stringify(priceValue));
-    assert.equal(
-      (await send([...body].map((byte) => Buffer.from([byte])))).text,
-      "模型",
+    assert.deepEqual(
+      await send([...body].map((byte) => Buffer.from([byte]))),
+      priceValue,
     );
     await assert.rejects(send([Buffer.alloc(8192, 32), Buffer.from("é")]));
   } finally {
