@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, dashboard, formulario opt-in y APIs por sesión (incluido compuesto) entregados; selector de arranque candidato, sin sesiones reales.**
+**Motor, dashboard, formulario opt-in, APIs por sesión y selector de arranque entregados; admisión interactiva A candidata inactiva, sin sesiones reales.**
 
-- **Última tarea terminada:** filtro compuesto API por sesión, PR #33 integrada; base `main` `02aaa49`, commit `fab58d5` (contexto de entrega del padre).
-- **En curso:** selector literal al arrancar dashboard (`--session`/`startDashboard`), sin interacción en pantalla; candidato no revisado ni entregado.
-- **Siguiente propuesta:** filtros interactivos o contexto avanzado; propuesta sin autorización.
+- **Última tarea terminada:** selector literal de arranque, PR #34 integrada; base `main` `098a119`, commit `ad18abd`.
+- **En curso:** unidad A autorizada: parser/admisión HTTP internos, pruebas sintéticas y docs; candidato inactivo, sin ruta ni UI y sin afirmar revisión o entrega.
+- **Siguiente propuesta:** unidad B (activación de ruta/UI); requiere autorización separada.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -30,7 +30,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
-| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar candidato, sin filtro interactivo ni mapping de repositorios |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A candidata inactiva, B pendiente de autorización; sin mapping de repositorios |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
@@ -77,8 +77,19 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
-| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33; selector de arranque candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
+| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A candidata inactiva | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
+
+## Filtro interactivo — unidad A candidata inactiva
+
+- Alcance autorizado: parser `parseSessionFilterRequest`, admisión/cuerpo compartidos con precios, pruebas sintéticas y docs; sin almacenamiento, ruta activa, UI, CSP, dependencias ni esquema.
+- JSON `{}` global o única clave propia `session`: literal no vacío ≤512 UTF-16; extras inválidos. Host/Origin exactos, duplicados rechazados, JSON ≤8192 bytes, UTF-8 fatal, deadline absoluto 5s y cleanup; errores sin IDs.
+- Demo/readonly conservan GET `/session-filter` 404 y POST 405; opt-in conserva rechazo de transporte para POST ajeno. `--session` entregado sigue intacto.
+- RED observado: `node --test --test-name-pattern='session filter HTTP' test/dashboard.test.js`, 1/5 pasa y 4 fallan por helper ausente. GREEN: `node --test --test-name-pattern='session filter HTTP|price HTTP' test/dashboard.test.js`, 11/11, incluyendo regresiones de precios y lifecycle.
+- Verificación del escritor: `npm test` 116/116; `node --check src/dashboard.js`, `node --check test/dashboard.test.js` y `git diff --check` aprobados. El padre confirmó LSP primario de ambos JS sin diagnósticos; sin build definido en `package.json`.
+- Diff final tras formato automático: 311 líneas (296 adiciones + 15 eliminaciones); sin comprimir ni retirar pruebas/comentarios para cumplir el techo.
+- Rollback: sólo el diff de A en `src/dashboard.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar PR #34, bases y entregas previas. Techo 400 líneas formateadas, incluidas pruebas/docs.
+- Unidad B y sesiones reales pendientes de autorización separada; browser N/A porque A no cambia UI. Revisión y entrega pertenecen al padre.
 
 ## Admisión HTTP y cuerpo limitado — entregada PR #25 (inactiva)
 

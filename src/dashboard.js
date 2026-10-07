@@ -17,13 +17,20 @@ class ManualPriceRequestError extends Error {
   }
 }
 
-// Internal parser for the explicitly opted-in selected-database server.
-// Returns the canonical six-field price without opening storage.
+class SessionFilterRequestError extends Error {
+  constructor(status) {
+    super("Session filter request rejected");
+    this.name = "SessionFilterRequestError";
+    this.status = status;
+  }
+}
+
+// Shared admission/body lifecycle; only private callers choose a route/error type.
 // Failures destroy the request/connection; callers must not reuse it.
-export async function parseManualPriceRequest(req, expectedOrigin) {
+async function parseJsonRequest(req, expectedOrigin, route, RequestError) {
   const deny = (status) => {
     req.destroy();
-    throw new ManualPriceRequestError(status);
+    throw new RequestError(status);
   };
   if (typeof expectedOrigin !== "string") deny(403);
   const match = /^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/.exec(expectedOrigin);
@@ -42,7 +49,7 @@ export async function parseManualPriceRequest(req, expectedOrigin) {
   )
     deny(403);
   if (req.method !== "POST") deny(405);
-  if (req.url !== "/manual-prices") deny(404);
+  if (req.url !== route) deny(404);
   if (
     !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
       headers.get("content-type") ?? "",
@@ -67,7 +74,7 @@ export async function parseManualPriceRequest(req, expectedOrigin) {
         req.removeListener(event, handler);
       if (status) {
         req.destroy();
-        reject(new ManualPriceRequestError(status));
+        reject(new RequestError(status));
       } else resolve(Buffer.concat(chunks, size));
     };
     const listeners = [
@@ -107,6 +114,18 @@ export async function parseManualPriceRequest(req, expectedOrigin) {
   } catch {
     deny(400);
   }
+  return value;
+}
+
+// Internal parser for the explicitly opted-in selected-database server.
+// Returns the canonical six-field price without opening storage.
+export async function parseManualPriceRequest(req, expectedOrigin) {
+  const value = await parseJsonRequest(
+    req,
+    expectedOrigin,
+    "/manual-prices",
+    ManualPriceRequestError,
+  );
   let validateManualPrice;
   try {
     ({ validateManualPrice } = await import("./ledger.js"));
@@ -117,8 +136,32 @@ export async function parseManualPriceRequest(req, expectedOrigin) {
   try {
     return validateManualPrice(value);
   } catch {
-    deny(400);
+    req.destroy();
+    throw new ManualPriceRequestError(400);
   }
+}
+
+// Prospective POST admission only: not wired into serve, no storage or ID echo.
+// Exported for synthetic tests; a selector is not a report or an HTTP response.
+export async function parseSessionFilterRequest(req, expectedOrigin) {
+  const value = await parseJsonRequest(
+    req,
+    expectedOrigin,
+    "/session-filter",
+    SessionFilterRequestError,
+  );
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const keys = Reflect.ownKeys(value);
+    if (keys.length === 0) return {};
+    if (
+      keys.length === 1 &&
+      keys[0] === "session" &&
+      validSession(value.session)
+    )
+      return { session: value.session };
+  }
+  req.destroy();
+  throw new SessionFilterRequestError(400);
 }
 
 export async function startDemo(port) {
