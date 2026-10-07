@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**El motor de datos funciona. La aplicación visual todavía no existe.**
+**El motor de datos funciona. Hay un candidato visual demo sintético; no está entregado ni conectado a datos reales.**
 
-- **Última tarea terminada:** reporte global runtime, entregado mediante PR #15; `main` confirmado por el padre: `f8f961b`.
-- **En curso:** costos comparativos API/CLI con moneda explícita; candidato implementado, 63/63 pruebas aprobadas; revisión pendiente, no entregado.
-- **Siguiente propuesta:** decidir habilitación del dashboard local; no autoriza implementación ni datos reales.
-- **Decisiones pendientes:** habilitar el dashboard y autorizar la selección de sesiones reales antes de trabajar en esos pasos.
+- **Última tarea terminada:** costos comparativos API/CLI, PR #16 integrado en `main` `64ce935`.
+- **En curso:** dashboard demo localhost SSR; candidato sin entregar, revisión y validación visual pendientes.
+- **Siguiente propuesta:** conectar datos mediante selección explícita; no autorizado.
+- **Decisiones pendientes:** autorizar conexión y selección de sesiones reales antes de trabajar en esos pasos.
 
 ## Qué ya podés hacer
 
@@ -28,8 +28,8 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
-| Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Candidato implementado; 63/63 pruebas aprobadas, revisión pendiente; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | No iniciado; requiere habilitación |
+| Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo sintético candidato; datos reales, evolución y formulario pendientes |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -66,7 +66,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 - **Evidencia histórica del bloque 1:** escritor: RED observado (híbrido blue/19, falso origen propio 57/19 y CLI ausente), luego GREEN. Verificador independiente: `npm test` 18/18; cinco comprobaciones `node --check`, 20 invocaciones CLI sintéticas y tres barreras de escritura independiente aprobadas. LSP: cinco archivos, cero errores. Los criterios tienen evidencia de implementación/pruebas o documentación; no se usaron datos reales.
 - **Límite de diseño:** una importación limpia o timestamps no prueban origen propio de IDs hijos desconocidos. Su consumo observado incierto se expone separado del ranking confirmado y no aditivo.
 - **Revisión cerrada del bloque 4:** captura nativa y reconocimiento completados; sin correcciones. Entrega realizada mediante PR #13. Esto no autoriza publicar unidades futuras.
-- **No iniciado:** dashboard y captura en vivo. No se han recolectado sesiones reales.
+- **Candidato actual:** dashboard demo sintético; no entregado. Captura en vivo no iniciada; sin sesiones reales.
 
 ## Lista completa del MVP
 
@@ -76,14 +76,24 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
-| 4. Análisis global | Parcial: tokens/runtime entregados; costos candidato sin entregar; evolución pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
+| 4. Análisis global | Parcial: tokens/runtime/costos entregados; evolución pendiente | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
-| 6. Dashboard localhost | Pospuesto; requiere habilitación posterior | Vista global primero, filtros y detalle después; formulario manual de precios |
+| 6. Dashboard localhost | Demo sintético candidato; conexión real no autorizada | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Costos comparativos — candidato sin entregar
+## Dashboard demo — candidato sin entregar
+
+- SSR sin JS cliente ni dependencias; servidor sólo fixture, bind 127.0.0.1 y puerto efectivo explícito.
+- Fixture proyectado desde APIs existentes sobre ledger sintético en memoria; sin IDs privados ni recálculo de precios.
+- Agentes/modelos/tokens exactos, costos EUR completos/cero/null, cobertura y razones; vistas no aditivas y runtime sin moneda inferida.
+- RED observado por módulos ausentes; GREEN demo 5/5 y suite 68/68, tres comprobaciones de sintaxis y diff check aprobados. Formato completado; browser no disponible al escritor, validación visual pendiente del padre.
+- Techo inicial 560; usuario amplió explícitamente hasta 700 líneas formateadas incluidas pruebas/docs para las mismas siete superficies. Rollback sólo de esos siete archivos, nunca bases ni APIs previas.
+
+## Costos comparativos — entregado en PR #16 (`64ce935`)
+
+- Revisión histórica `review-8c5074f0bb6e7bac` aprobada y acknowledged, sin correcciones; 63/63. Esta autoridad no revisa el dashboard candidato.
 
 - `costReport({currency})` y CLI `costs --db` existente con moneda explícita; snapshot único, filas conjuntas y cobertura sin subtotal ni ranking monetario.
-- RED observado: 59/63, cuatro fallos por API/CLI ausentes; GREEN 63/63. CLI sintética equivalente a API; snapshot independiente, exclusiones, fechas, cero, precisión grande y grupos incompletos aprobados. LSP completo no disponible al escritor; revisión pendiente.
+- Evidencia histórica del escritor anterior: RED 59/63, cuatro fallos por API/CLI ausentes; GREEN 63/63. CLI sintética equivalente a API; snapshot independiente, exclusiones, fechas, cero, precisión grande y grupos incompletos aprobados. LSP completo no disponible entonces; revisión posteriormente cerrada según registro anterior.
 - Expectativa grande corregida mediante aritmética independiente: `9007199254740991 × (10¹² − 10⁻⁶) = 9007199254740990990992.800745259009`.
 - Usuario autorizó hasta 500 líneas formateadas (adiciones + eliminaciones), sólo esta unidad/seis archivos, incluidas pruebas/docs; no hereda excepciones anteriores.
 - Sin datos reales, esquema, dependencias, captura/UI, cambios runtime/ranking ni publicación; rollback sólo del diff autorizado, preservando bases y fixtures ignorados.

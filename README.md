@@ -1,8 +1,29 @@
 # pi-usage-audit
 
-Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; no dashboard.
+Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; synthetic localhost dashboard candidate.
 
 Project status and next steps: [roadmap and progress](ROADMAP.md).
+
+## Synthetic dashboard demo
+
+```sh
+node src/dashboard.js --demo
+node src/dashboard.js --demo --port 8080
+node src/dashboard.js --help
+```
+
+Open the printed `http://127.0.0.1:<effective-port>/` yourself; port defaults to 0.
+Stop with Ctrl+C. Only this exact host and GET `/` are accepted; no query routes.
+The permanent demo banner identifies synthetic data, not real usage or capture.
+The server reads only the checked-in fixture: no SQLite, tariffs, external calls,
+client scripts or new dependencies. Errors omit paths and request values.
+
+Agent/model views share entries and are nonadditive. Tokens remain exact strings.
+Manual group costs show explicit EUR, complete coverage or null with API reasons;
+known zero is distinct from missing. No subtotal, global money total or money ranking.
+Runtime amounts remain separate with unknown currency/total. No conversion or invoice claim.
+Fixture equivalence is tested against a fixed in-memory synthetic ledger.
+Visual browser verification and candidate review/delivery remain parent-owned.
 
 ## Quick start
 
@@ -320,7 +341,7 @@ Only whitelisted accounting/attribution metadata, opaque path keys and keyed cop
 
 SQLite uses WAL, a 5-second busy timeout, initialization retries, transactions and unique insert keys. Public `entries()`, `ranking()` and `accounting()` each use a deferred read transaction; the import's internal snapshot stays inside its write transaction. Separate API calls/output fields are not one combined snapshot. Tests use synthetic fixtures only and independent concurrent processes with overlapping/disjoint inputs. Tests leave synthetic artifacts under ignored `test/.runtime-*/` directories; these can be removed after verification.
 
-Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, dashboard, automatic model changes, automatic manual price application, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
+Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, real-data dashboard connection, automatic model changes, automatic manual price application, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
 
 Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). Estimates delivered in PR #6 (main `68a85dc`), imported quotes in PR #7 (main `23ab4bc`).
 
