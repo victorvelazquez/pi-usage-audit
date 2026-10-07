@@ -771,9 +771,243 @@ function request(port, path = "/", options = {}) {
       },
     );
     req.on("error", reject);
-    req.end();
+    req.end(options.body);
   });
 }
+
+function postPrice(port, value = priceValue, options = {}) {
+  return request(port, options.path ?? "/manual-prices", {
+    method: "POST",
+    ...options,
+    headers: {
+      Origin: `http://127.0.0.1:${port}`,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+    body: options.body ?? JSON.stringify(value),
+  });
+}
+
+test("opt-in prices persist canonical retries, conflicts and explicit currency", async () => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  openLedger(path).close();
+  const server = await dashboard.startDashboard({
+    db: path,
+    currency: "USD",
+    allowManualPrices: true,
+  });
+  try {
+    const port = server.address().port;
+    const page = await request(port);
+    for (const rate of ["1.2", "1.200000"]) {
+      const saved = await postPrice(port, {
+        ...priceValue,
+        ratePerMillion: rate,
+      });
+      assert.equal(saved.status, 200);
+      assert.deepEqual(JSON.parse(saved.body), priceValue);
+      assert.match(saved.headers["content-type"], /^application\/json/);
+      assert.equal(saved.headers["cache-control"], "no-store");
+      assert.equal(saved.headers["x-content-type-options"], "nosniff");
+      assert.equal(
+        saved.headers["content-security-policy"],
+        page.headers["content-security-policy"],
+      );
+    }
+    const conflict = await postPrice(port, {
+      ...priceValue,
+      ratePerMillion: "2",
+    });
+    assert.equal(conflict.status, 409);
+    assert.deepEqual(JSON.parse(conflict.body), {
+      error: "Manual price conflict",
+    });
+    const version = {
+      ...priceValue,
+      effectiveFrom: "2025-01-01T00:00:00.000Z",
+    };
+    assert.equal((await postPrice(port, version)).status, 200);
+    assert.equal((await request(port)).body, page.body);
+    assert.equal((await request(port, "/manual-prices")).status, 404);
+    for (const method of ["HEAD", "OPTIONS"])
+      assert.equal(
+        (await request(port, "/manual-prices", { method })).status,
+        405,
+      );
+    const reader = openLedger(path);
+    try {
+      for (const currency of ["EUR", "USD"])
+        assert.deepEqual(
+          reader.manualPrices({
+            provider: priceValue.provider,
+            model: priceValue.model,
+            currency,
+          }),
+          currency === "EUR" ? [priceValue, version] : [],
+        );
+    } finally {
+      reader.close();
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("opt-in prices reject invalid options before storage/listen", async (t) => {
+  let opens = 0;
+  let listens = 0;
+  t.mock.method(DatabaseSync.prototype, "prepare", () => {
+    opens++;
+    throw new Error();
+  });
+  t.mock.method(http.Server.prototype, "listen", () => {
+    listens++;
+    throw new Error();
+  });
+  for (const allowManualPrices of [null, 0, 1, "true", {}, []])
+    await assert.rejects(
+      dashboard.startDashboard({
+        db: "unused",
+        currency: "EUR",
+        allowManualPrices,
+      }),
+      { message: "Dashboard unavailable" },
+    );
+  for (const options of [
+    {},
+    { currency: "EUR" },
+    { db: "unused" },
+    { db: "unused", currency: "eur" },
+  ])
+    await assert.rejects(
+      dashboard.startDashboard({ ...options, allowManualPrices: true }),
+      { message: "Dashboard unavailable" },
+    );
+  assert.equal(opens, 0);
+  assert.equal(listens, 0);
+});
+
+test("opt-in prices default and transport rejection never open a writer", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  openLedger(path).close();
+  for (const allowManualPrices of [undefined, false, true]) {
+    const server = await dashboard.startDashboard({
+      db: path,
+      currency: "EUR",
+      allowManualPrices,
+    });
+    const before = readFileSync(path);
+    let opens = 0;
+    t.mock.method(DatabaseSync.prototype, "prepare", () => {
+      opens++;
+      throw new Error();
+    });
+    try {
+      const port = server.address().port;
+      if (allowManualPrices) {
+        for (const options of [
+          { headers: { Origin: "null" } },
+          { headers: { Host: "localhost:" + port } },
+          { headers: { "Sec-Fetch-Site": "none" } },
+          { path: "/manual-prices?x=1" },
+          { body: JSON.stringify({ ...priceValue, currency: undefined }) },
+          { body: " ".repeat(8193) },
+        ]) {
+          await assert.rejects(postPrice(port, priceValue, options));
+        }
+        const admitted = once(server, "request");
+        const req = http.request({
+          hostname: "127.0.0.1",
+          port,
+          path: "/manual-prices",
+          method: "POST",
+          headers: {
+            Origin: `http://127.0.0.1:${port}`,
+            "Content-Type": "application/json",
+          },
+        });
+        req.on("error", () => {});
+        const closed = new Promise((resolve) => req.on("close", resolve));
+        req.write("{");
+        await admitted;
+        req.destroy();
+        await closed;
+      } else assert.equal((await postPrice(port)).status, 405);
+      assert.deepEqual(readFileSync(path), before);
+      assert.equal(opens, 0);
+    } finally {
+      t.mock.restoreAll();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+});
+
+test("opt-in prices operational failures sanitize and close; committed retry safe", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  openLedger(path).close();
+  const server = await dashboard.startDashboard({
+    db: path,
+    currency: "EUR",
+    allowManualPrices: true,
+  });
+  try {
+    const port = server.address().port;
+    for (const mode of ["open", "save", "close"]) {
+      let closes = 0;
+      const close = DatabaseSync.prototype.close;
+      t.mock.method(DatabaseSync.prototype, "close", function () {
+        closes++;
+        close.call(this);
+        if (mode === "close") throw new Error("PRIVATE_PATH SQL BODY");
+      });
+      if (mode === "open")
+        t.mock.method(DatabaseSync.prototype, "prepare", () => {
+          throw new Error("PRIVATE_PATH");
+        });
+      if (mode === "save") {
+        const exec = DatabaseSync.prototype.exec;
+        t.mock.method(DatabaseSync.prototype, "exec", function (sql) {
+          if (sql === "SAVEPOINT add_manual_price")
+            throw new Error("PRIVATE_SQL");
+          return exec.call(this, sql);
+        });
+      }
+      const result = await postPrice(port);
+      assert.equal(result.status, 500);
+      assert.deepEqual(JSON.parse(result.body), {
+        error: "Manual price operation failed",
+      });
+      assert.equal(closes, 1);
+      t.mock.restoreAll();
+      const reader = openLedger(path);
+      try {
+        assert.equal(
+          reader.manualPrices({
+            provider: priceValue.provider,
+            model: priceValue.model,
+            currency: "EUR",
+          }).length,
+          mode === "close" ? 1 : 0,
+        );
+      } finally {
+        reader.close();
+      }
+    }
+    assert.equal((await postPrice(port)).status, 200);
+  } finally {
+    t.mock.restoreAll();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
 
 test("HTTP loopback, exact route, headers and origin boundaries", async () => {
   const server = await startDemo(0);
@@ -958,11 +1192,31 @@ test("CLI help and invalid requests are sanitized before startup", () => {
   const help = cli(["--help"]);
   assert.equal(help.status, 0);
   assert.ok(help.stdout.includes("--demo"));
+  assert.ok(help.stdout.includes("--allow-manual-prices"));
   assert.ok(help.stdout.includes("--db FILE --currency CODE"));
   const dir = mkdtempSync("test/.runtime-dashboard-");
   const missing = join(dir, "PRIVATE_PATH.sqlite");
   for (const args of [
     [],
+    ["--allow-manual-prices"],
+    ["--demo", "--allow-manual-prices"],
+    ["--db", "PRIVATE_PATH", "--currency", "EUR", "--allow-manual-prices=true"],
+    [
+      "--db",
+      "PRIVATE_PATH",
+      "--currency",
+      "EUR",
+      "--allow-manual-prices",
+      "--allow-manual-prices",
+    ],
+    [
+      "--db",
+      "PRIVATE_PATH",
+      "--currency",
+      "EUR",
+      "--allow-manual-prices",
+      "true",
+    ],
     ["--db", "PRIVATE_PATH"],
     ["--currency", "EUR"],
     ["--db", "PRIVATE_PATH", "--currency"],
@@ -999,7 +1253,7 @@ test("CLI effective URL, occupied port and signal shutdown", async () => {
     ["SIGTERM", ["--demo"], "DEMO", "Demo unavailable"],
     [
       "SIGTERM",
-      ["--db", path, "--currency", "EUR"],
+      ["--db", path, "--currency", "EUR", "--allow-manual-prices"],
       "BASE SELECCIONADA",
       "Dashboard unavailable",
     ],
@@ -1016,6 +1270,8 @@ test("CLI effective URL, occupied port and signal shutdown", async () => {
       const page = await request(port);
       assert.equal(page.status, 200);
       assert.ok(page.body.includes(banner));
+      if (args.includes("--allow-manual-prices"))
+        assert.equal((await postPrice(port)).status, 200);
       assert.match(page.body, /<caption>Evolución diaria — UTC<\/caption>/);
       assert.ok(page.body.includes("18014398509481985"));
       assert.ok(!page.body.includes("<script"));

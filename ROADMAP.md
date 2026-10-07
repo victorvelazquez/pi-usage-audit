@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, dashboard, apertura RW y admisión HTTP interna entregados; guardado HTTP deshabilitado, sin sesiones reales.**
+**Motor, dashboard, apertura RW y validación HTTP entregados; guardado opt-in candidato, sin sesiones reales.**
 
-- **Última tarea terminada:** admisión HTTP/cuerpo limitado interna e inactiva, PR #25 integrada; base `main` `799cf42`.
-- **En curso:** validación semántica/canonicalización implementada e inactiva; pendiente revisión/entrega, sin conectar al servidor ni guardar.
-- **Siguiente propuesta:** opt-in CLI/API y persistencia HTTP; después formulario, en unidades separadas de hasta 400 líneas.
+- **Última tarea terminada:** validación semántica/canonicalización, PR #26 integrada; base `main` `7d37f7c`.
+- **En curso:** opt-in CLI/API y persistencia HTTP implementados; candidato pendiente de revisión/entrega por el padre.
+- **Siguiente propuesta:** formulario de tarifas, en unidad separada de hasta 400 líneas.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 entregada; validación semántica, opt-in/guardado y formulario pendientes |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado candidatos; formulario pendiente |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -78,7 +78,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
-| 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución y detalle PR #22 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
+| 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 entregados; opt-in/guardado candidatos | Vista global primero, filtros y detalle después; formulario manual de precios |
 
 ## Admisión HTTP y cuerpo limitado — entregada PR #25 (inactiva)
 
@@ -87,18 +87,30 @@ Integrada en `main` `799cf42`; revisión nativa aprobada y reconocida antes de l
 - [x] Helper interno sin almacenamiento ni cambios a rutas GET-only; Host/Origin exactos obligatorios, duplicados rechazados, Fetch-site sólo same-origin, POST/ruta/JSON estrictos.
 - [x] 8192 bytes declarados/reales, UTF-8 fatal, JSON estricto, plazo absoluto 5s y cleanup en éxito/rechazo/abort/error/close/timeout. Devuelve JSON no confiable: validar antes de cualquier RW futuro.
 - [x] Pruebas sintéticas y harness loopback chunked; regresión demo/readonly 405 sin guardar. No sesiones reales ni revisión nativa afirmada.
-- [ ] Validación semántica de seis campos/canonicalización, opt-in CLI/API y persistencia HTTP, formulario: unidades futuras separadas, hasta 400 líneas cada una.
+- [x] Validación semántica de seis campos/canonicalización entregada después en PR #26.
+- [ ] Opt-in CLI/API y persistencia HTTP candidatos; formulario futuro, hasta 400 líneas por unidad.
 - RED histórico: patrón `price HTTP`, 0/1 por helper ausente. Nuevo RED: rechazo de JSON válido no semántico (1 pasa/4 fallan; harness agotó 60s). GREEN actual 5/5: JSON no confiable intacto, admisión, parsing, lifecycle y loopback; sin pruebas semánticas.
 - Verificación: `node --test test/dashboard.test.js` 17/17; `npm test` 91/91; `node --check src/dashboard.js` y `node --check test/dashboard.test.js` aprobados. Timers Node mockeados sin parámetro configurable por request; clearTimeout y listeners comprobados.
 - Diff anterior autoformateado: 475 líneas, no 344; alcance reducido retirando validación semántica y sus pruebas, sin comprimir código ni quitar cobertura HTTP. Final tras herramientas: 384 líneas (372 adiciones + 12 eliminaciones), bajo 400; `git diff --check` aprobado. Verificación sintética no equivale a aprobación nativa.
 - Techo duro 400 líneas incluidas pruebas/docs por unidad; sin ledger/esquema/deps/formulario. Rollback sólo este diff en dashboard, su test, README y ROADMAP; preservar bases y entregas.
 
-## Validación semántica de tarifas — candidata inactiva
+## Opt-in CLI/API y persistencia HTTP — candidato no entregado
+
+- Implementado sobre `7d37f7c`: booleano estricto/default false; CLI valueless sólo base/moneda; POST valida antes de RW por petición, cierre en finally, sin writer retenido.
+- 200 canónico/idempotente, 409 conflicto exacto y 500 genérico; rechazo del parser cierra transporte, no promete respuesta HTTP. Moneda del cuerpo explícita, HTML/CSP estáticos.
+- Sintéticos: persistencia/reapertura, versión/moneda/conflicto, admisión/no RW, interrupción, fallos open/save/close y reintento tras commit; CLI ayuda/límites/arranque/señales. Windows puede terminar directamente, sin garantía de cierre graceful.
+- RED: `node --test --test-name-pattern='opt-in prices|CLI help' test/dashboard.test.js` 1/5; GREEN 5/5. Dos intentos intermedios agotaron 60s por lifecycle/transport, corregidos sin cambiar el parser.
+- Verificación sintética: dashboard 23/23, `npm test` 97/97; `node --check` de ambos JS y `git diff --check` aprobados. Formato manual; sin formatter autorizado.
+- Rollback sólo de este diff en `src/dashboard.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar bases, temporales y entregas. Sin formulario, deps, esquema, datos reales ni aprobación nativa afirmada.
+
+## Validación semántica de tarifas — entregada PR #26 (`7d37f7c`)
+
+Revisión histórica aprobada antes de integrar PR #26; no revisa el candidato opt-in. La evidencia siguiente conserva el estado previo a la entrega.
 
 - [x] Parser devuelve seis campos canónicos mediante wrapper puro `validateManualPrice`; contrato privado existente compartido con `addManualPrice`, sin duplicar reglas ni abrir almacenamiento.
 - [x] Import diferido sólo en semántica; rechazos 400 sanitizados destruyen request, fallos de carga conservan naturaleza operacional. Demo/readonly siguen GET-only.
 - [x] Sintéticos: cero/mínimo/máximo, categorías, UTC, identidades, moneda, decimales, claves faltantes/extra/`__proto__`, tipos y claves propias no enumerables/símbolos; lifecycle y loopback conservados.
-- [ ] Revisión/entrega por el padre; opt-in, persistencia HTTP, formulario y sesiones reales no autorizados aquí.
+- [x] Revisión/entrega completadas mediante PR #26; opt-in y persistencia son el candidato posterior, formulario y sesiones reales siguen pendientes.
 - RED enfocado: 4/7 pasan, 3 fallan por canonicalización/rechazo/wrapper ausentes. GREEN enfocado: 7/7 (22 éxitos canónicos y 103 rechazos semánticos); dashboard 19/19, `npm test` 93/93 y sintaxis de los tres JS aprobados. Sin revisión nativa afirmada.
 - Rollback sólo del diff de esta unidad en `src/ledger.js`, `src/dashboard.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar los cambios previos del padre. Techo duro 400 líneas formateadas contando esos cambios.
 
@@ -394,7 +406,7 @@ La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la c
 - **Precios:** conservar versión o tarifa aplicada; distinguir estimación del runtime, estimación manual y factura/suscripción. Precio faltante no es costo cero; no mezclar monedas sin una política explícita.
 - **Análisis:** consumo propio como ranking global; total del árbol como métrica separada. Contar ejecuciones y resultados sólo cuando exista evidencia; no inferir éxito ni ahorro por tokens solamente.
 - **Contexto:** identidad estable de repositorio/worktrees y funcionalidad por tarea, heredable a hijos; fallback "Sin clasificar". Contexto secundario, no sustituto del ranking global.
-- **Dashboard:** snapshot localhost entregado; evolución UI B PR #21, detalle PR #22 y guardado atómico PR #23 entregados; apertura RW PR #24 entregada; admisión HTTP interna PR #25 entregada; validación semántica y guardado opt-in/formulario pendientes.
+- **Dashboard:** snapshot localhost entregado; evolución UI B PR #21, detalle PR #22 y guardado atómico PR #23 entregados; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; guardado opt-in candidato y formulario pendiente.
 
 ## Cómo acompañar el avance
 
