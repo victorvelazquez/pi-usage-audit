@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, demo, API readonly, UI seleccionada y evolución API A entregados. Evolución UI B candidata sin entregar; sin validación de sesiones reales.**
+**Motor, demo, API readonly, UI seleccionada y evolución API/UI entregados. Detalle por agente candidato sin revisión/entrega; sin sesiones reales.**
 
-- **Última tarea terminada:** evolución API A, PR #20 integrado en `main` `896fa46` (commit `e5049bd`).
-- **En curso:** evolución diaria UTC UI B; candidata implementada, revisión/entrega pendientes.
-- **Siguiente propuesta:** revisión nativa de B por el padre; después acordar detalle/formulario.
+- **Última tarea terminada:** evolución UI B, PR #21 integrado en `main` `ef660d2` (commit `dc03b15`).
+- **En curso:** detalle desplegable agente→proveedor/modelo; candidato implementado, revisión/entrega pendientes.
+- **Siguiente propuesta:** revisión del detalle por el padre; formulario de tarifas por acordar.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20 entregada, UI B candidata y formulario pendiente |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle candidato y formulario pendiente |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -76,11 +76,26 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
-| 4. Análisis global | Parcial: tokens/runtime/costos/evolución API entregados; evolución UI candidata | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
+| 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI entregados; detalle candidato | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
-| 6. Dashboard localhost | Demo, API readonly y UI seleccionada entregados; evolución API entregada y UI B candidata | Vista global primero, filtros y detalle después; formulario manual de precios |
+| 6. Dashboard localhost | Demo, API readonly, UI seleccionada y evolución entregados; detalle candidato | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Unidad B evolución diaria SSR — CANDIDATA sin entregar
+## Detalle agente→proveedor/modelo — CANDIDATO sin revisión/entrega
+
+- [x] Desplegables nativos anidados agente→proveedor/modelo demo/base seleccionada; tabla por grupo, cuatro categorías/total exactos, entradas, sesiones distintas no aditivas, costo manual/cobertura/razones; exclusiones globales.
+- [x] Observations del snapshot existente: BigInt/Set temporales, proyección pública detached; sin IDs/rutas/tarifas, repricing ni cambios ledger/CLI/API/esquema/deps.
+- [x] Sintéticos: conservación cruzada agentes/modelos, sesión repetida y varios modelos, >safe, cero, fecha/identidad inválida con tokens y costo null, escape/clones/vacío.
+- [ ] Revisión/entrega por el padre; sin aprobación nativa afirmada, sesiones reales ni browser visual. Padre informó LSP de ambos JS/lens limpios antes del ajuste anidado; edición posterior limpia, sin nueva comprobación LSP primaria del escritor.
+- RED: `node --test test/dashboard.test.js` 10/12, dos fallos por tokens ausentes; primer intento incluyó un error SQL del test, corregido antes del RED contractual.
+- GREEN final: `node --test test/dashboard.test.js` 12/12; `npm test` 80/80. Triangulación pasó tras corregir selección SQL duplicada en la nueva prueba.
+- Ajuste anidado: RED enfocado 10/12 por segundo nivel/summary ausentes; GREEN 12/12. Estructura prueba dos niveles, una tabla/grupo, summaries nativos sin JS y null/texto/escape distintos.
+- `node --check src/dashboard-report.js`, `node --check test/dashboard.test.js` y `git diff --check` aprobados. Padre autoformateó el diff previo: 317 líneas (+30 sobre 287). Ajuste posterior formateado manualmente, sin comando formatter autorizado; diff final 357 líneas (322 adiciones + 35 eliminaciones).
+- Runtime: CLI/HTTP sintético ambos modos, fixture equivalente, cierre pre-listen y HTML estático, CSP/Host/Origin/Fetch-site y GET `/` preservados.
+- Rollback sólo del diff candidato en `src/dashboard-report.js`, `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar entregas/bases/temporales. Techo duro 400 líneas formateadas incluidas pruebas/docs.
+
+## Unidad B evolución diaria SSR — entregada PR #21 (`ef660d2`, commit `dc03b15`)
+
+La evidencia siguiente conserva el estado histórico previo a la integración.
 
 - [x] Demo y base seleccionada: tabla con caption, scope col, scroll, días UTC/entradas/tokens exactos; sólo días observados, sin rellenar huecos, cero visible.
 - [x] Proyección profunda de evolution del snapshot conjunto existente; sin tocar ledger/API/esquema/dependencias. Undated separado con missing/invalid y cobertura/exclusiones no aditivas.
@@ -328,7 +343,7 @@ La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la c
 - **Precios:** conservar versión o tarifa aplicada; distinguir estimación del runtime, estimación manual y factura/suscripción. Precio faltante no es costo cero; no mezclar monedas sin una política explícita.
 - **Análisis:** consumo propio como ranking global; total del árbol como métrica separada. Contar ejecuciones y resultados sólo cuando exista evidencia; no inferir éxito ni ahorro por tokens solamente.
 - **Contexto:** identidad estable de repositorio/worktrees y funcionalidad por tarea, heredable a hijos; fallback "Sin clasificar". Contexto secundario, no sustituto del ranking global.
-- **Dashboard:** snapshot localhost entregado; evolución UI B candidata autorizada, detalle y edición de precios pendientes de habilitación.
+- **Dashboard:** snapshot localhost entregado; evolución UI B entregada PR #21, detalle candidato autorizado; edición de precios pendiente de habilitación.
 
 ## Cómo acompañar el avance
 

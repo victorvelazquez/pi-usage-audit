@@ -1,6 +1,6 @@
 # pi-usage-audit
 
-Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution API, candidate evolution UI.
+Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution UI, candidate agent detail.
 
 Project status and next steps: [roadmap and progress](ROADMAP.md).
 
@@ -171,7 +171,9 @@ timezone: 'UTC', buckets, undated, coverage }` from one deferred read snapshot.
 API A adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
 Readonly still exposes only `dashboardReport`/`close`, not independent `tokenEvolution`.
 
-### Daily evolution dashboard (unit B candidate, not delivered)
+### Daily evolution dashboard (delivered PR #21)
+
+Delivered on `main` `ef660d2`, commit `dc03b15`.
 
 Both demo and selected-database SSR display an accessible captioned UTC table:
 day, entry count and exact token strings. Only observed ascending days appear;
@@ -182,10 +184,29 @@ usage is not zero. No temporal costs, charts, filters or client JavaScript.
 Selected mode uses the existing joint snapshot, deeply projected before closing;
 changes to dates/tokens after startup never refresh HTML. Demo uses the same seed
 as fixture equivalence tests. Only synthetic CLI/HTTP validation; no real sessions
-or visual-browser validation. Native review and delivery remain parent-owned.
-Rollback only this unit's diff in `src/dashboard-report.js`, `src/dashboard.js`,
+or visual-browser validation. The following rollback surface is historical for B.
+Rollback only that unit's diff in `src/dashboard-report.js`, `src/dashboard.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
 `ROADMAP.md`; preserve delivered API A, prior work, bases and test artifacts.
+
+### Agent → provider/model detail (candidate, not reviewed or delivered)
+
+Native `details`/`summary` replaces the flat manual-cost table in both modes.
+Each agent opens nested native provider/model disclosures, each with a captioned
+single-group table: four exact token categories, total tokens, entries, distinct
+group sessions, manual cost, coverage and reasons. Summaries are keyboard-selectable
+without JavaScript; quoted literal identities distinguish text from null.
+Sessions across groups are nonadditive; exclusions stay global. Null cost is not
+zero; no agent money subtotal, ranking, percentages or quality inference.
+Tokens derive from existing snapshot observations even when quotes are null.
+Temporary BigInt sums/session Sets project only decimal strings and counts;
+no IDs, paths, observations or rates survive. Runtime remains separate.
+The existing pre-listen close/static snapshot and HTTP/CSP barriers are unchanged.
+Synthetic structural/HTTP tests only; visual browser validation remains pending.
+Parent readback reported both JS LSP/lens checks clean before the nested adjustment.
+Rollback only this candidate's diff in `src/dashboard-report.js`,
+`test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
+`ROADMAP.md`; preserve delivered evolution, databases and test artifacts.
 
 ## Global runtime report (API and CLI)
 
