@@ -1,6 +1,6 @@
 # pi-usage-audit
 
-Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution UI, candidate agent detail.
+Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution UI and agent detail.
 
 Project status and next steps: [roadmap and progress](ROADMAP.md).
 
@@ -189,7 +189,10 @@ Rollback only that unit's diff in `src/dashboard-report.js`, `src/dashboard.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
 `ROADMAP.md`; preserve delivered API A, prior work, bases and test artifacts.
 
-### Agent → provider/model detail (candidate, not reviewed or delivered)
+### Agent → provider/model detail (delivered PR #22)
+
+Delivered on `main` `73a1d63`, commit `5535d91`. The verification notes below
+are historical; they do not review the current atomic-price candidate.
 
 Native `details`/`summary` replaces the flat manual-cost table in both modes.
 Each agent opens nested native provider/model disclosures, each with a captioned
@@ -204,7 +207,7 @@ no IDs, paths, observations or rates survive. Runtime remains separate.
 The existing pre-listen close/static snapshot and HTTP/CSP barriers are unchanged.
 Synthetic structural/HTTP tests only; visual browser validation remains pending.
 Parent readback reported both JS LSP/lens checks clean before the nested adjustment.
-Rollback only this candidate's diff in `src/dashboard-report.js`,
+Historical rollback surface for this detail unit: `src/dashboard-report.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
 `ROADMAP.md`; preserve delivered evolution, databases and test artifacts.
 
@@ -278,6 +281,17 @@ All listed keys are required and unknown keys are rejected; there are no default
 - `effectiveFrom` is an explicit real UTC date in `YYYY-MM-DDTHH:mm:ss.sssZ`, years 0001–9999. Offsets, invalid leap dates and implicit “now” are rejected.
 - Rates are decimal **strings**, matching `^(0|[1-9]\d{0,11})(\.\d{1,6})?$`, from zero through `999999999999.999999`. Stored/returned as six-fraction-digit TEXT using string padding, never floating-point costs. Explicit zero is a known rate, unlike absence.
 - The provider/model/category/currency/date key is unique and nonnull. Same canonical rate is idempotent (`1`, `1.0`, `1.000000`); a conflicting rate throws a generic error and preserves the original. New dates/currencies are separate versions; retrospective dates are allowed.
+
+`addManualPrice` now has a candidate atomic-save change: one local SQLite
+savepoint spans insertion, confirmation and conflict checking. A failed
+confirmation rolls back that call's insertion; successful calls inside a caller's
+transaction still depend on its commit and are undone by its rollback. Six-field
+validation remains before SQL, with unchanged canonical retries and append-only
+conflicts. Operational/cleanup errors expose only `Manual price operation failed`.
+If SQLite cleanup itself fails, the caller must recover or close the handle;
+rollback cannot be guaranteed when SQLite refuses it. This is not filesystem
+immutability, a new opener or a tariff form. Existing-file RW opening without
+creation and the form remain future work; review/delivery of this candidate are pending.
 
 ### Read-only manual quote
 

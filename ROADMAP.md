@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, demo, API readonly, UI seleccionada y evolución API/UI entregados. Detalle por agente candidato sin revisión/entrega; sin sesiones reales.**
+**Motor, demo, API readonly, UI seleccionada, evolución y detalle por agente entregados. Guardado atómico de tarifas candidato; sin sesiones reales.**
 
-- **Última tarea terminada:** evolución UI B, PR #21 integrado en `main` `ef660d2` (commit `dc03b15`).
-- **En curso:** detalle desplegable agente→proveedor/modelo; candidato implementado, revisión/entrega pendientes.
-- **Siguiente propuesta:** revisión del detalle por el padre; formulario de tarifas por acordar.
+- **Última tarea terminada:** detalle agente→proveedor/modelo, PR #22 integrado en `main` `73a1d63` (commit `5535d91`).
+- **En curso:** guardado atómico `addManualPrice`; candidato, revisión/entrega pendientes.
+- **Siguiente propuesta:** revisión de esta unidad por el padre; apertura RW de base existente sin creación antes del formulario, aún futuras.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -29,7 +29,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Pendiente | Qué vas a poder hacer cuando esté listo | Estado |
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
-| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle candidato y formulario pendiente |
+| Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico candidato, apertura RW sin creación y formulario pendientes |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; falta completar |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
@@ -76,11 +76,24 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 1. Importación utilizable | Entregado en PR #2 | CLI de archivos explícitos y consultas consistentes durante importaciones concurrentes |
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
-| 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI entregados; detalle candidato | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
+| 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
-| 6. Dashboard localhost | Demo, API readonly, UI seleccionada y evolución entregados; detalle candidato | Vista global primero, filtros y detalle después; formulario manual de precios |
+| 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución y detalle PR #22 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Detalle agente→proveedor/modelo — CANDIDATO sin revisión/entrega
+## Guardado atómico addManualPrice — CANDIDATO sin revisión/entrega
+
+- Savepoint local: INSERT, confirmación y conflicto en una operación; compatible con `BEGIN IMMEDIATE` exterior, sin apropiarse de su commit/rollback.
+- API de seis campos, validación antes de SQL, tarifas append-only y firmas/errores de conflicto conservados; sin opener, formulario, CLI/dashboard/HTTP/esquema/deps ni datos reales.
+- RED: `node --test --test-name-pattern=addManualPrice test/audit.test.js`, 0/1; tras fallo SELECT post-INSERT quedaba una fila en lugar de `[]`.
+- GREEN/triangulación: mismo comando, 3/3; recuperación en mismo handle, duplicado canónico, conflicto, versión nueva, rollback/commit exterior y fallos de savepoint/INSERT/confirmación/release/cleanup sanitizados.
+- Verificación: `node --test --test-name-pattern='manual|tariffs' test/audit.test.js` 10/10; `npm test` 83/83; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Formato manual según estilo existente; diagnósticos automáticos parciales, sin herramienta LSP primaria disponible al escritor.
+- Cleanup rechazado por SQLite no permite garantizar rollback: recuperar o cerrar el handle. Runtime N/A: sólo API, sin nueva frontera CLI/HTTP/UI; pruebas funcionales sintéticas en memoria.
+- Revisión/entrega pendientes del padre. Apertura RW existente sin creación y formulario son trabajo posterior, no implementado aquí.
+- Rollback sólo del diff actual de `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar entregas, bases y artefactos. Techo 400 líneas formateadas incluidas pruebas/docs.
+
+## Detalle agente→proveedor/modelo — entregado PR #22 (`73a1d63`, commit `5535d91`)
+
+La evidencia siguiente conserva el estado histórico previo a la integración.
 
 - [x] Desplegables nativos anidados agente→proveedor/modelo demo/base seleccionada; tabla por grupo, cuatro categorías/total exactos, entradas, sesiones distintas no aditivas, costo manual/cobertura/razones; exclusiones globales.
 - [x] Observations del snapshot existente: BigInt/Set temporales, proyección pública detached; sin IDs/rutas/tarifas, repricing ni cambios ledger/CLI/API/esquema/deps.
@@ -343,7 +356,7 @@ La evidencia 22/22 de este apartado es histórica y exclusiva del bloque 2; la c
 - **Precios:** conservar versión o tarifa aplicada; distinguir estimación del runtime, estimación manual y factura/suscripción. Precio faltante no es costo cero; no mezclar monedas sin una política explícita.
 - **Análisis:** consumo propio como ranking global; total del árbol como métrica separada. Contar ejecuciones y resultados sólo cuando exista evidencia; no inferir éxito ni ahorro por tokens solamente.
 - **Contexto:** identidad estable de repositorio/worktrees y funcionalidad por tarea, heredable a hijos; fallback "Sin clasificar". Contexto secundario, no sustituto del ranking global.
-- **Dashboard:** snapshot localhost entregado; evolución UI B entregada PR #21, detalle candidato autorizado; edición de precios pendiente de habilitación.
+- **Dashboard:** snapshot localhost entregado; evolución UI B entregada PR #21 y detalle entregado PR #22; guardado atómico candidato, apertura RW sin creación y edición de precios pendientes.
 
 ## Cómo acompañar el avance
 

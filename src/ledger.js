@@ -758,24 +758,39 @@ function createLedgerApi(db, secret) {
     addManualPrice: (value) => {
       const price = validateManual(value, manualKeys);
       const key = manualKeys.slice(0, -1).map((field) => price[field]);
-      let stored;
+      const conflict = new Error("Manual price conflict");
+      let active = false;
       try {
-        // Unique-key arbitration is atomic across handles; existing rates never update.
+        // A savepoint also works inside a caller-owned write transaction.
+        db.exec("SAVEPOINT add_manual_price");
+        active = true;
+        // Unique-key arbitration across handles never updates existing rates.
         db.prepare(`INSERT INTO manual_prices VALUES (?,?,?,?,?,?)
           ON CONFLICT(provider,model,category,currency,effectiveFrom) DO NOTHING`).run(
           ...key,
           price.ratePerMillion,
         );
-        stored = db
+        const stored = db
           .prepare(`SELECT * FROM manual_prices
           WHERE provider=? AND model=? AND category=? AND currency=? AND effectiveFrom=?`)
           .get(...key);
-      } catch {
+        if (stored.ratePerMillion !== price.ratePerMillion) throw conflict;
+        const result = { ...stored };
+        db.exec("RELEASE add_manual_price");
+        active = false;
+        return result;
+      } catch (error) {
+        if (active) {
+          try {
+            db.exec("ROLLBACK TO add_manual_price");
+            db.exec("RELEASE add_manual_price");
+          } catch {
+            throw new Error("Manual price operation failed");
+          }
+        }
+        if (error === conflict) throw conflict;
         throw new Error("Manual price operation failed");
       }
-      if (stored.ratePerMillion !== price.ratePerMillion)
-        throw new Error("Manual price conflict");
-      return { ...stored };
     },
     manualPrices: (value) => {
       const query = validateManual(value, ["provider", "model", "currency"]);
