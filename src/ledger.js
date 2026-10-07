@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 
 export const defaultDatabasePath = () =>
@@ -323,11 +324,31 @@ export function openLedger(path = defaultDatabasePath()) {
 }
 
 export function openReadonlyLedger(path) {
+  return openValidatedLedger(path, false);
+}
+
+export function openExistingLedger(path) {
+  return openValidatedLedger(path, true);
+}
+
+function openValidatedLedger(path, writable) {
   let db;
   try {
-    if (typeof path !== "string" || !path || path === ":memory:")
+    if (
+      typeof path !== "string" ||
+      !path ||
+      path === ":memory:" ||
+      (writable && /^file:/i.test(path))
+    )
       throw new Error();
-    db = new DatabaseSync(path, { readOnly: true, timeout: 5000 });
+    let location = path;
+    if (writable) {
+      // SQLite enforces no-create at open, without a racy filesystem precheck.
+      const uri = pathToFileURL(resolve(path));
+      uri.search = "?mode=rw";
+      location = uri.href;
+    }
+    db = new DatabaseSync(location, { readOnly: !writable, timeout: 5000 });
     db.exec("BEGIN DEFERRED");
     const schema = [
       ["config", "key value", "TEXT TEXT", "key"],
@@ -385,14 +406,22 @@ export function openReadonlyLedger(path) {
       throw new Error();
     db.exec("COMMIT");
     const api = createLedgerApi(db, secret);
-    return { dashboardReport: api.dashboardReport, close: api.close };
+    return writable
+      ? {
+          addManualPrice: api.addManualPrice,
+          manualPrices: api.manualPrices,
+          close: api.close,
+        }
+      : { dashboardReport: api.dashboardReport, close: api.close };
   } catch {
     try {
       db?.close();
     } catch {
       // Preserve the sanitized opening error.
     }
-    throw new Error("Readonly ledger open failed");
+    throw new Error(
+      writable ? "Existing ledger open failed" : "Readonly ledger open failed",
+    );
   }
 }
 
