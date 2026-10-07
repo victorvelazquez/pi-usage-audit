@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import * as dashboard from "../src/dashboard.js";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import http from "node:http";
@@ -13,8 +16,8 @@ const fixture = () =>
     readFileSync(new URL("./fixtures/dashboard-demo.json", import.meta.url)),
   );
 const categories = ["input", "output", "cacheRead", "cacheWrite"];
-function seeded() {
-  const ledger = openLedger(":memory:");
+function seeded(path = ":memory:") {
+  const ledger = openLedger(path);
   for (const [session, agent, provider, model, input, certainty] of [
     ["a", "<demo>", "synthetic", "priced", Number.MAX_SAFE_INTEGER, "own"],
     ["b", "<demo>", "synthetic", "priced", Number.MAX_SAFE_INTEGER, "own"],
@@ -188,6 +191,119 @@ test("HTTP loopback, exact route, headers and origin boundaries", async () => {
   }
 });
 
+test("selected database snapshot closes before listen and stays static", async (t) => {
+  const dir = mkdtempSync("test/.runtime-dashboard-");
+  const path = join(dir, "synthetic.sqlite");
+  const ledger = seeded(path);
+  ledger.close();
+  const before = readFileSync(path);
+  let closes = 0;
+  const close = DatabaseSync.prototype.close;
+  const listen = http.Server.prototype.listen;
+  t.mock.method(DatabaseSync.prototype, "close", function () {
+    closes++;
+    return close.call(this);
+  });
+  t.mock.method(http.Server.prototype, "listen", function (...args) {
+    assert.equal(closes, 1);
+    return listen.apply(this, args);
+  });
+  const server = await dashboard.startDashboard({ db: path, currency: "EUR" });
+  t.mock.restoreAll();
+  try {
+    assert.deepEqual(readFileSync(path), before);
+    const port = server.address().port;
+    const page = await request(port);
+    assert.equal(page.status, 200);
+    assert.equal(page.body, renderDashboard(fixture(), { selected: true }));
+    assert.ok(page.body.includes("BASE SELECCIONADA"));
+    assert.ok(!page.body.includes("Snapshot sintético"));
+    assert.ok(!page.body.includes(path));
+    assert.ok(!page.body.includes("PRIVATE_ID"));
+    assert.ok(page.body.includes("18014398509.481982000000"));
+    assert.ok(page.body.includes("Desconocido (null)"));
+    assert.ok(page.body.includes("0.000000000000"));
+    assert.ok(page.body.includes("vistas no aditivas"));
+    const writer = openLedger(path);
+    try {
+      writer.db.exec("UPDATE tasks SET agent='later-synthetic-agent'");
+    } finally {
+      writer.close();
+    }
+    assert.equal((await request(port)).body, page.body);
+    assert.ok(!page.body.includes("later-synthetic-agent"));
+    assert.equal((await request(port, "/?refresh=1")).status, 404);
+    assert.equal(
+      (await request(port, "/", { headers: { Host: "evil.test" } })).status,
+      403,
+    );
+    await assert.rejects(
+      dashboard.startDashboard({ db: path, currency: "EUR", port }),
+      { message: "Dashboard unavailable" },
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("database failures close the snapshot and sanitize private errors", async (t) => {
+  const dir = mkdtempSync("test/.runtime-dashboard-");
+  const path = join(dir, "PRIVATE_PATH.sqlite");
+  const ledger = seeded(path);
+  ledger.close();
+  let closes = 0;
+  const close = DatabaseSync.prototype.close;
+  t.mock.method(DatabaseSync.prototype, "close", function () {
+    closes++;
+    return close.call(this);
+  });
+  t.mock.method(DatabaseSync.prototype, "prepare", () => {
+    throw new Error(path);
+  });
+  await assert.rejects(
+    dashboard.startDashboard({ db: path, currency: "EUR" }),
+    {
+      message: "Dashboard unavailable",
+    },
+  );
+  assert.equal(closes, 1);
+  t.mock.restoreAll();
+  closes = 0;
+  let begins = 0;
+  const exec = DatabaseSync.prototype.exec;
+  t.mock.method(DatabaseSync.prototype, "close", function () {
+    closes++;
+    return close.call(this);
+  });
+  t.mock.method(DatabaseSync.prototype, "exec", function (sql) {
+    if (sql === "BEGIN DEFERRED" && ++begins === 2) throw new Error(path);
+    return exec.call(this, sql);
+  });
+  t.mock.method(http.Server.prototype, "listen", () =>
+    assert.fail("must not listen"),
+  );
+  await assert.rejects(
+    dashboard.startDashboard({ db: path, currency: "EUR" }),
+    {
+      message: "Dashboard unavailable",
+    },
+  );
+  assert.equal(begins, 2);
+  assert.equal(closes, 1);
+  t.mock.restoreAll();
+  const missing = join(dir, "missing.sqlite");
+  const corrupt = join(dir, "corrupt.sqlite");
+  writeFileSync(corrupt, "synthetic non SQLite");
+  for (const db of [missing, corrupt]) {
+    const result = cli(["--db", db, "--currency", "EUR"]);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.ok(result.stderr.includes("Dashboard unavailable"));
+    assert.ok(!result.stderr.includes(dir));
+  }
+  assert.equal(existsSync(missing), false);
+});
+
 const cli = (args) =>
   spawnSync(process.execPath, ["src/dashboard.js", ...args], {
     encoding: "utf8",
@@ -196,9 +312,20 @@ test("CLI help and invalid requests are sanitized before startup", () => {
   const help = cli(["--help"]);
   assert.equal(help.status, 0);
   assert.ok(help.stdout.includes("--demo"));
+  assert.ok(help.stdout.includes("--db FILE --currency CODE"));
+  const dir = mkdtempSync("test/.runtime-dashboard-");
+  const missing = join(dir, "PRIVATE_PATH.sqlite");
   for (const args of [
     [],
     ["--db", "PRIVATE_PATH"],
+    ["--currency", "EUR"],
+    ["--db", "PRIVATE_PATH", "--currency"],
+    ["--db", "--currency", "EUR"],
+    ["--db", "PRIVATE_PATH", "--currency", "eur"],
+    ["--db", "PRIVATE_PATH", "--currency", "EUR", "--db", "other"],
+    ["--db", "PRIVATE_PATH", "--currency", "EUR", "--currency", "USD"],
+    ["--demo", "--db", "PRIVATE_PATH", "--currency", "EUR"],
+    ["--demo", "--currency", "EUR"],
     ["--host", "0.0.0.0"],
     ["--demo", "--demo"],
     ["--help", "--demo"],
@@ -207,16 +334,31 @@ test("CLI help and invalid requests are sanitized before startup", () => {
     ["--demo", "--port"],
     ["--demo", "--port", "0", "--port", "1"],
   ]) {
-    const result = cli(args);
+    const result = cli(
+      args.map((arg) => (arg === "PRIVATE_PATH" ? missing : arg)),
+    );
     assert.equal(result.status, 2);
     assert.equal(result.stdout, "");
     assert.ok(!result.stderr.includes("PRIVATE_PATH"));
+    assert.equal(existsSync(missing), false);
   }
 });
 
 test("CLI effective URL, occupied port and signal shutdown", async () => {
-  for (const requestedSignal of ["SIGINT", "SIGTERM"]) {
-    const child = spawn(process.execPath, ["src/dashboard.js", "--demo"], {
+  const dir = mkdtempSync("test/.runtime-dashboard-");
+  const path = join(dir, "synthetic.sqlite");
+  seeded(path).close();
+  for (const [requestedSignal, args, banner, error] of [
+    ["SIGINT", ["--demo"], "DEMO", "Demo unavailable"],
+    ["SIGTERM", ["--demo"], "DEMO", "Demo unavailable"],
+    [
+      "SIGTERM",
+      ["--db", path, "--currency", "EUR"],
+      "BASE SELECCIONADA",
+      "Dashboard unavailable",
+    ],
+  ]) {
+    const child = spawn(process.execPath, ["src/dashboard.js", ...args], {
       stdio: ["ignore", "pipe", "pipe"],
     });
     const exited = once(child, "exit");
@@ -225,10 +367,13 @@ test("CLI effective URL, occupied port and signal shutdown", async () => {
       const url = chunk.toString().trim();
       assert.match(url, /^http:\/\/127\.0\.0\.1:[1-9]\d*\/$/);
       const port = Number(new URL(url).port);
-      assert.equal((await request(port)).status, 200);
-      const busy = cli(["--demo", "--port", String(port)]);
+      const page = await request(port);
+      assert.equal(page.status, 200);
+      assert.ok(page.body.includes(banner));
+      const busy = cli([...args, "--port", String(port)]);
       assert.equal(busy.status, 1);
-      assert.equal(busy.stderr.trim(), "Demo unavailable");
+      assert.ok(busy.stderr.trim().endsWith(error));
+      assert.ok(!busy.stderr.includes(path));
       child.kill(requestedSignal);
       const [code, signal] = await exited;
       // Windows terminates directly; POSIX exercises the graceful handler.

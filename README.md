@@ -23,9 +23,32 @@ Manual group costs show explicit EUR, complete coverage or null with API reasons
 known zero is distinct from missing. No subtotal, global money total or money ranking.
 Runtime amounts remain separate with unknown currency/total. No conversion or invoice claim.
 Fixture equivalence is tested against a fixed in-memory synthetic ledger.
-Demo delivered in PR #17 (`8873088`); real-data UI connection remains pending.
+Demo delivered in PR #17 (`8873088`); selected-database UI is a candidate, not delivered.
 
-## Readonly dashboard reports (API only)
+## Selected-database dashboard (candidate)
+
+```sh
+node src/dashboard.js --db /explicit/existing.sqlite --currency EUR
+node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --port 8080
+```
+
+Currency is required: exactly three uppercase ASCII letters, without inference or
+conversion. Demo cannot combine with database/currency flags. Duplicate, missing
+or invalid arguments fail before opening storage or listening; help opens neither.
+Exit codes are 0 for help/success, 2 for arguments, 1 for sanitized operational errors.
+The same loopback, Host/Origin/Fetch-site restrictions and CSP protect both modes.
+
+The selected-base banner is not a claim of verified real-session data. One
+`dashboardReport({currency})` snapshot supplies runtime and costs together;
+projection retains summaries, not IDs or selected prices, without repricing.
+The reader closes before listen, including report/render failures. HTML stays
+static until restart: no refresh, capture, discovery, external calls or tariff UI.
+Opening never creates/initializes/repairs a base. SQLite readonly may use WAL/SHM;
+this is not a guarantee of zero physical filesystem effects. Labels remain
+user-provided metadata: do not store secrets in them. Validation uses synthetic
+bases only; real-session and visual browser validation remain pending.
+
+## Readonly dashboard reports (API delivered PR #18)
 
 `openReadonlyLedger(filename)` from `src/ledger.js` requires an explicit existing
 SQLite file initialized by `openLedger`. It returns only `{ dashboardReport, close }`:
@@ -43,7 +66,7 @@ whole result (`Dashboard report operation failed`). Close the reader in `finally
 
 Readonly does not mean filesystem-immutable: SQLite may create/use WAL/SHM
 sidecars. No WAL configuration, `immutable` mode, key writes or repair occurs.
-This API candidate does not connect the dashboard UI or authorize real sessions.
+This API was delivered in PR #18 (`7d924e4`); it does not authorize real sessions.
 
 ## Quick start
 
@@ -361,7 +384,7 @@ Only whitelisted accounting/attribution metadata, opaque path keys and keyed cop
 
 SQLite uses WAL, a 5-second busy timeout, initialization retries, transactions and unique insert keys. Public `entries()`, `ranking()` and `accounting()` each use a deferred read transaction; the import's internal snapshot stays inside its write transaction. Separate API calls/output fields are not one combined snapshot. Tests use synthetic fixtures only and independent concurrent processes with overlapping/disjoint inputs. Tests leave synthetic artifacts under ignored `test/.runtime-*/` directories; these can be removed after verification.
 
-Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, real-data dashboard connection, automatic model changes, automatic manual price application, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
+Deferred: broader block 2 coverage and trustworthy child-origin evidence, automatic discovery/live `message_end`, delivery/real-session validation of the dashboard connection, automatic model changes, automatic manual price application, repository/worktree grouping and task-time attribution. Files are read fully into memory; this is not yet a large-history streaming importer. No real-session validation, publication or license selection has occurred.
 
 Block 3 catalogue delivered in PR #4 (merge `a55c043`); read-only quotes delivered in PR #5 (main `b3fd9c5`). Estimates delivered in PR #6 (main `68a85dc`), imported quotes in PR #7 (main `23ab4bc`).
 
