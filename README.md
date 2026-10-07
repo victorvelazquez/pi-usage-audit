@@ -5,7 +5,9 @@ Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is e
 Project status and next steps: [roadmap and progress](ROADMAP.md).
 Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API delivered
 in PR #24 (main `8cfb899`); semantic validation delivered in PR #26 (`7d37f7c`).
-HTTP saving is a new opt-in implementation candidate, not yet delivered/reviewed.
+Opt-in HTTP saving delivered in PR #27 (main `64c81bb`).
+The manual tariff form is an implementation candidate pending parent verification,
+review and delivery; it is not yet delivered.
 
 ## Synthetic dashboard demo
 
@@ -45,11 +47,36 @@ The selected-base banner is not a claim of verified real-session data. One
 `dashboardReport({currency})` snapshot supplies runtime, costs and evolution together;
 projection retains summaries, not IDs or selected prices, without repricing.
 The reader closes before listen, including report/render failures. HTML stays
-static until restart: no refresh, capture, discovery, external calls or tariff UI.
+static until restart: no refresh, capture, discovery or external calls.
+Default/demo pages have no form, client scripts or network writes.
 Opening never creates/initializes/repairs a base. SQLite readonly may use WAL/SHM;
 this is not a guarantee of zero physical filesystem effects. Labels remain
 user-provided metadata: do not store secrets in them. Validation uses synthetic
 bases only; real-session and visual browser validation remain pending.
+
+### Opt-in manual tariff form (candidate)
+
+```sh
+node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --allow-manual-prices
+```
+
+Only this explicit opt-in enables one form and same-origin POST to the selected
+existing database (`startDashboard({ db, currency, allowManualPrices: true })`).
+Enter provider, model, category (`input`, `output`, `cacheRead`, `cacheWrite`),
+explicit three-letter uppercase currency, canonical UTC text
+(`YYYY-MM-DDTHH:mm:ss.sssZ`) and a decimal-string rate per million (zero allowed,
+up to six fractional digits). No numeric conversion or currency inference occurs.
+Controls disable while pending. Feedback shows the canonical saved price, a
+version conflict or a generic failure; inputs remain for inspection. No automatic
+retry: a network failure can leave the outcome unknown. Check before resending.
+
+Prices are append-only/versioned: a conflicting rate cannot replace the same
+identity/currency/category/effective time; another effective time is another version.
+Saving never reprices or refreshes the static cost snapshot. Estimates are not
+invoices. The trusted inline script has an exact CSP SHA-256 hash; only opted-in
+pages allow same-origin connections. Demo/readonly CSP and behavior stay unchanged.
+Synthetic tests cover this candidate; actual-browser verification and independent
+review/delivery remain parent-owned. No real sessions are authorized.
 
 ## Readonly dashboard reports (API delivered PR #18)
 

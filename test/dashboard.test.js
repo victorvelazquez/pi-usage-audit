@@ -7,6 +7,8 @@ import * as dashboard from "../src/dashboard.js";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import http from "node:http";
+import { createHash } from "node:crypto";
+import { runInNewContext } from "node:vm";
 import { PassThrough } from "node:stream";
 import * as ledgerModule from "../src/ledger.js";
 import { openLedger } from "../src/ledger.js";
@@ -1244,6 +1246,148 @@ test("CLI help and invalid requests are sanitized before startup", () => {
   }
 });
 
+test("manual form gating and exact script CSP", async () => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  openLedger(path).close();
+  for (const mode of ["demo", false, true]) {
+    const server =
+      mode === "demo"
+        ? await startDemo()
+        : await dashboard.startDashboard({
+            db: path,
+            currency: "EUR",
+            allowManualPrices: mode,
+          });
+    try {
+      const page = await request(server.address().port);
+      const scripts = [...page.body.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+      assert.equal(scripts.length, mode === true ? 1 : 0);
+      assert.equal(
+        (page.body.match(/<form\b/g) ?? []).length,
+        mode === true ? 1 : 0,
+      );
+      const csp = page.headers["content-security-policy"];
+      if (mode === true) {
+        const hash = createHash("sha256")
+          .update(scripts[0][1])
+          .digest("base64");
+        assert.ok(csp.includes(`script-src 'sha256-${hash}'`));
+        assert.ok(csp.includes("connect-src 'self'"));
+        assert.equal((page.body.match(/<label\b/g) ?? []).length, 6);
+        for (const key of Object.keys(priceValue))
+          assert.ok(page.body.includes(`name="${key}"`));
+        for (const category of ["input", "output", "cacheRead", "cacheWrite"])
+          assert.ok(page.body.includes(`value="${category}"`));
+        assert.match(page.body, /append-only/);
+        assert.match(page.body, /no son una factura/);
+        assert.ok(!scripts[0][1].includes("innerHTML"));
+      } else {
+        assert.ok(csp.includes("script-src 'none'; connect-src 'none'"));
+      }
+      assert.ok(csp.includes("frame-src 'none'; frame-ancestors 'none'"));
+      assert.ok(
+        csp.endsWith(
+          "style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+        ),
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+});
+
+test("manual form exact zero payload, pending, canonical feedback and failures", async () => {
+  const { manualPriceScript } = await import("../src/manual-price-form.js");
+  const fields = Object.fromEntries(
+    Object.entries({
+      ...priceValue,
+      provider: '<img src=x onerror="bad()">',
+      ratePerMillion: "0",
+    }).map(([key, value]) => [key, { value, disabled: false }]),
+  );
+  const button = { disabled: false };
+  const feedback = { textContent: "" };
+  let submit;
+  const form = {
+    elements: { ...fields, namedItem: (key) => fields[key] },
+    addEventListener: (name, handler) => {
+      assert.equal(name, "submit");
+      submit = handler;
+    },
+  };
+  const calls = [];
+  let settle;
+  runInNewContext(manualPriceScript, {
+    document: {
+      getElementById: (id) =>
+        ({
+          "manual-price-form": form,
+          "manual-price-submit": button,
+          "manual-price-feedback": feedback,
+        })[id],
+    },
+    fetch: (url, options) => {
+      calls.push({ url, options });
+      return new Promise((resolve, reject) => {
+        settle = { resolve, reject };
+      });
+    },
+  });
+  const event = { preventDefault() {} };
+  for (const outcome of [
+    "success",
+    "conflict",
+    "operation",
+    "network",
+    "invalid-json",
+  ]) {
+    const count = calls.length;
+    const pending = submit(event);
+    await submit(event);
+    assert.equal(calls.length, count + 1);
+    assert.equal(button.disabled, true);
+    assert.ok(Object.values(fields).every((field) => field.disabled));
+    const { url, options } = calls.at(-1);
+    assert.equal(url, "/manual-prices");
+    assert.equal(options.method, "POST");
+    assert.equal(options.headers["Content-Type"], "application/json");
+    const expected = Object.fromEntries(
+      Object.entries(fields).map(([k, f]) => [k, f.value]),
+    );
+    assert.deepEqual(JSON.parse(options.body), expected);
+    if (outcome === "network") settle.reject(new Error("secret"));
+    else
+      settle.resolve({
+        status:
+          outcome === "conflict" ? 409 : outcome === "operation" ? 500 : 200,
+        json: async () => {
+          if (outcome === "invalid-json") throw new Error("secret");
+          return { ...expected, ratePerMillion: "0.000000" };
+        },
+      });
+    await pending;
+    assert.equal(button.disabled, false);
+    assert.ok(Object.values(fields).every((field) => !field.disabled));
+    assert.equal(fields.ratePerMillion.value, "0");
+    assert.equal(calls.length, count + 1);
+    if (outcome === "success") {
+      assert.ok(
+        feedback.textContent.includes(
+          JSON.stringify({ ...expected, ratePerMillion: "0.000000" }),
+        ),
+      );
+    } else
+      assert.match(
+        feedback.textContent,
+        outcome === "conflict" ? /Conflicto/ : /No se pudo guardar/,
+      );
+    assert.ok(!feedback.textContent.includes("secret"));
+  }
+});
+
 test("CLI effective URL, occupied port and signal shutdown", async () => {
   const dir = mkdtempSync("test/.runtime-dashboard-");
   const path = join(dir, "synthetic.sqlite");
@@ -1274,7 +1418,10 @@ test("CLI effective URL, occupied port and signal shutdown", async () => {
         assert.equal((await postPrice(port)).status, 200);
       assert.match(page.body, /<caption>Evolución diaria — UTC<\/caption>/);
       assert.ok(page.body.includes("18014398509481985"));
-      assert.ok(!page.body.includes("<script"));
+      assert.equal(
+        page.body.includes("<script"),
+        args.includes("--allow-manual-prices"),
+      );
       const busy = cli([...args, "--port", String(port)]);
       assert.equal(busy.status, 1);
       assert.ok(busy.stderr.trim().endsWith(error));
