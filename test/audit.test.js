@@ -1987,6 +1987,184 @@ test("manual catalogue persists versions, literal identities and append-only rat
   ledger.close();
 });
 
+test("addManualPrice rolls back failed confirmation and recovers on the same handle", () => {
+  const ledger = openLedger(":memory:");
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  let inserted = false;
+  ledger.db.prepare = (sql) => {
+    const stmt = prepare(sql);
+    if (sql.includes("INSERT INTO manual_prices")) {
+      const run = stmt.run.bind(stmt);
+      stmt.run = (...args) => {
+        const result = run(...args);
+        inserted = true;
+        return result;
+      };
+    }
+    if (sql.includes("SELECT * FROM manual_prices")) {
+      stmt.get = () => {
+        assert.equal(inserted, true);
+        throw new Error("synthetic private path SQL value");
+      };
+    }
+    return stmt;
+  };
+  try {
+    assert.throws(() => ledger.addManualPrice(manualPrice), {
+      message: "Manual price operation failed",
+    });
+  } finally {
+    ledger.db.prepare = prepare;
+  }
+  assert.equal(inserted, true);
+  assert.deepEqual(ledger.manualPrices(manualQuery), []);
+  const canonical = { ...manualPrice, ratePerMillion: "1.000000" };
+  assert.deepEqual(ledger.addManualPrice(manualPrice), canonical);
+  assert.deepEqual(
+    ledger.addManualPrice({ ...manualPrice, ratePerMillion: "1.0" }),
+    canonical,
+  );
+  assert.throws(
+    () => ledger.addManualPrice({ ...manualPrice, ratePerMillion: "2" }),
+    { message: "Manual price conflict" },
+  );
+  const next = {
+    ...manualPrice,
+    effectiveFrom: "2027-01-01T00:00:00.000Z",
+    ratePerMillion: "2",
+  };
+  assert.deepEqual(ledger.addManualPrice(next), {
+    ...next,
+    ratePerMillion: "2.000000",
+  });
+  assert.deepEqual(ledger.manualPrices(manualQuery), [
+    canonical,
+    { ...next, ratePerMillion: "2.000000" },
+  ]);
+  ledger.close();
+});
+
+test("addManualPrice preserves caller transaction ownership and rollback", () => {
+  const ledger = openLedger(":memory:");
+  const canonical = ledger.addManualPrice(manualPrice);
+  const outerPrice = { ...manualPrice, category: "output" };
+  const failedPrice = { ...manualPrice, category: "cacheRead" };
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  ledger.db.exec("BEGIN IMMEDIATE");
+  assert.deepEqual(ledger.addManualPrice(outerPrice), {
+    ...outerPrice,
+    ratePerMillion: "1.000000",
+  });
+  ledger.db.prepare = (sql) => {
+    const stmt = prepare(sql);
+    if (sql.includes("SELECT * FROM manual_prices"))
+      stmt.get = () => {
+        throw new Error("synthetic private confirmation");
+      };
+    return stmt;
+  };
+  try {
+    assert.throws(() => ledger.addManualPrice(failedPrice), {
+      message: "Manual price operation failed",
+    });
+  } finally {
+    ledger.db.prepare = prepare;
+  }
+  assert.deepEqual(
+    ledger.manualPrices(manualQuery).map((row) => row.category),
+    ["input", "output"],
+  );
+  assert.throws(
+    () => ledger.addManualPrice({ ...manualPrice, ratePerMillion: "2" }),
+    { message: "Manual price conflict" },
+  );
+  ledger.addManualPrice(failedPrice);
+  ledger.db.exec("ROLLBACK");
+  assert.deepEqual(ledger.manualPrices(manualQuery), [canonical]);
+  ledger.db.exec("BEGIN IMMEDIATE");
+  ledger.addManualPrice(outerPrice);
+  ledger.db.exec("COMMIT");
+  assert.equal(ledger.manualPrices(manualQuery).length, 2);
+  ledger.addManualPrice(failedPrice);
+  assert.equal(ledger.manualPrices(manualQuery).length, 3);
+  ledger.close();
+});
+
+test("addManualPrice sanitizes lifecycle and cleanup failures before recovery", () => {
+  for (const stage of [
+    "savepoint",
+    "insert",
+    "missing",
+    "release",
+    "rollback",
+    "cleanup",
+  ]) {
+    const ledger = openLedger(":memory:");
+    const prepare = ledger.db.prepare.bind(ledger.db);
+    const exec = ledger.db.exec.bind(ledger.db);
+    let failed = false;
+    ledger.db.prepare = (sql) => {
+      if (stage === "insert" && sql.includes("INSERT INTO manual_prices"))
+        throw new Error("synthetic private SQL value");
+      const stmt = prepare(sql);
+      if (sql.includes("SELECT * FROM manual_prices")) {
+        if (stage === "missing") stmt.get = () => undefined;
+        if (["rollback", "cleanup"].includes(stage))
+          stmt.get = () => {
+            throw new Error("synthetic private path");
+          };
+      }
+      return stmt;
+    };
+    ledger.db.exec = (sql) => {
+      if (
+        !failed &&
+        ((stage === "savepoint" && sql === "SAVEPOINT add_manual_price") ||
+          (stage === "release" && sql === "RELEASE add_manual_price"))
+      ) {
+        failed = true;
+        throw new Error("synthetic private lifecycle");
+      }
+      const result = exec(sql);
+      if (
+        (stage === "rollback" && sql === "ROLLBACK TO add_manual_price") ||
+        (stage === "cleanup" && sql === "RELEASE add_manual_price")
+      )
+        throw new Error("synthetic private cleanup");
+      return result;
+    };
+    try {
+      assert.throws(
+        () => ledger.addManualPrice(manualPrice),
+        { message: "Manual price operation failed" },
+        stage,
+      );
+    } finally {
+      ledger.db.prepare = prepare;
+      ledger.db.exec = exec;
+    }
+    assert.deepEqual(ledger.manualPrices(manualQuery), [], stage);
+    // A cleanup failure can leave a savepoint open; caller recovery is explicit.
+    if (stage === "rollback") exec("ROLLBACK");
+    assert.doesNotThrow(() => exec("BEGIN IMMEDIATE"), stage);
+    exec("ROLLBACK");
+    assert.doesNotThrow(() => ledger.addManualPrice(manualPrice), stage);
+    ledger.close();
+  }
+  const ledger = openLedger(":memory:");
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  ledger.db.prepare = ledger.db.exec = () => {
+    assert.fail("invalid requests must not execute SQL");
+  };
+  assert.throws(() => ledger.addManualPrice({ ...manualPrice, extra: true }), {
+    message: "Invalid manual price",
+  });
+  ledger.db.prepare = prepare;
+  ledger.db.exec = exec;
+  ledger.close();
+});
+
 test("manual validation rejects malformed fields without changing storage", () => {
   const ledger = openLedger(fixture().db);
   ledger.addManualPrice(manualPrice);
