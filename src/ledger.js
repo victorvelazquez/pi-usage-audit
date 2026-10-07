@@ -603,12 +603,13 @@ function createLedgerApi(db, secret) {
       }
     },
     tokenEvolution: (value) => {
-      if (
-        !value ||
-        typeof value !== "object" ||
-        Array.isArray(value) ||
-        Reflect.ownKeys(value).length !== 0
-      )
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new Error("Invalid token evolution");
+      const keys = Reflect.ownKeys(value);
+      if (keys.length > 1 || (keys.length === 1 && keys[0] !== "session"))
+        throw new Error("Invalid token evolution");
+      const session = keys.length === 1 ? value.session : null;
+      if (keys.length === 1 && !text(session))
         throw new Error("Invalid token evolution");
       try {
         return reportTransaction(() => {
@@ -623,6 +624,8 @@ function createLedgerApi(db, secret) {
           let includedEntries = 0;
           let excludedEntries = 0;
           for (const row of snapshot()) {
+            // Classify complete lineage before selecting literal session rows.
+            if (session !== null && row.session !== session) continue;
             if (row.certainty !== "own") {
               excludedEntries++;
               excluded.set(

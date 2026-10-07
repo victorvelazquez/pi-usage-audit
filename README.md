@@ -9,7 +9,8 @@ Opt-in HTTP saving delivered in PR #27 (main `64c81bb`).
 The manual tariff form is delivered in PR #28 (main `bc79558`).
 Session-scoped runtime reporting API is delivered in PR #29 (main `619654b`,
 commit `4a3eb2e`). The CLI session filter is delivered in PR #30 (main `63bdcdb`,
-commit `3cefedb`). The cost API session filter is a new implementation candidate;
+commit `3cefedb`). The cost API session filter is delivered in PR #31 (main
+`00d82b1`, commit `df78f9e`). The evolution API session filter is a new candidate;
 its review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
@@ -82,7 +83,7 @@ pages allow same-origin connections. Demo/readonly CSP and behavior stay unchang
 PR #28 delivered this form after independent synthetic verification in Edge 154
 (12 groups; suite 99/99) and native review `review-78b87faea124bc1e`, approved and
 acknowledged before delivery. This historical evidence does not review or approve
-the current cost API session-filter candidate. No real sessions are authorized.
+the current evolution API session-filter candidate. No real sessions are authorized.
 
 ## Readonly dashboard reports (API delivered PR #18)
 
@@ -184,8 +185,12 @@ and CLI outputs are unchanged; no dashboard, live capture or automatic model pol
 
 ## Daily token evolution (API A delivered PR #20)
 
-`ledger.tokenEvolution({})` requires an object with zero own keys, including
-symbols/nonenumerable keys; invalid requests fail before SQL (`Invalid token evolution`).
+`ledger.tokenEvolution({})` preserves the delivered global report. The candidate
+also accepts `{ session: 'literal-id' }`: a single own key, nonempty string of at
+most 512 UTF-16 code units, without trimming, case folding or Unicode normalization.
+Nonenumerable own session is accepted; inherited keys are ignored. Extra own keys
+(including symbols/nonenumerables), null and other invalid values fail before SQL
+(`Invalid token evolution`).
 It returns `{ provenance: 'imported-own-token-evolution', granularity: 'day',
 timezone: 'UTC', buckets, undated, coverage }` from one deferred read snapshot.
 
@@ -204,8 +209,16 @@ timezone: 'UTC', buckets, undated, coverage }` from one deferred read snapshot.
   operation, even undated: `Token evolution operation failed`. Results are detached;
   late ownership evidence affects fresh calls. No tariff or task attribution dependency.
 
+Classification uses the full imported lineage snapshot before selecting rows;
+parents outside the session remain evidence, never auto-imported. Buckets, undated
+and coverage then describe only selected rows. Unknown IDs return the existing
+empty shape. BigInt/string arithmetic, detached results and failure recovery stay
+unchanged; the selector performs no writes or tariff/task reads.
+
 API A adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
 Readonly still exposes only `dashboardReport`/`close`, not independent `tokenEvolution`.
+This filter is a candidate, not reviewed or delivered. Composite dashboard,
+CLI and UI remain unchanged; coherent composite filtering → UI are later units.
 
 ### Daily evolution dashboard (delivered PR #21)
 
@@ -280,7 +293,7 @@ No dashboard filter, repository/worktree mapping, schema, pricing change or
 real-session authorization is added. CLI delivered in PR #30 (main `63bdcdb`).
 Historical API #29 writer evidence: suite 100/100; native review
 `review-ac9fb5a8946953ce` approved and acknowledged before delivery. That evidence
-does not review the current cost API session-filter candidate.
+does not review the current evolution API session-filter candidate.
 
 - Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
 - `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.
@@ -304,7 +317,7 @@ existing databases. The filesystem existence check is not an atomic read-only-op
 `node src/cli.js costs --db /explicit/existing.sqlite --currency USD` returns
 `{ provenance: 'imported-own-manual-cost-report', currency, groups, coverage }`.
 Currency remains required: three uppercase ASCII letters, with no default,
-inference or conversion. The API candidate additionally accepts
+inference or conversion. The API delivered in PR #31 additionally accepts
 `ledger.costReport({ currency: 'USD', session: 'literal-id' })`: only own
 `currency` and optional own `session` keys, including nonenumerable keys.
 Session must be nonempty and at most 512 UTF-16 code units; no trim/case folding.
@@ -316,10 +329,10 @@ before counting coverage, exclusions, grouping or quoting. External parents
 remain evidence; nothing is auto-imported. Unknown sessions return the existing
 empty shape with the requested currency. Results remain detached and one-snapshot
 consistent; prices, complete-or-null totals and known zeros are unchanged.
-This cost API filter is not reviewed or delivered. CLI `costs` still rejects
-`--session`; runtime, evolution and dashboard behavior are unchanged.
-Next proposed units: evolution API filter → coherent composite report → UI,
-each requiring separate authorization/review; no real sessions or capture.
+This cost API filter is delivered in PR #31 (`00d82b1`, commit `df78f9e`).
+CLI `costs` still rejects `--session`; dashboard behavior is unchanged.
+Evolution API filtering is the current candidate, followed by coherent composite
+report → UI; each needs separate review/delivery. No real sessions or capture.
 
 Groups use literal joint agent/provider/model identities, binary UTF-8 order,
 null first, not monetary ranking. Each has `entries`, per-entry `quotes` retaining
