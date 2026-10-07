@@ -13,7 +13,10 @@ commit `3cefedb`). The cost API session filter is delivered in PR #31 (main
 `00d82b1`, commit `df78f9e`). The evolution API session filter is delivered in
 PR #32 (main `b537af8`, commit `b3f9aa1`). The composite dashboard session filter
 is delivered in PR #33 (main `02aaa49`, commit `fab58d5`). Startup dashboard
-session selection is the current candidate; review and delivery remain parent-owned.
+session selection is delivered in PR #34 (main `098a119`, commit `ad18abd`).
+Interactive filtering unit A is the current inactive parser candidate; unit B
+(route/UI activation) requires separate authorization. Real-session validation
+remains pending; review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
 
@@ -56,7 +59,7 @@ the startup selector delegates `{currency,session}` to the same composite API.
 projection retains summaries, not IDs or selected prices, without repricing.
 The reader closes before listen, including report/render failures. HTML stays
 static until restart: no refresh, capture, discovery or external calls.
-The candidate accepts optional `startDashboard({ db, currency, port, session,
+The delivered startup selector accepts optional `startDashboard({ db, currency, port, session,
 allowManualPrices })` or one `--session ID` flag. Session is literal, nonempty,
 ≤512 UTF-16 code units, without trim/case folding/Unicode normalization; invalid
 API values fail before storage/listen with `Dashboard unavailable`. Omission
@@ -73,6 +76,21 @@ this is not a guarantee of zero physical filesystem effects. Labels remain
 user-provided metadata: do not store secrets in them. Validation uses synthetic
 bases only; real-session validation remains pending. The opt-in form's synthetic
 actual-browser verification completed in Edge 154 before PR #28 delivery.
+
+### Interactive session filtering — inactive unit A candidate
+
+Internal `parseSessionFilterRequest` admits a prospective POST `/session-filter`
+without storage: JSON `{}` selects global scope; the sole own `session` key must
+contain literal nonempty text of ≤512 UTF-16 units. Extra keys are rejected.
+Admission shares the manual-price reader: exact loopback Host and mandatory
+Origin, no duplicate headers, same-origin Fetch-site when present, JSON only,
+8192-byte limit, fatal UTF-8, absolute 5-second deadline and cleanup. Rejections
+are sanitized, never echoing IDs. Manual-price behavior is unchanged.
+No server route or control is activated: demo/readonly GET returns 404 and POST
+405. Opt-in unrelated POSTs retain their existing transport rejection. Startup
+`--session`, static snapshots, demo/readonly behavior and CSP are unchanged.
+Only synthetic parser/HTTP tests are authorized here; browser verification is
+not applicable to this no-UI unit. Unit B and real sessions remain unauthorized.
 
 ### Opt-in manual tariff form (delivered PR #28)
 

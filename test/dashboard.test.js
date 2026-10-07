@@ -42,6 +42,215 @@ const priceError = (status) => ({
   message: "Manual price request rejected",
 });
 
+const sessionError = (status) => ({
+  name: "SessionFilterRequestError",
+  status,
+  message: "Session filter request rejected",
+});
+
+function sessionRequest(
+  headers = {},
+  method = "POST",
+  url = "/session-filter",
+) {
+  return priceRequest(headers, method, url);
+}
+
+async function parseSessionBody(body, headers = {}) {
+  const req = sessionRequest(headers);
+  const result = dashboard.parseSessionFilterRequest(req, priceOrigin);
+  req.end(body);
+  return result;
+}
+
+test("session filter HTTP accepts global and literal UTF16 selectors", async () => {
+  assert.deepEqual(await parseSessionBody("{}"), {});
+  for (const session of [
+    " ",
+    " Synthetic/Case ",
+    "a\u0000b",
+    "é",
+    "e\u0301",
+    "x".repeat(512),
+    "😀".repeat(256),
+  ]) {
+    assert.deepEqual(await parseSessionBody(JSON.stringify({ session })), {
+      session,
+    });
+  }
+});
+
+test("session filter HTTP rejects shapes and hostile own keys without echo", async () => {
+  for (const body of [
+    "null",
+    "[]",
+    "1",
+    "true",
+    '"PRIVATE_ID"',
+    '{"session":""}',
+    '{"session":null}',
+    '{"session":1}',
+    '{"session":true}',
+    '{"session":[]}',
+    '{"session":{}}',
+    JSON.stringify({ session: "x".repeat(513) }),
+    JSON.stringify({ session: "😀".repeat(257) }),
+    '{"extra":"PRIVATE_ID"}',
+    '{"session":"PRIVATE_ID","extra":1}',
+    '{"__proto__":{"session":"PRIVATE_ID"}}',
+    '{"session":"PRIVATE_ID","constructor":{}}',
+    '{"session":"PRIVATE_ID","toString":null}',
+    "",
+    "{",
+    "{} trailing",
+    "\ufeff{}",
+  ]) {
+    const req = sessionRequest();
+    const result = dashboard.parseSessionFilterRequest(req, priceOrigin);
+    req.end(body);
+    await assert.rejects(result, sessionError(400));
+    assert.ok(req.destroyed);
+    for (const event of ["data", "end", "aborted", "error", "close"])
+      assert.equal(req.listenerCount(event), 0);
+  }
+  assert.equal(Object.prototype.session, undefined);
+});
+
+test("session filter HTTP enforces admission and duplicate headers", async () => {
+  for (const [headers, method, url, status] of [
+    [{ Origin: undefined }, "POST", "/session-filter", 403],
+    [{ Host: "localhost:1234" }, "POST", "/session-filter", 403],
+    [{ Origin: "null" }, "POST", "/session-filter", 403],
+    [{ "Sec-Fetch-Site": "same-site" }, "POST", "/session-filter", 403],
+    [{}, "GET", "/session-filter", 405],
+    [{}, "POST", "/session-filter?session=PRIVATE_ID", 404],
+    [{}, "POST", "/manual-prices", 404],
+    [{ "Content-Type": "text/plain" }, "POST", "/session-filter", 415],
+    [{ "Content-Encoding": "gzip" }, "POST", "/session-filter", 415],
+    [{ "Content-Length": "8193" }, "POST", "/session-filter", 413],
+    [{ "Content-Length": "-1" }, "POST", "/session-filter", 400],
+  ]) {
+    const req = sessionRequest(headers, method, url);
+    await assert.rejects(
+      dashboard.parseSessionFilterRequest(req, priceOrigin),
+      sessionError(status),
+    );
+    assert.ok(req.destroyed);
+  }
+  for (const key of [
+    "Host",
+    "Origin",
+    "Content-Type",
+    "Content-Length",
+    "X-Extra",
+  ]) {
+    const req = sessionRequest();
+    if (["Content-Length", "X-Extra"].includes(key))
+      req.rawHeaders.push(key, "0");
+    req.rawHeaders.push(key.toLowerCase(), "PRIVATE_ID");
+    await assert.rejects(
+      dashboard.parseSessionFilterRequest(req, priceOrigin),
+      sessionError(400),
+    );
+  }
+  await assert.rejects(
+    dashboard.parseSessionFilterRequest(
+      sessionRequest(),
+      "http://localhost:1234",
+    ),
+    sessionError(403),
+  );
+});
+
+test("session filter HTTP body limits, fatal UTF8 and deadline cleanup", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const clear = t.mock.method(globalThis, "clearTimeout");
+  for (const mode of [
+    "oversize",
+    "utf8",
+    "aborted",
+    "error",
+    "close",
+    "timeout",
+    "length",
+  ]) {
+    const req = sessionRequest(
+      mode === "length" ? { "Content-Length": "1" } : {},
+    );
+    const result = dashboard.parseSessionFilterRequest(req, priceOrigin);
+    const checked = assert.rejects(
+      result,
+      sessionError(mode === "oversize" ? 413 : mode === "timeout" ? 408 : 400),
+    );
+    if (mode === "timeout") {
+      t.mock.timers.tick(4999);
+      req.write(" ");
+      t.mock.timers.tick(1);
+    } else if (["aborted", "error", "close"].includes(mode)) {
+      req.emit(mode, new Error("PRIVATE_ID"));
+    } else {
+      req.end(
+        mode === "oversize"
+          ? Buffer.alloc(8193, 32)
+          : mode === "utf8"
+            ? Buffer.from([0xc3, 0x28])
+            : "{}",
+      );
+    }
+    await checked;
+    assert.ok(req.destroyed);
+    assert.equal(clear.mock.callCount(), 1, mode);
+    clear.mock.resetCalls();
+    for (const event of ["data", "end", "aborted", "error", "close"])
+      assert.equal(req.listenerCount(event), 0, `${mode}/${event}`);
+    t.mock.timers.tick(5000);
+  }
+  assert.deepEqual(
+    await parseSessionBody("{}" + " ".repeat(8190), {
+      "Content-Length": "8192",
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Encoding": "identity",
+      "Sec-Fetch-Site": "same-origin",
+    }),
+    {},
+  );
+  assert.equal(clear.mock.callCount(), 1);
+});
+
+test("session filter HTTP production route remains inactive in demo and readonly", async () => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  openLedger(path).close();
+  for (const server of [
+    await startDemo(0),
+    await dashboard.startDashboard({
+      db: path,
+      currency: "EUR",
+      session: "PRIVATE_ID",
+    }),
+  ]) {
+    try {
+      const port = server.address().port;
+      assert.equal((await request(port, "/session-filter")).status, 404);
+      assert.equal(
+        (await request(port, "/session-filter", { method: "POST" })).status,
+        405,
+      );
+      const page = await request(port);
+      assert.ok(!page.body.includes("PRIVATE_ID"));
+      assert.ok(!page.body.includes("/session-filter"));
+      assert.match(
+        page.headers["content-security-policy"],
+        /connect-src 'none'/,
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+});
+
 test("price HTTP manual semantics returns canonical six-field records", async () => {
   for (const [rate, canonical] of [
     ["0", "0.000000"],
