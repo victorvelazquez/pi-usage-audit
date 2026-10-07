@@ -580,19 +580,32 @@ function createLedgerApi(db, secret) {
     close: () => db.close(),
     attribution,
     dashboardReport: (value) => {
-      const request = validateManual(
-        value,
-        ["currency"],
-        "Invalid dashboard report",
-      );
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        !Object.hasOwn(value, "currency") ||
+        Reflect.ownKeys(value).some(
+          (key) => key !== "currency" && key !== "session",
+        ) ||
+        (Object.hasOwn(value, "session") && !text(value.session)) ||
+        typeof value.currency !== "string" ||
+        value.currency.length !== 3 ||
+        !/^[A-Z]{3}$/.test(value.currency)
+      )
+        throw new Error("Invalid dashboard report");
+      const selection = Object.hasOwn(value, "session")
+        ? { session: value.session }
+        : {};
+      const request = { currency: value.currency, ...selection };
       try {
         return readTransaction(() => {
           dashboardReading = true;
           try {
             return {
-              runtime: api.runtimeReport({}),
+              runtime: api.runtimeReport(selection),
               costs: api.costReport(request),
-              evolution: api.tokenEvolution({}),
+              evolution: api.tokenEvolution(selection),
             };
           } finally {
             dashboardReading = false;

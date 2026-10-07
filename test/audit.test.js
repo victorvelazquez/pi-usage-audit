@@ -749,6 +749,21 @@ test("readonly dashboard allowlist, strict validation, preservation and recovery
       { currency: "usd" },
       { currency: "USD\n" },
       { currency: "USD", extra: 1 },
+      ...[
+        undefined,
+        null,
+        1,
+        [],
+        {},
+        "",
+        "x".repeat(513),
+        "😀".repeat(257),
+      ].map((session) => ({ currency: "USD", session })),
+      { currency: "USD", session: "s", extra: 1 },
+      { currency: "USD", session: "s", [Symbol()]: 1 },
+      Object.defineProperty({ currency: "USD", session: "s" }, "hidden", {
+        value: 1,
+      }),
       { currency: "USD", [Symbol()]: 1 },
       Object.create({ currency: "USD" }),
       Object.defineProperty({ currency: "USD" }, "hidden", { value: 1 }),
@@ -801,7 +816,136 @@ test("readonly dashboard allowlist, strict validation, preservation and recovery
   }
 });
 
-test("dashboardReport holds one snapshot across constant-count writer commit between reports", () => {
+test("dashboardReport literal sessions, lineage, detached restart and recovery", () => {
+  const f = fixture();
+  const writer = openLedger(f.db);
+  const proto = DatabaseSync.prototype;
+  const prepare = proto.prepare;
+  const exec = proto.exec;
+  let reader;
+  try {
+    assert.equal(Object.hasOwn(writer, "dashboardReport"), false);
+    const ids = ["s", " S ", " ", "é", "é", "x".repeat(512), "😀".repeat(256)];
+    const bigUsage = {
+      input: Number.MAX_SAFE_INTEGER,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: Number.MAX_SAFE_INTEGER,
+    };
+    const paths = ids.map((id, i) =>
+      f.file(`literal-${i}.jsonl`, [
+        header(id),
+        message("a", { usage: bigUsage }),
+        message("b", { usage: bigUsage }),
+      ]),
+    );
+    const parent = f.file("parent.jsonl", [header("parent"), message("copy")]);
+    const child = f.file("child.jsonl", [
+      header("child", { parentSession: parent }),
+      message("copy"),
+      message("new"),
+    ]);
+    writer.importFiles({ sessions: [...paths, parent, child] });
+    const tables = [
+      "sources",
+      "entries",
+      "tasks",
+      "imports",
+      "manual_prices",
+      "manual_estimates",
+      "imported_estimates",
+      "config",
+    ];
+    const rows = () =>
+      tables.map((table) => writer.db.prepare(`SELECT * FROM ${table}`).all());
+    const before = rows();
+    const bytes = readFileSync(f.db);
+    const expected = (session, currency = "EUR") => {
+      const request = session === undefined ? {} : { session };
+      return {
+        runtime: writer.runtimeReport(request),
+        costs: writer.costReport({ currency, ...request }),
+        evolution: writer.tokenEvolution(request),
+      };
+    };
+    reader = ledgerModule.openReadonlyLedger(f.db);
+    for (const session of [...ids, "parent", "child", "unknown", "S", "s "]) {
+      const request = { currency: "EUR", session };
+      const result = reader.dashboardReport(request);
+      assert.deepEqual(result, expected(session));
+      const hidden = Object.defineProperty({ currency: "EUR" }, "session", {
+        value: session,
+      });
+      assert.deepEqual(reader.dashboardReport(hidden), result);
+    }
+    const literal = reader.dashboardReport({ currency: "EUR", session: " S " });
+    assert.equal(literal.runtime.agents[0].totalTokens, "18014398509481982");
+    assert.equal(literal.costs.groups[0].total, null);
+    const childResult = reader.dashboardReport({
+      currency: "EUR",
+      session: "child",
+    });
+    assert.deepEqual(childResult.runtime.coverage.excludedByCertainty, {
+      copied: 1,
+      "lineage-unresolved": 1,
+    });
+    const unknown = reader.dashboardReport({
+      currency: "JPY",
+      session: "unknown",
+    });
+    assert.deepEqual(unknown, expected("unknown", "JPY"));
+    const inherited = Object.create(
+      { session: "s" },
+      { currency: { value: "EUR" } },
+    );
+    assert.deepEqual(reader.dashboardReport(inherited), expected(undefined));
+    literal.runtime.agents[0].totalTokens = "0";
+    literal.evolution.buckets.length = 0;
+    literal.costs.groups[0].quotes[0].observation.usage.input = 0;
+    const request = { currency: "EUR", session: " S " };
+    assert.deepEqual(reader.dashboardReport(request), expected(" S "));
+    for (const failure of ["read", "commit", "rollback"]) {
+      let failed = false;
+      proto.prepare = function (sql) {
+        if (this !== writer.db && failure !== "commit" && !failed) {
+          failed = true;
+          throw new Error("SYNTHETIC_PRIVATE_PATH");
+        }
+        return prepare.call(this, sql);
+      };
+      proto.exec = function (sql) {
+        if (
+          this !== writer.db &&
+          ((failure === "commit" && sql === "COMMIT") ||
+            (failure === "rollback" && sql === "ROLLBACK"))
+        )
+          throw new Error("SYNTHETIC_PRIVATE_PATH");
+        return exec.call(this, sql);
+      };
+      assert.throws(
+        () => reader.dashboardReport(request),
+        /^Error: Dashboard report operation failed$/,
+      );
+      proto.prepare = prepare;
+      proto.exec = exec;
+      if (failure !== "rollback")
+        assert.deepEqual(reader.dashboardReport(request), expected(" S "));
+      reader.close();
+      reader = ledgerModule.openReadonlyLedger(f.db);
+      assert.deepEqual(reader.dashboardReport(request), expected(" S "));
+    }
+    assert.deepEqual(rows(), before);
+    assert.deepEqual(readFileSync(f.db), bytes);
+  } finally {
+    proto.prepare = prepare;
+    proto.exec = exec;
+    reader?.close();
+    writer.close();
+  }
+});
+
+function dashboardSnapshot(session) {
   const f = fixture();
   const writer = openLedger(f.db);
   const proto = DatabaseSync.prototype;
@@ -830,6 +974,13 @@ test("dashboardReport holds one snapshot across constant-count writer commit bet
       );
     const before = counts();
     reader = ledgerModule.openReadonlyLedger(f.db);
+    const request = session === undefined ? {} : { session };
+    const standalone = () => ({
+      runtime: writer.runtimeReport(request),
+      costs: writer.costReport({ currency: "USD", ...request }),
+      evolution: writer.tokenEvolution(request),
+    });
+    const expected = standalone();
     let sources = 0;
     proto.prepare = function (sql) {
       if (
@@ -856,8 +1007,14 @@ test("dashboardReport holds one snapshot across constant-count writer commit bet
       }
       return prepare.call(this, sql);
     };
-    const first = reader.dashboardReport({ currency: "USD" });
+    const first = reader.dashboardReport({ currency: "USD", ...request });
     assert.equal(sources, 3);
+    assert.deepEqual(first, expected);
+    const next = reader.dashboardReport({ currency: "USD", ...request });
+    assert.deepEqual(next, standalone());
+    assert.notDeepEqual(next, first);
+    assert.deepEqual(counts(), before);
+    if (session !== undefined) return;
     assert.deepEqual(first.evolution.buckets, [
       { day: "2026-01-01", entries: 2, totalTokens: "38" },
     ]);
@@ -873,7 +1030,6 @@ test("dashboardReport holds one snapshot across constant-count writer commit bet
     assert.equal(first.costs.coverage.includedEntries, 2);
     assert.deepEqual(first.runtime.coverage, first.costs.coverage);
     assert.deepEqual(counts(), before);
-    const next = reader.dashboardReport({ currency: "USD" });
     assert.deepEqual(next.evolution.buckets, [
       { day: "2026-02-01", entries: 1, totalTokens: "29" },
     ]);
@@ -891,7 +1047,12 @@ test("dashboardReport holds one snapshot across constant-count writer commit bet
     reader?.close();
     writer.close();
   }
-});
+}
+
+for (const session of [undefined, "s", "child"])
+  test(`dashboardReport snapshot between reports (${session ?? "global"})`, () => {
+    dashboardSnapshot(session);
+  });
 
 test("costReport strict requests, detached empty result and generic recovery", () => {
   const f = fixture();

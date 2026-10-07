@@ -10,8 +10,9 @@ The manual tariff form is delivered in PR #28 (main `bc79558`).
 Session-scoped runtime reporting API is delivered in PR #29 (main `619654b`,
 commit `4a3eb2e`). The CLI session filter is delivered in PR #30 (main `63bdcdb`,
 commit `3cefedb`). The cost API session filter is delivered in PR #31 (main
-`00d82b1`, commit `df78f9e`). The evolution API session filter is a new candidate;
-its review and delivery remain parent-owned.
+`00d82b1`, commit `df78f9e`). The evolution API session filter is delivered in
+PR #32 (main `b537af8`, commit `b3f9aa1`). The composite dashboard session filter
+is the current candidate; its review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
 
@@ -83,7 +84,7 @@ pages allow same-origin connections. Demo/readonly CSP and behavior stay unchang
 PR #28 delivered this form after independent synthetic verification in Edge 154
 (12 groups; suite 99/99) and native review `review-78b87faea124bc1e`, approved and
 acknowledged before delivery. This historical evidence does not review or approve
-the current evolution API session-filter candidate. No real sessions are authorized.
+the current composite dashboard session-filter candidate. No real sessions are authorized.
 
 ## Readonly dashboard reports (API delivered PR #18)
 
@@ -98,8 +99,17 @@ checked by reads. Missing, empty, corrupt or incompatible storage fails with
 (evolution delivered in PR #20, main `896fa46`, commit `e5049bd`);
 existing runtime/cost shapes are unchanged.
 All three reports use **one deferred transaction** spanning
-entries, lineage, task attribution and tariffs. Exactly one own currency key is
-required; three uppercase ASCII letters, no default/conversion. Invalid requests
+entries, lineage, task attribution and tariffs. Own currency is required:
+three uppercase ASCII letters, no default/conversion. The candidate additionally
+accepts `reader.dashboardReport({ currency: 'USD', session: 'literal-id' })`.
+Only these own keys are allowed, including nonenumerable keys; extra own keys
+(including symbols) are rejected. Session is nonempty, ≤512 UTF-16 code units,
+without trim, case folding or normalization. Omission preserves the global report.
+All subreports receive the same selector in the existing joint snapshot; complete
+lineage is classified before selection, retaining external parents as evidence.
+Unknown IDs return the three existing empty shapes with explicit cost currency.
+Detached results, exact arithmetic and readonly boundaries remain unchanged:
+`openLedger` intentionally does not expose `dashboardReport`. Invalid requests
 fail before SQL (`Invalid dashboard report`); operational failures reject the
 whole result (`Dashboard report operation failed`). Close the reader in `finally`.
 
@@ -185,8 +195,8 @@ and CLI outputs are unchanged; no dashboard, live capture or automatic model pol
 
 ## Daily token evolution (API A delivered PR #20)
 
-`ledger.tokenEvolution({})` preserves the delivered global report. The candidate
-also accepts `{ session: 'literal-id' }`: a single own key, nonempty string of at
+`ledger.tokenEvolution({})` preserves the delivered global report. PR #32
+also delivered `{ session: 'literal-id' }`: a single own key, nonempty string of at
 most 512 UTF-16 code units, without trimming, case folding or Unicode normalization.
 Nonenumerable own session is accepted; inherited keys are ignored. Extra own keys
 (including symbols/nonenumerables), null and other invalid values fail before SQL
@@ -217,8 +227,9 @@ unchanged; the selector performs no writes or tariff/task reads.
 
 API A adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
 Readonly still exposes only `dashboardReport`/`close`, not independent `tokenEvolution`.
-This filter is a candidate, not reviewed or delivered. Composite dashboard,
-CLI and UI remain unchanged; coherent composite filtering → UI are later units.
+This filter is delivered in PR #32 (`b537af8`, commit `b3f9aa1`). Composite
+filtering is the current API candidate; CLI/UI stay unchanged. UI filtering is
+only a next-step proposal, not authorized by this unit.
 
 ### Daily evolution dashboard (delivered PR #21)
 
@@ -293,7 +304,7 @@ No dashboard filter, repository/worktree mapping, schema, pricing change or
 real-session authorization is added. CLI delivered in PR #30 (main `63bdcdb`).
 Historical API #29 writer evidence: suite 100/100; native review
 `review-ac9fb5a8946953ce` approved and acknowledged before delivery. That evidence
-does not review the current evolution API session-filter candidate.
+does not review the current composite dashboard session-filter candidate.
 
 - Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
 - `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.
@@ -331,8 +342,9 @@ empty shape with the requested currency. Results remain detached and one-snapsho
 consistent; prices, complete-or-null totals and known zeros are unchanged.
 This cost API filter is delivered in PR #31 (`00d82b1`, commit `df78f9e`).
 CLI `costs` still rejects `--session`; dashboard behavior is unchanged.
-Evolution API filtering is the current candidate, followed by coherent composite
-report → UI; each needs separate review/delivery. No real sessions or capture.
+Evolution API filtering is delivered in PR #32. Coherent composite filtering is
+the current candidate; UI is proposed next, without authorization. No real sessions
+or capture.
 
 Groups use literal joint agent/provider/model identities, binary UTF-8 order,
 null first, not monetary ranking. Each has `entries`, per-entry `quotes` retaining
