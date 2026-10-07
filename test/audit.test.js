@@ -61,7 +61,7 @@ function fixture() {
   return { dir, db, file, task };
 }
 
-test("tokenEvolution strict empty requests, detached results and recovery", () => {
+test("tokenEvolution strict requests, detached results and recovery", () => {
   const ledger = openLedger(":memory:");
   const exec = ledger.db.exec.bind(ledger.db);
   try {
@@ -74,6 +74,19 @@ test("tokenEvolution strict empty requests, detached results and recovery", () =
       { day: "now" },
       { [Symbol()]: 1 },
       Object.defineProperty({}, "hidden", { value: 1 }),
+      ...[
+        undefined,
+        null,
+        1,
+        [],
+        {},
+        "",
+        "x".repeat(513),
+        "😀".repeat(257),
+      ].map((session) => ({ session })),
+      { session: "s", extra: 1 },
+      { session: "s", [Symbol()]: 1 },
+      Object.defineProperty({ session: "s" }, "hidden", { value: 1 }),
     ])
       assert.throws(
         () => ledger.tokenEvolution(value),
@@ -102,6 +115,16 @@ test("tokenEvolution strict empty requests, detached results and recovery", () =
       ledger.tokenEvolution(Object.create({ ignored: true })),
       empty,
     );
+    for (const session of ["unknown", " ", "x".repeat(512), "😀".repeat(256)])
+      assert.deepEqual(ledger.tokenEvolution({ session }), empty);
+    assert.deepEqual(
+      ledger.tokenEvolution(
+        Object.defineProperty({}, "session", {
+          value: "unknown",
+        }),
+      ),
+      empty,
+    );
     empty.buckets.push({ day: "fake" });
     assert.deepEqual(ledger.tokenEvolution({}).buckets, []);
     ledger.db.exec = () => {
@@ -115,6 +138,167 @@ test("tokenEvolution strict empty requests, detached results and recovery", () =
     assert.deepEqual(ledger.tokenEvolution({}).buckets, []);
   } finally {
     ledger.db.exec = exec;
+    ledger.close();
+  }
+});
+
+test("tokenEvolution session selection preserves literal IDs and full lineage", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  try {
+    const huge = {
+      input: Number.MAX_SAFE_INTEGER,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: Number.MAX_SAFE_INTEGER,
+    };
+    const parent = f.file("parent.jsonl", [
+      header(" É😀 "),
+      message("a", { usage: huge }),
+      message("b", { usage: huge }),
+      { ...message("missing"), timestamp: null },
+      { ...message("invalid"), timestamp: "2026-01-01" },
+      message("incomplete", { usage: {} }),
+    ]);
+    const child = f.file("child.jsonl", [
+      header("child", { parentSession: parent }),
+      message("a", { usage: huge }),
+      message("new"),
+    ]);
+    const outside = f.file("other.jsonl", [header("É😀"), message("other")]);
+    ledger.importFiles({ sessions: [child, outside] });
+    assert.deepEqual(ledger.tokenEvolution({ session: "child" }).coverage, {
+      includedEntries: 0,
+      excludedEntries: 2,
+      excludedByCertainty: { "lineage-unresolved": 2 },
+    });
+    ledger.importFiles({ sessions: [parent] });
+    const rows = ledger.db.prepare("SELECT * FROM entries").all();
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    const global = ledger.tokenEvolution({});
+    const selected = ledger.tokenEvolution({ session: " É😀 " });
+    assert.deepEqual(selected.buckets, [
+      { day: "2026-01-01", entries: 2, totalTokens: "18014398509481982" },
+    ]);
+    assert.deepEqual(selected.undated, {
+      entries: 2,
+      totalTokens: "38",
+      missingTimestampEntries: 1,
+      invalidTimestampEntries: 1,
+    });
+    assert.deepEqual(selected.coverage, {
+      includedEntries: 4,
+      excludedEntries: 1,
+      excludedByCertainty: { incomplete: 1 },
+    });
+    const copied = ledger.tokenEvolution({ session: "child" });
+    assert.deepEqual(copied.buckets, []);
+    assert.equal(copied.undated.totalTokens, "0");
+    assert.deepEqual(copied.coverage.excludedByCertainty, {
+      copied: 1,
+      "lineage-unresolved": 1,
+    });
+    assert.deepEqual(
+      ledger.tokenEvolution(Object.create({ session: "child" })),
+      global,
+    );
+    for (const session of ["É😀", " é😀 ", " É😀 ", "unknown"])
+      assert.equal(
+        ledger.tokenEvolution({ session }).coverage.includedEntries,
+        session === "É😀" ? 1 : 0,
+      );
+    assert.deepEqual(ledger.tokenEvolution({}), global);
+    assert.deepEqual(ledger.db.prepare("SELECT * FROM entries").all(), rows);
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    selected.buckets[0].totalTokens = "0";
+    selected.undated.entries = 999;
+    selected.coverage.excludedByCertainty.incomplete = 999;
+    ledger.close();
+    ledger = openLedger(f.db);
+    const fresh = ledger.tokenEvolution({ session: " É😀 " });
+    assert.equal(fresh.buckets[0].totalTokens, "18014398509481982");
+    assert.equal(fresh.undated.entries, 2);
+    assert.equal(fresh.coverage.excludedByCertainty.incomplete, 1);
+    const row = rows.find((row) => row.session === "É😀");
+    ledger.db
+      .prepare("UPDATE entries SET data=? WHERE session=?")
+      .run(JSON.stringify({ ...JSON.parse(row.data), input: -1 }), row.session);
+    assert.deepEqual(ledger.tokenEvolution({ session: " É😀 " }), fresh);
+    assert.throws(
+      () => ledger.tokenEvolution({ session: "É😀" }),
+      /^Error: Token evolution operation failed$/,
+    );
+    assert.throws(
+      () => ledger.tokenEvolution({}),
+      /Token evolution operation failed/,
+    );
+  } finally {
+    ledger.close();
+  }
+});
+
+test("tokenEvolution selected snapshot and sanitized failure recovery", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const other = openLedger(f.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  try {
+    ledger.importFiles({
+      sessions: [f.file("s.jsonl", [header("s"), message("a")])],
+    });
+    const before = ledger.tokenEvolution({});
+    let fired = false;
+    ledger.db.prepare = (sql) => {
+      if (sql === "SELECT * FROM entries" && !fired) {
+        fired = true;
+        other.db.exec("UPDATE sources SET parent='missing' WHERE session='s'");
+        other.db.exec(`UPDATE entries SET data=json_set(data,
+          '$.input',20,'$.totalTokens',29,'$.timestamp','2026-02-01T00:00:00.000Z')`);
+      }
+      return prepare(sql);
+    };
+    assert.deepEqual(ledger.tokenEvolution({ session: "s" }), before);
+    assert.equal(fired, true);
+    assert.deepEqual(ledger.tokenEvolution({ session: "s" }).coverage, {
+      includedEntries: 0,
+      excludedEntries: 1,
+      excludedByCertainty: { "lineage-unresolved": 1 },
+    });
+    other.db.exec("UPDATE sources SET parent=NULL WHERE session='s'");
+    const next = ledger.tokenEvolution({ session: "s" });
+    assert.deepEqual(next.buckets, [
+      { day: "2026-02-01", entries: 1, totalTokens: "29" },
+    ]);
+    for (const failure of ["read", "commit", "rollback"]) {
+      ledger.db.prepare = (sql) => {
+        if (failure !== "commit") throw new Error("PRIVATE_SENTINEL");
+        return prepare(sql);
+      };
+      ledger.db.exec = (sql) => {
+        if (sql === "COMMIT") throw new Error("PRIVATE_SENTINEL");
+        const result = exec(sql);
+        if (sql === "ROLLBACK" && failure === "rollback")
+          throw new Error("PRIVATE_SENTINEL");
+        return result;
+      };
+      assert.throws(
+        () => ledger.tokenEvolution({ session: "s" }),
+        /^Error: Token evolution operation failed$/,
+      );
+      ledger.db.prepare = prepare;
+      ledger.db.exec = exec;
+      assert.equal(ledger.db.isTransaction, false);
+      assert.deepEqual(ledger.tokenEvolution({ session: "s" }), next);
+    }
+  } finally {
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    other.close();
     ledger.close();
   }
 });
@@ -180,6 +364,18 @@ test("tokenEvolution UTC dates, exact totals, ownership and restart conservation
       missingTimestampEntries: 2,
       invalidTimestampEntries: 5,
     });
+    const scoped = ledger.tokenEvolution({ session: "child" });
+    assert.deepEqual(scoped.coverage, {
+      includedEntries: 0,
+      excludedEntries: 3,
+      excludedByCertainty: {
+        copied: 1,
+        "lineage-unresolved": 1,
+        "lineage-conflict": 1,
+      },
+    });
+    assert.deepEqual(scoped.buckets, []);
+    assert.equal(scoped.undated.totalTokens, "0");
     const runtime = ledger.runtimeReport({});
     assert.deepEqual(report.coverage, runtime.coverage);
     assert.deepEqual(report.coverage.excludedByCertainty, {
