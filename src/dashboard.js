@@ -3,6 +3,107 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { projectDemo, renderDashboard } from "./dashboard-report.js";
 
+class ManualPriceRequestError extends Error {
+  constructor(status) {
+    super("Manual price request rejected");
+    this.name = "ManualPriceRequestError";
+    this.status = status;
+  }
+}
+
+// Internal parser for future opt-in wiring; neither server calls this.
+// Returns untrusted JSON: validate before any future RW/storage use.
+// Failures destroy the request/connection; callers must not reuse it.
+export async function parseManualPriceRequest(req, expectedOrigin) {
+  const deny = (status) => {
+    req.destroy();
+    throw new ManualPriceRequestError(status);
+  };
+  if (typeof expectedOrigin !== "string") deny(403);
+  const match = /^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/.exec(expectedOrigin);
+  if (!match || Number(match[1]) > 65535) deny(403);
+  const headers = new Map();
+  for (let i = 0; i < req.rawHeaders.length; i += 2) {
+    const key = req.rawHeaders[i].toLowerCase();
+    if (headers.has(key)) deny(400);
+    headers.set(key, req.rawHeaders[i + 1]);
+  }
+  if (
+    headers.get("host") !== expectedOrigin.slice(7) ||
+    headers.get("origin") !== expectedOrigin ||
+    (headers.has("sec-fetch-site") &&
+      headers.get("sec-fetch-site") !== "same-origin")
+  )
+    deny(403);
+  if (req.method !== "POST") deny(405);
+  if (req.url !== "/manual-prices") deny(404);
+  if (
+    !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+      headers.get("content-type") ?? "",
+    )
+  )
+    deny(415);
+  if (
+    headers.has("content-encoding") &&
+    headers.get("content-encoding") !== "identity"
+  )
+    deny(415);
+  const declared = headers.get("content-length");
+  if (declared !== undefined && !/^(0|[1-9]\d*)$/.test(declared)) deny(400);
+  if (declared !== undefined && BigInt(declared) > 8192n) deny(413);
+  const body = await new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    const deadline = Date.now() + 5000;
+    const finish = (status) => {
+      clearTimeout(timer);
+      for (const [event, handler] of listeners)
+        req.removeListener(event, handler);
+      if (status) {
+        req.destroy();
+        reject(new ManualPriceRequestError(status));
+      } else resolve(Buffer.concat(chunks, size));
+    };
+    const listeners = [
+      [
+        "data",
+        (chunk) => {
+          if (Date.now() >= deadline) return finish(408);
+          if (!Buffer.isBuffer(chunk)) return finish(400);
+          size += chunk.length;
+          if (size > 8192) return finish(413);
+          chunks.push(chunk);
+        },
+      ],
+      [
+        "end",
+        () =>
+          finish(
+            Date.now() >= deadline
+              ? 408
+              : declared !== undefined && BigInt(declared) !== BigInt(size)
+                ? 400
+                : 0,
+          ),
+      ],
+      ["aborted", () => finish(400)],
+      ["error", () => finish(400)],
+      ["close", () => finish(400)],
+    ];
+    const timer = setTimeout(() => finish(408), 5000);
+    for (const [event, handler] of listeners) req.on(event, handler);
+    if (req.destroyed || req.readableEnded || req.aborted) finish(400);
+  });
+  let value;
+  try {
+    const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+    value = JSON.parse(decoder.decode(body));
+  } catch {
+    deny(400);
+  }
+  return value;
+}
+
 export async function startDemo(port) {
   let html;
   try {

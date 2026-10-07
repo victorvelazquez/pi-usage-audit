@@ -7,9 +7,235 @@ import * as dashboard from "../src/dashboard.js";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import http from "node:http";
+import { PassThrough } from "node:stream";
 import { openLedger } from "../src/ledger.js";
 import { projectDemo, renderDashboard } from "../src/dashboard-report.js";
 import { startDemo } from "../src/dashboard.js";
+
+const priceOrigin = "http://127.0.0.1:1234";
+const priceValue = { text: "模型", ratePerMillion: "1.2" };
+function priceRequest(headers = {}, method = "POST", url = "/manual-prices") {
+  const req = new PassThrough();
+  req.method = method;
+  req.url = url;
+  req.rawHeaders = Object.entries({
+    Host: "127.0.0.1:1234",
+    Origin: priceOrigin,
+    "Content-Type": "application/json",
+    ...headers,
+  }).flatMap(([key, value]) => (value === undefined ? [] : [key, value]));
+  return req;
+}
+const priceError = (status) => ({
+  name: "ManualPriceRequestError",
+  status,
+  message: "Manual price request rejected",
+});
+
+test("price HTTP parsing returns untrusted JSON unchanged", async () => {
+  for (const value of [priceValue, null, [], 1, "text", {}]) {
+    const req = priceRequest();
+    const result = dashboard.parseManualPriceRequest(req, priceOrigin);
+    req.end(JSON.stringify(value));
+    assert.deepEqual(await result, value);
+  }
+});
+
+test("price HTTP rejects admission, duplicates and simple requests", async () => {
+  for (const [headers, method, url, status] of [
+    [{ Origin: undefined }, "POST", "/manual-prices", 403],
+    [{ Host: undefined }, "POST", "/manual-prices", 403],
+    ...["null", "http://evil.test", priceOrigin + "/"].map((Origin) => [
+      { Origin },
+      "POST",
+      "/manual-prices",
+      403,
+    ]),
+    ...["localhost:1234", "127.0.0.1:1235"].map((Host) => [
+      { Host },
+      "POST",
+      "/manual-prices",
+      403,
+    ]),
+    ...["none", "same-site", "cross-site"].map((site) => [
+      { "Sec-Fetch-Site": site },
+      "POST",
+      "/manual-prices",
+      403,
+    ]),
+    [{}, "GET", "/manual-prices", 405],
+    [{}, "POST", "/manual-prices?x=1", 404],
+    [{}, "POST", "/other", 404],
+    ...[undefined, "text/plain", "application/json; charset=latin1"].map(
+      (type) => [{ "Content-Type": type }, "POST", "/manual-prices", 415],
+    ),
+    [{ "Content-Encoding": "gzip" }, "POST", "/manual-prices", 415],
+    [{ "Content-Length": "8193" }, "POST", "/manual-prices", 413],
+    [{ "Content-Length": "-1" }, "POST", "/manual-prices", 400],
+  ]) {
+    const req = priceRequest(headers, method, url);
+    await assert.rejects(
+      dashboard.parseManualPriceRequest(req, priceOrigin),
+      priceError(status),
+    );
+    assert.ok(req.destroyed);
+  }
+  for (const key of ["Host", "Origin", "Content-Type", "Sec-Fetch-Site"]) {
+    const req = priceRequest();
+    if (key === "Sec-Fetch-Site") req.rawHeaders.push(key, "same-origin");
+    req.rawHeaders.push(key.toLowerCase(), "PRIVATE_VALUE");
+    await assert.rejects(
+      dashboard.parseManualPriceRequest(req, priceOrigin),
+      priceError(400),
+    );
+  }
+  for (const origin of [
+    "http://localhost:1234",
+    priceOrigin + "/",
+    "http://127.0.0.1:01234",
+  ]) {
+    await assert.rejects(
+      dashboard.parseManualPriceRequest(priceRequest(), origin),
+      priceError(403),
+    );
+  }
+});
+
+test("price HTTP rejects malformed JSON and accepts supported headers", async () => {
+  for (const body of ["", "{", "{} trailing", "\ufeff{}"]) {
+    const req = priceRequest();
+    const result = dashboard.parseManualPriceRequest(req, priceOrigin);
+    req.end(body);
+    await assert.rejects(result, priceError(400));
+  }
+  const req = priceRequest({
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Encoding": "identity",
+    "Sec-Fetch-Site": "same-origin",
+  });
+  const result = dashboard.parseManualPriceRequest(req, priceOrigin);
+  req.end(JSON.stringify(priceValue));
+  assert.deepEqual(await result, priceValue);
+});
+
+test("price HTTP byte limits, fatal UTF8, lifecycle and absolute deadline cleanup", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const clear = t.mock.method(globalThis, "clearTimeout");
+  for (const mode of [
+    "success",
+    "oversize",
+    "utf8",
+    "aborted",
+    "error",
+    "close",
+    "timeout",
+    "length",
+  ]) {
+    const req = priceRequest(
+      mode === "length" ? { "Content-Length": "1" } : {},
+    );
+    const result = dashboard.parseManualPriceRequest(req, priceOrigin);
+    const checked =
+      mode === "success"
+        ? result
+        : assert.rejects(
+            result,
+            priceError(
+              mode === "oversize" ? 413 : mode === "timeout" ? 408 : 400,
+            ),
+          );
+    if (mode === "timeout") {
+      t.mock.timers.tick(4999);
+      req.write(" "); // Progress must not reset the deadline.
+      t.mock.timers.tick(1);
+    } else if (["aborted", "error", "close"].includes(mode)) {
+      req.emit(mode, new Error("PRIVATE_VALUE"));
+    } else if (mode === "oversize") {
+      req.write(Buffer.alloc(8192, 32));
+      req.end(Buffer.from("é"));
+    } else
+      req.end(
+        mode === "utf8"
+          ? Buffer.from([0xc3, 0x28])
+          : JSON.stringify(priceValue),
+      );
+    await checked;
+    assert.equal(clear.mock.callCount(), 1, mode);
+    clear.mock.resetCalls();
+    for (const event of ["data", "end", "aborted", "error", "close"])
+      assert.equal(req.listenerCount(event), 0, `${mode}/${event}`);
+    t.mock.timers.tick(5000);
+  }
+  const body = Buffer.from(JSON.stringify(priceValue));
+  const req = priceRequest({ "Content-Length": "8192" });
+  const result = dashboard.parseManualPriceRequest(req, priceOrigin);
+  req.end(Buffer.concat([body, Buffer.alloc(8192 - body.length, 32)]));
+  assert.deepEqual(await result, priceValue);
+  assert.equal(clear.mock.callCount(), 1);
+  t.mock.timers.tick(5000);
+});
+
+test("price HTTP loopback chunked harness and production writes remain disabled", async () => {
+  const server = http.createServer(async (req, res) => {
+    try {
+      const value = await dashboard.parseManualPriceRequest(
+        req,
+        `http://127.0.0.1:${server.address().port}`,
+      );
+      res.end(JSON.stringify(value));
+    } catch {
+      if (!res.destroyed) res.end("rejected");
+    }
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  const send = (chunks) =>
+    new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: "127.0.0.1",
+          port,
+          path: "/manual-prices",
+          method: "POST",
+          headers: {
+            Origin: `http://127.0.0.1:${port}`,
+            "Content-Type": "application/json",
+            "Transfer-Encoding": "chunked",
+          },
+        },
+        (res) => {
+          let body = "";
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("end", () => resolve(JSON.parse(body)));
+        },
+      );
+      req.on("error", reject);
+      for (const chunk of chunks) req.write(chunk);
+      req.end();
+    });
+  try {
+    const body = Buffer.from(JSON.stringify(priceValue));
+    assert.equal(
+      (await send([...body].map((byte) => Buffer.from([byte])))).text,
+      "模型",
+    );
+    await assert.rejects(send([Buffer.alloc(8192, 32), Buffer.from("é")]));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  const demo = await startDemo(0);
+  try {
+    assert.equal(
+      (await request(demo.address().port, "/manual-prices", { method: "POST" }))
+        .status,
+      405,
+    );
+  } finally {
+    await new Promise((resolve) => demo.close(resolve));
+  }
+});
 
 const fixture = () =>
   JSON.parse(
@@ -489,6 +715,11 @@ test("selected database snapshot closes before listen and stays static", async (
   try {
     assert.deepEqual(readFileSync(path), before);
     const port = server.address().port;
+    assert.equal(
+      (await request(port, "/manual-prices", { method: "POST" })).status,
+      405,
+    );
+    assert.deepEqual(readFileSync(path), before);
     const page = await request(port);
     assert.equal(page.status, 200);
     assert.equal(page.body, renderDashboard(fixture(), { selected: true }));
