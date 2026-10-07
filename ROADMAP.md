@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, dashboard, formulario opt-in y filtro API por sesión entregados; CLI por sesión candidato, sin sesiones reales.**
+**Motor, dashboard, formulario opt-in y runtime API/CLI por sesión entregados; filtro costos API candidato, sin sesiones reales.**
 
-- **Última tarea terminada:** filtro runtime API por sesión, PR #29 integrada; base `main` `619654b`, commit `4a3eb2e`.
-- **En curso:** `report --db <path> [--session <id>]`; candidato CLI pendiente de revisión y entrega por el padre.
-- **Siguiente propuesta:** acordar filtros posteriores o validación real seleccionada; propuesta, no autorización.
+- **Última tarea terminada:** filtro runtime CLI por sesión, PR #30 integrada; base `main` `63bdcdb`, commit `3cefedb` (historial Git comprobado).
+- **En curso:** selector literal opcional sólo en `costReport({currency, session})`; candidato no revisado ni entregado.
+- **Siguiente propuesta:** filtro evolución API → informe compuesto coherente → UI; unidades separadas, propuesta sin autorización.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -30,7 +30,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
-| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI candidato, sin UI ni mapping de repositorios |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API candidato, sin UI ni mapping de repositorios |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
@@ -77,7 +77,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
-| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API por sesión PR #29; CLI candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
+| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30; costos API candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
 ## Admisión HTTP y cuerpo limitado — entregada PR #25 (inactiva)
@@ -99,11 +99,13 @@ Integrada en `main` `799cf42`; revisión nativa aprobada y reconocida antes de l
 - Primera API aprobada: `{}` global intacto o única clave propia `session`, texto no vacío de hasta 512 unidades UTF-16; literal sin trim/casefold, extras propios rechazados antes de SQL.
 - Clasificación del linaje completo primero; luego todas las vistas/coberturas sólo de la sesión seleccionada. Padres externos conservan evidencia; ID desconocido devuelve shape vacío existente.
 - Pruebas sintéticas: grandes/cero/faltantes, continuaciones y atribución conflictiva, copias/hijos no resueltos, sesiones ambiguas, reinicio/detach, no mutación, errores sanitizados y snapshot con commit independiente.
-- Evidencia del escritor: `node --test --test-name-pattern=runtimeReport test/audit.test.js` RED 3/6 (tres rechazos esperados de sesión), GREEN 6/6; `npm test` 100/100; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Evidencia histórica del escritor; revisión nativa `review-ac9fb5a8946953ce` aprobada y acknowledged antes de la entrega PR #29. No revisa el nuevo candidato CLI.
+- Evidencia del escritor: `node --test --test-name-pattern=runtimeReport test/audit.test.js` RED 3/6 (tres rechazos esperados de sesión), GREEN 6/6; `npm test` 100/100; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Evidencia histórica del escritor; revisión nativa `review-ac9fb5a8946953ce` aprobada y acknowledged antes de la entrega PR #29. No revisa el nuevo candidato costos API.
 - Esta entrega API no añadió filtros CLI/dashboard, mapping de repositorios, sesiones automáticas, datos reales, dependencias ni esquema.
 - Rollback sólo de este diff en `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar PR #28, bases y artefactos. Techo 400 líneas formateadas incluidas pruebas/docs.
 
-## Filtro runtime CLI por sesión — candidato no revisado ni entregado
+## Filtro runtime CLI por sesión — entregado PR #30 (`63bdcdb`, commit `3cefedb`)
+
+Entrega comprobada en Git; la evidencia siguiente es histórica, no revisión del filtro costos API actual.
 
 - Sobre API PR #29: global `{}` intacto o un selector literal no vacío de hasta 512 unidades UTF-16; sin trim/casefold. ID desconocido: éxito con shape vacío existente.
 - CLI delega a `runtimeReport`; no replica clasificación ni filtra JSON. Linaje externo disponible antes de seleccionar; vistas/cobertura aisladas.
@@ -111,19 +113,29 @@ Integrada en `main` `799cf42`; revisión nativa aprobada y reconocida antes de l
 - Sintéticos subprocess: equivalencia API/global, IDs literales/límites, cobertura, padre externo/copia/no resuelto, errores sanitizados, ayuda y regresiones import/costs.
 - RED: `node --test --test-name-pattern='CLI report session' test/cli.test.js` 0/3 (ayuda sin selector y dos rechazos de sesión). GREEN 3/3; intento intermedio 1/3 por dos expectativas de fixture corregidas (cost dentro de usage y certeza `copied`).
 - Verificación: `npm test` 103/103; `node --check src/cli.js`, `node --check test/cli.test.js` y `git diff --check` aprobados. Formato manual local, sin formatter global.
-- Sin ledger/esquema/deps/dashboard/captura/datos reales. Revisión y entrega del candidato pertenecen al padre; la evidencia API histórica no lo aprueba.
+- Sin ledger/esquema/deps/dashboard/captura/datos reales. Entrega PR #30 comprobada; no se infiere revisión actual de la evidencia histórica.
 - Rollback sólo de este diff en `src/cli.js`, `test/cli.test.js`, `README.md`, `ROADMAP.md`; preservar API PR #29, bases y artefactos. Techo duro 400 líneas formateadas incluidas pruebas/docs.
+
+## Filtro costos API por sesión — candidato no revisado ni entregado
+
+- Global `{currency}` intacto; selector propio opcional literal no vacío ≤512 UTF-16, sin trim/casefold. Moneda explícita; extras propios (símbolos/no enumerables incluidos) inválidos antes de SQL.
+- Snapshot completo y clasificación de linaje antes de seleccionar; coberturas, exclusiones y cotizaciones sólo de filas seleccionadas. Sesión desconocida: shape vacío con moneda solicitada.
+- Pruebas sintéticas: literalidad/límites/claves, linaje externo/tardío, copias/no resueltos/ambigüedad/conflictos, grandes/cero/null, detached/reinicio/no mutación y commit independiente durante snapshot.
+- RED observado: `node --test --test-name-pattern=costReport test/audit.test.js` 0/4, rechazo esperado de sesión. GREEN 4/4; intermedio 3/4 por intento de asignar propiedad configurable pero no writable, corregido sólo en la prueba.
+- Verificación: `npm test` 104/104; `node --check src/ledger.js`, `node --check test/audit.test.js` y `git diff --check` aprobados. Diff final tras formato: 227 líneas (203 adiciones + 24 eliminaciones); suite 104/104 y sintaxis/diff check reconfirmados por el padre, LSP primario sin errores. Sin aprobación nativa afirmada; historial PR #29/#30/#28 no revisa este candidato.
+- Próximas propuestas: evolución API → compuesto en snapshot único → UI. No cambia runtime/evolución/dashboard/CLI, precios, esquema, dependencias, captura ni autorización de datos reales.
+- Rollback sólo de este diff en `src/ledger.js`, `test/audit.test.js`, `README.md`, `ROADMAP.md`; preservar entregas, bases y artefactos. Techo 400 líneas formateadas, incluidas pruebas/docs.
 
 ## Formulario manual — entregado PR #28 (`bc79558`)
 
-La evidencia siguiente es histórica de la implementación previa a integrar PR #28; no revisa el candidato CLI actual.
+La evidencia siguiente es histórica de la implementación previa a integrar PR #28; no revisa el candidato costos API actual.
 
 - Una sola tarifa de seis campos explícitos; sólo base seleccionada y opt-in booleano true/CLI existente. Demo/readonly sin formulario, script ni conexiones.
 - Script estático con hash CSP exacto y connect-src self sólo opt-in; payload decimal/UTC textual, cero preservado, feedback por textContent y controles bloqueados durante envío.
 - Éxito canónico, conflicto 409 y fallos genéricos; entradas retenidas, sin reintento automático, recotización ni refresco. Precios append-only/versionados; snapshot estimado, no factura.
 - RED enfocado observado 0/2: script ausente y módulo inexistente; GREEN 2/2 con CSP/gating y VM fakeDOM (pending/doble envío/cero/éxito/conflicto/operación/red/JSON inválido).
 - Verificación sintética: dashboard 25/25, `npm test` 99/99 y sintaxis de los cuatro JS/diff check aprobados. Diagnósticos automáticos de edición limpios; LSP primario no disponible al escritor.
-- Antes de entregar PR #28: verificación independiente con datos sintéticos en browser real Edge 154, 12 grupos y suite 99/99; revisión nativa `review-78b87faea124bc1e` aprobada y acknowledged. Evidencia histórica del formulario, no aprobación del filtro CLI actual. Sesiones reales pendientes; no ledger/esquema/rutas/deps nuevos.
+- Antes de entregar PR #28: verificación independiente con datos sintéticos en browser real Edge 154, 12 grupos y suite 99/99; revisión nativa `review-78b87faea124bc1e` aprobada y acknowledged. Evidencia histórica del formulario, no aprobación del filtro costos API actual. Sesiones reales pendientes; no ledger/esquema/rutas/deps nuevos.
 - Rollback sólo del diff candidato en `src/manual-price-form.js`, `src/dashboard-report.js`, `src/dashboard.js`, `test/dashboard.test.js`, `README.md`, `ROADMAP.md`; preservar bases y entregas.
 
 ## Opt-in CLI/API y persistencia HTTP — entregado PR #27 (`64c81bb`)

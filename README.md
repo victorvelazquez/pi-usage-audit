@@ -8,7 +8,8 @@ in PR #24 (main `8cfb899`); semantic validation delivered in PR #26 (`7d37f7c`).
 Opt-in HTTP saving delivered in PR #27 (main `64c81bb`).
 The manual tariff form is delivered in PR #28 (main `bc79558`).
 Session-scoped runtime reporting API is delivered in PR #29 (main `619654b`,
-commit `4a3eb2e`). The CLI session filter is a new implementation candidate;
+commit `4a3eb2e`). The CLI session filter is delivered in PR #30 (main `63bdcdb`,
+commit `3cefedb`). The cost API session filter is a new implementation candidate;
 its review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
@@ -81,7 +82,7 @@ pages allow same-origin connections. Demo/readonly CSP and behavior stay unchang
 PR #28 delivered this form after independent synthetic verification in Edge 154
 (12 groups; suite 99/99) and native review `review-78b87faea124bc1e`, approved and
 acknowledged before delivery. This historical evidence does not review or approve
-the current CLI session-filter candidate. No real sessions are authorized.
+the current cost API session-filter candidate. No real sessions are authorized.
 
 ## Readonly dashboard reports (API delivered PR #18)
 
@@ -246,7 +247,7 @@ Historical rollback surface for this detail unit: `src/dashboard-report.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
 `ROADMAP.md`; preserve delivered evolution, databases and test artifacts.
 
-## Runtime report (API delivered PR #29; CLI session filter candidate)
+## Runtime report (API delivered PR #29; CLI delivered PR #30)
 
 ```sh
 node src/cli.js report --db /explicit/existing.sqlite
@@ -276,10 +277,10 @@ Missing, empty or oversized values fail before storage opens. The existing parse
 rejects values starting with `--` and does not support `--flag=value`, so such IDs
 cannot be selected through this CLI. `costs` still rejects `--session`.
 No dashboard filter, repository/worktree mapping, schema, pricing change or
-real-session authorization is added. This CLI candidate is not reviewed/delivered.
+real-session authorization is added. CLI delivered in PR #30 (main `63bdcdb`).
 Historical API #29 writer evidence: suite 100/100; native review
 `review-ac9fb5a8946953ce` approved and acknowledged before delivery. That evidence
-does not review this CLI candidate.
+does not review the current cost API session-filter candidate.
 
 - Only current confirmed-own entries contribute. `models` matches `modelUsage({}).groups`, including literal/null identities, exact decimal-string token categories, descending totals and binary UTF-8 ties. Reasoning/cacheWrite1h are not extra tokens.
 - `agents` has `agent`, `entries`, distinct `sessions`, and exact decimal-string `totalTokens`; order is descending tokens then binary agent. Attribution is task consensus, not proven roles; the legacy literal `unknown`/sentinel collision remains. Continuations do not multiply usage.
@@ -302,9 +303,23 @@ existing databases. The filesystem existence check is not an atomic read-only-op
 `ledger.costReport({ currency: 'USD' })` or
 `node src/cli.js costs --db /explicit/existing.sqlite --currency USD` returns
 `{ provenance: 'imported-own-manual-cost-report', currency, groups, coverage }`.
-Exactly one own key is required (symbols/nonenumerable extras rejected); currency
-is three uppercase ASCII letters, with no default, inference or conversion.
-Invalid requests fail before SQL: `Invalid cost report`.
+Currency remains required: three uppercase ASCII letters, with no default,
+inference or conversion. The API candidate additionally accepts
+`ledger.costReport({ currency: 'USD', session: 'literal-id' })`: only own
+`currency` and optional own `session` keys, including nonenumerable keys.
+Session must be nonempty and at most 512 UTF-16 code units; no trim/case folding.
+Extra own keys (including symbols/nonenumerables) and invalid values fail before
+SQL: `Invalid cost report`. Omission preserves the global report.
+
+Classification retains the full imported lineage snapshot, then selects rows
+before counting coverage, exclusions, grouping or quoting. External parents
+remain evidence; nothing is auto-imported. Unknown sessions return the existing
+empty shape with the requested currency. Results remain detached and one-snapshot
+consistent; prices, complete-or-null totals and known zeros are unchanged.
+This cost API filter is not reviewed or delivered. CLI `costs` still rejects
+`--session`; runtime, evolution and dashboard behavior are unchanged.
+Next proposed units: evolution API filter → coherent composite report → UI,
+each requiring separate authorization/review; no real sessions or capture.
 
 Groups use literal joint agent/provider/model identities, binary UTF-8 order,
 null first, not monetary ranking. Each has `entries`, per-entry `quotes` retaining
@@ -312,7 +327,7 @@ session/entry, observation, eligibility reasons and selected prices, plus
 `coverage: { complete, completeQuotes, incompleteEntries }` and `total`.
 Totals are exact fixed-12 BigInt sums only when every entry has a complete quote;
 otherwise null, never a subtotal. Invalid own identity/date/counters remain
-incomplete entries; non-own entries appear only in global `coverage` counts
+incomplete entries; non-own entries appear only in selected/global `coverage` counts
 `includedEntries`, `excludedEntries`, `excludedByCertainty`, without global money.
 
 One deferred snapshot spans current classification, task-consensus attribution

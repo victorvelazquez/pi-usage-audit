@@ -685,14 +685,18 @@ function createLedgerApi(db, secret) {
         !value ||
         typeof value !== "object" ||
         Array.isArray(value) ||
-        Reflect.ownKeys(value).length !== 1 ||
         !Object.hasOwn(value, "currency") ||
+        Reflect.ownKeys(value).some(
+          (key) => key !== "currency" && key !== "session",
+        ) ||
+        (Object.hasOwn(value, "session") && !text(value.session)) ||
         typeof value.currency !== "string" ||
         value.currency.length !== 3 ||
         !/^[A-Z]{3}$/.test(value.currency)
       )
         throw new Error("Invalid cost report");
       const currency = value.currency;
+      const session = Object.hasOwn(value, "session") ? value.session : null;
       try {
         return reportTransaction(() => {
           const groups = new Map();
@@ -703,6 +707,8 @@ function createLedgerApi(db, secret) {
             excludedByCertainty: {},
           };
           for (const row of snapshot()) {
+            // Retain complete lineage evidence before selecting literal session rows.
+            if (session !== null && row.session !== session) continue;
             if (row.certainty !== "own") {
               coverage.excludedEntries++;
               const key = row.certainty;
