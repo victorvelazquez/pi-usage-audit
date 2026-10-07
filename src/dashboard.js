@@ -11,7 +11,7 @@ class ManualPriceRequestError extends Error {
   }
 }
 
-// Internal parser for future opt-in wiring; neither server calls this.
+// Internal parser for the explicitly opted-in selected-database server.
 // Returns the canonical six-field price without opening storage.
 // Failures destroy the request/connection; callers must not reuse it.
 export async function parseManualPriceRequest(req, expectedOrigin) {
@@ -129,9 +129,19 @@ export async function startDemo(port) {
   return serve(html, port);
 }
 
-export async function startDashboard({ db, currency, port = 0 }) {
+export async function startDashboard({
+  db,
+  currency,
+  port = 0,
+  allowManualPrices = false,
+}) {
   try {
-    if (typeof db !== "string" || !db || !/^[A-Z]{3}$/.test(currency ?? ""))
+    if (
+      typeof allowManualPrices !== "boolean" ||
+      typeof db !== "string" ||
+      !db ||
+      !/^[A-Z]{3}$/.test(currency ?? "")
+    )
       throw new Error();
     const { openReadonlyLedger } = await import("./ledger.js");
     const ledger = openReadonlyLedger(db);
@@ -145,13 +155,45 @@ export async function startDashboard({ db, currency, port = 0 }) {
     } finally {
       ledger.close();
     }
-    return await serve(html, port);
+    return await serve(html, port, allowManualPrices ? db : undefined);
   } catch {
     throw new Error("Dashboard unavailable");
   }
 }
 
-async function serve(html, port) {
+async function saveManualPrice(req, res, origin, db) {
+  let status = 200;
+  let result;
+  try {
+    const price = await parseManualPriceRequest(req, origin);
+    const { openExistingLedger } = await import("./ledger.js");
+    const writer = openExistingLedger(db);
+    try {
+      result = writer.addManualPrice(price);
+    } catch (error) {
+      if (error.message !== "Manual price conflict") throw error;
+      status = 409;
+      result = { error: "Manual price conflict" };
+    } finally {
+      writer.close();
+    }
+  } catch (error) {
+    // Parser rejection destroys the transport; its status is not an HTTP reply.
+    if (error instanceof ManualPriceRequestError) {
+      req.socket.destroy();
+      return;
+    }
+    if (req.socket.destroyed || res.destroyed) return;
+    status = 500;
+    result = { error: "Manual price operation failed" };
+  }
+  if (res.destroyed) return;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.writeHead(status);
+  res.end(JSON.stringify(result));
+}
+
+async function serve(html, port, writeDb) {
   const server = http.createServer((req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
@@ -162,6 +204,10 @@ async function serve(html, port) {
       "default-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
     );
     const host = `127.0.0.1:${server.address().port}`;
+    if (writeDb !== undefined && req.method === "POST") {
+      void saveManualPrice(req, res, `http://${host}`, writeDb);
+      return;
+    }
     const site = req.headers["sec-fetch-site"];
     const denied =
       req.headers.host !== host ||
@@ -194,7 +240,13 @@ function parse(args) {
     const flag = args[i];
     if (
       seen.has(flag) ||
-      !["--demo", "--port", "--db", "--currency"].includes(flag)
+      ![
+        "--demo",
+        "--port",
+        "--db",
+        "--currency",
+        "--allow-manual-prices",
+      ].includes(flag)
     )
       throw new Error();
     seen.add(flag);
@@ -203,6 +255,8 @@ function parse(args) {
       if (!/^(0|[1-9]\d{0,4})$/.test(value ?? "") || Number(value) > 65535)
         throw new Error();
       options.port = Number(value);
+    } else if (flag === "--allow-manual-prices") {
+      options.allowManualPrices = true;
     } else if (flag !== "--demo") {
       const value = args[++i];
       if (!value || value.startsWith("--")) throw new Error();
@@ -211,7 +265,8 @@ function parse(args) {
   }
   options.demo = seen.has("--demo");
   if (options.demo) {
-    if (seen.has("--db") || seen.has("--currency")) throw new Error();
+    if (seen.has("--db") || seen.has("--currency") || options.allowManualPrices)
+      throw new Error();
   } else if (!options.db || !/^[A-Z]{3}$/.test(options.currency ?? "")) {
     throw new Error();
   }
@@ -228,7 +283,7 @@ async function main() {
   }
   if (options === null) {
     console.log(
-      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N]\n       node src/dashboard.js --help",
+      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N] [--allow-manual-prices]\n       node src/dashboard.js --help",
     );
     return;
   }

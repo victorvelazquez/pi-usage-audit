@@ -4,7 +4,8 @@ Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is e
 
 Project status and next steps: [roadmap and progress](ROADMAP.md).
 Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API delivered
-in PR #24 (main `8cfb899`). HTTP saving is **not enabled**.
+in PR #24 (main `8cfb899`); semantic validation delivered in PR #26 (`7d37f7c`).
+HTTP saving is a new opt-in implementation candidate, not yet delivered/reviewed.
 
 ## Synthetic dashboard demo
 
@@ -315,11 +316,16 @@ NOT NULL constraints or triggers. SQLite may naturally use journal/WAL/SHM sidec
 this does not protect file identity against hostile replacement. Synthetic API
 runtime tests only: no HTTP, dashboard form, CLI change or real-session validation.
 
-### HTTP price validation preparation (inactive candidate)
+### Opt-in HTTP manual prices (implementation candidate)
 
-`parseManualPriceRequest` in `src/dashboard.js` is an **internal** parser for
-future opt-in wiring, not a user API. No production route or CLI flag calls it:
-all dashboard modes remain GET-only and cannot save prices. It checks exact
+Selected databases can opt in with CLI `--allow-manual-prices` (valueless), or
+`startDashboard({ db, currency, allowManualPrices: true })`. The API accepts only
+booleans; omitted/false stays GET-only and never opens a writer. Demo cannot opt in.
+No startup RW preflight occurs. Each admitted POST `/manual-prices` opens the
+existing validated RW ledger, saves synchronously and closes in `finally`.
+
+`parseManualPriceRequest` in `src/dashboard.js` remains an **internal** parser,
+not a user API. The opted-in POST handler calls it before GET guards. It checks exact
 loopback Host/mandatory Origin, POST `/manual-prices` and JSON headers; buffers
 at most 8192 declared/actual bytes with fatal UTF-8 and an absolute five-second
 deadline. Errors contain only a sanitized type/status; rejection closes the
@@ -330,8 +336,17 @@ identities stay literal, currency/category/UTC dates are strict, decimal strings
 become six-fractional-digit rates. Semantic rejection is sanitized status 400 and
 destroys the request. Ledger loading is deferred to semantics; loading failures
 remain operational errors, not bad-input errors. The pure validator opens no storage.
-Tests use synthetic streams and a loopback harness only. Explicit CLI/API opt-in,
-HTTP persistence and the form remain future units, each within 400 changed lines.
+Successful insert/canonical retry returns 200 JSON with the six-field record;
+conflicting rate returns 409 `{ "error": "Manual price conflict" }`. Operational
+open/save/close errors return generic 500 `Manual price operation failed`, without
+paths, SQL or body echoes. Parser rejection closes the transport: its status is
+not a reliable HTTP response. JSON uses no-store/nosniff and the unchanged CSP.
+Currency must be explicit in the body, independent of the displayed currency.
+A close failure can follow a committed save: rollback is not guaranteed; retrying
+the same canonical record is safe. No writer is retained for shutdown.
+HTML remains the startup snapshot; no refresh, form or CSP relaxation. GET on
+the price route is 404; HEAD/OPTIONS are 405. Tests use only synthetic databases
+and loopback. The form and real-session validation remain pending.
 
 ### Read-only manual quote
 
