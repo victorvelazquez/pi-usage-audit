@@ -108,6 +108,7 @@ test("empty reports and escaping preserve unknown, zero and exact strings", () =
       ledger.tokenEvolution({}),
     );
     assert.ok(renderDashboard(empty).includes("Sin filas"));
+    assert.ok(!renderDashboard(empty).includes("<details>"));
     assert.equal(empty.runtime.total, null);
     assert.deepEqual(empty.evolution.buckets, []);
     assert.match(renderDashboard(empty), /Sin fecha.*<td>0<\/td><td>0<\/td>/s);
@@ -222,6 +223,177 @@ test("evolution projection deeply detaches summaries and escapes every value", (
   }
 });
 
+test("agent detail conserves categories, entries and distinct group sessions", () => {
+  const ledger = seeded();
+  try {
+    ledger.db.exec(`INSERT INTO entries SELECT session, 'SECOND_PRIVATE_ID',
+      json_set(data, '$.model', 'alternate', '$.input', 2, '$.output', 3,
+        '$.cacheRead', 4, '$.cacheWrite', 5, '$.totalTokens', 14), 'synthetic', 0
+      FROM entries WHERE session='a';
+      INSERT INTO entries SELECT session, 'THIRD_PRIVATE_ID',
+        json_set(data, '$.model', 'priced'), 'synthetic', 0
+        FROM entries WHERE session IN ('a', 'd') AND entry='PRIVATE_ID'`);
+    const demo = projection(ledger);
+    for (const agent of demo.agents) {
+      const groups = demo.costs.filter((g) => g.agent === agent.agent);
+      assert.equal(
+        groups.reduce((n, g) => n + g.entries, 0),
+        agent.entries,
+      );
+      assert.equal(
+        groups
+          .reduce((n, g) => n + BigInt(g.tokens.totalTokens), 0n)
+          .toString(),
+        agent.totalTokens,
+      );
+    }
+    for (const model of demo.models) {
+      const groups = demo.costs.filter(
+        (g) => g.provider === model.provider && g.model === model.model,
+      );
+      assert.equal(
+        groups.reduce((n, g) => n + g.entries, 0),
+        model.entries,
+      );
+      assert.equal(
+        groups.reduce((n, g) => n + g.sessions, 0),
+        model.sessions,
+      );
+      for (const key of [...categories, "totalTokens"])
+        assert.equal(
+          groups.reduce((n, g) => n + BigInt(g.tokens[key]), 0n).toString(),
+          model.tokens[key],
+        );
+    }
+    const groups = demo.costs.filter((g) => g.agent === "<demo>");
+    assert.equal(
+      groups.reduce((n, g) => n + g.sessions, 0),
+      3,
+    );
+    assert.equal(demo.agents[0].sessions, 2);
+    assert.deepEqual(groups.find((g) => g.model === "alternate").tokens, {
+      input: "2",
+      output: "3",
+      cacheRead: "4",
+      cacheWrite: "5",
+      totalTokens: "14",
+    });
+    assert.equal(
+      groups.find((g) => g.model === "priced").tokens.input,
+      "27021597764222973",
+    );
+    assert.equal(groups.find((g) => g.model === "priced").entries, 3);
+    assert.equal(
+      demo.costs.find((g) => g.agent === "zero").tokens.totalTokens,
+      "0",
+    );
+    const html = renderDashboard(demo);
+    assert.equal(
+      (html.match(/<details>/g) ?? []).length,
+      demo.agents.length + demo.costs.length,
+    );
+    assert.match(
+      html,
+      /<details><summary>&lt;demo&gt;<\/summary><details><summary>Proveedor: &quot;synthetic&quot; — Modelo: &quot;alternate&quot;<\/summary>/,
+    );
+    let depth = 0;
+    const tablesByDepth = [];
+    for (const [tag] of html.matchAll(/<details>|<\/details>|<table>/g)) {
+      if (tag === "<details>") depth++;
+      else if (tag === "</details>") depth--;
+      else if (depth) tablesByDepth.push(depth);
+    }
+    assert.equal(depth, 0);
+    assert.deepEqual(
+      tablesByDepth,
+      demo.costs.map(() => 2),
+    );
+    assert.ok(!/<script|onclick|ontoggle|tabindex|<details\s/.test(html));
+    assert.ok(html.includes("Sesiones distintas del grupo"));
+    assert.ok(!/SECOND_PRIVATE_ID|THIRD_PRIVATE_ID/.test(html));
+  } finally {
+    ledger.close();
+  }
+});
+
+test("detail retains unquoteable tokens, literal null labels and detached public data", () => {
+  const ledger = seeded();
+  try {
+    retime(ledger, "a", "invalid-date");
+    ledger.db.exec(`UPDATE entries SET data=json_set(data,
+      '$.provider', 'Desconocido (null)', '$.model', 'Desconocido (null)') WHERE session='d'`);
+    const snapshot = {
+      runtime: ledger.runtimeReport({}),
+      costs: ledger.costReport({ currency: "EUR" }),
+      evolution: ledger.tokenEvolution({}),
+    };
+    const before = structuredClone(snapshot);
+    const demo = projectDemo(
+      snapshot.runtime,
+      snapshot.costs,
+      snapshot.evolution,
+    );
+    const invalid = demo.costs.find((g) => g.agent === "<demo>");
+    assert.equal(invalid.tokens.input, "18014398509481982");
+    assert.equal(invalid.total, null);
+    assert.ok(invalid.reasons.includes("invalid-timestamp"));
+    assert.equal(demo.costs.filter((g) => g.agent === "unknown").length, 2);
+    const literal = demo.costs.find((g) => g.provider === "Desconocido (null)");
+    assert.equal(literal.model, "Desconocido (null)");
+    assert.equal(literal.tokens.input, "2");
+    assert.equal(literal.total, null);
+    assert.ok(
+      literal.reasons.some((reason) => reason.startsWith("missingPrices")),
+    );
+    assert.equal(demo.costs.find((g) => g.provider === null).tokens.input, "1");
+    for (const group of demo.costs) {
+      assert.deepEqual(Object.keys(group).sort(), [
+        "agent",
+        "coverage",
+        "entries",
+        "model",
+        "provider",
+        "reasons",
+        "sessions",
+        "tokens",
+        "total",
+      ]);
+    }
+    assert.ok(
+      !/PRIVATE_ID|observation|ratePerMillion|selectedPrices/.test(
+        JSON.stringify(demo),
+      ),
+    );
+    demo.costs[0].tokens.input = `<tokens>&"'`;
+    demo.costs[0].reasons.push("<reason>");
+    demo.costs[0].coverage.completeQuotes = "<coverage>";
+    demo.costs[0].provider = "<provider>";
+    const html = renderDashboard(demo);
+    assert.match(
+      html,
+      /<summary>Proveedor: Desconocido \(null\) — Modelo: Desconocido \(null\)<\/summary>/,
+    );
+    assert.match(
+      html,
+      /<summary>Proveedor: &quot;Desconocido \(null\)&quot; — Modelo: &quot;Desconocido \(null\)&quot;<\/summary>/,
+    );
+    assert.match(
+      html,
+      /<summary>Proveedor: &quot;&lt;provider&gt;&quot; — Modelo: &quot;priced&quot;<\/summary>/,
+    );
+    for (const text of [
+      "&lt;tokens&gt;&amp;&quot;&#39;",
+      "&lt;reason&gt;",
+      "&lt;coverage&gt;",
+      "&lt;provider&gt;",
+    ])
+      assert.ok(html.includes(text), text);
+    assert.deepEqual(snapshot, before);
+  } finally {
+    ledger.close();
+  }
+});
+
 function request(port, path = "/", options = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -321,6 +493,8 @@ test("selected database snapshot closes before listen and stays static", async (
     assert.equal(page.status, 200);
     assert.equal(page.body, renderDashboard(fixture(), { selected: true }));
     assert.ok(page.body.includes("BASE SELECCIONADA"));
+    assert.match(page.body, /<summary>&lt;demo&gt;<\/summary>/);
+    assert.ok(page.body.includes("Sesiones distintas del grupo"));
     assert.ok(!page.body.includes("Snapshot sintético"));
     assert.ok(!page.body.includes(path));
     assert.ok(!page.body.includes("PRIVATE_ID"));

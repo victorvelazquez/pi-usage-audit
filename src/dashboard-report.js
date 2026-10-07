@@ -1,5 +1,27 @@
 const tokenKeys = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
 
+function groupUsage(quotes) {
+  const sums = Object.fromEntries(
+    tokenKeys.slice(0, 4).map((key) => [key, 0n]),
+  );
+  const sessions = new Set();
+  for (const { session, observation } of quotes) {
+    sessions.add(session);
+    for (const key of Object.keys(sums))
+      sums[key] += BigInt(observation.usage[key]);
+  }
+  sums.totalTokens = Object.values(sums).reduce(
+    (sum, value) => sum + value,
+    0n,
+  );
+  return {
+    sessions: sessions.size,
+    tokens: Object.fromEntries(
+      Object.entries(sums).map(([key, value]) => [key, value.toString()]),
+    ),
+  };
+}
+
 // Copy public summaries only: never retain session/entry IDs or selected prices.
 export function projectDemo(report, costs, evolution) {
   return {
@@ -21,6 +43,7 @@ export function projectDemo(report, costs, evolution) {
         provider,
         model,
         entries,
+        ...groupUsage(quotes),
         total,
         coverage: structuredClone(coverage),
         reasons: [
@@ -65,6 +88,51 @@ function table(title, headings, rows) {
     )
     .join("");
   return `<section><h2>${escape(title)}</h2><div class="scroll"><table><caption>${escape(title)}</caption><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${rows.length ? "" : "<p>Sin filas</p>"}</section>`;
+}
+function groupDetails(group, currency) {
+  const identity = (value) => escape(value === null ? value : `"${value}"`);
+  return `<details><summary>Proveedor: ${identity(group.provider)} — Modelo: ${identity(group.model)}</summary>${table(
+    `Consumo del grupo y costo manual — ${currency}`,
+    [
+      "Proveedor",
+      "Modelo",
+      "Entradas",
+      "Sesiones distintas del grupo",
+      ...tokenKeys,
+      "Costo manual del grupo",
+      "Cobertura",
+      "Razones",
+    ],
+    [
+      [
+        group.provider,
+        group.model,
+        group.entries,
+        group.sessions,
+        ...tokenKeys.map((key) => group.tokens[key]),
+        group.total,
+        `${group.coverage.complete ? "complete" : "incomplete"}; completeQuotes: ${group.coverage.completeQuotes}; incompleteEntries: ${group.coverage.incompleteEntries}`,
+        group.reasons.join("; "),
+      ],
+    ],
+  )}</details>`;
+}
+function agentDetails(demo) {
+  return `<section><h2>Detalle de consumo por agente y proveedor/modelo</h2>
+<p>Sesiones distintas del grupo; no aditivas entre proveedores/modelos.
+Exclusiones sólo en las vistas globales; sin subtotal monetario por agente.</p>
+${
+  demo.agents.length
+    ? demo.agents
+        .map(({ agent }) => {
+          const groups = demo.costs.filter((g) => g.agent === agent);
+          return `<details><summary>${escape(agent)}</summary>${groups
+            .map((group) => groupDetails(group, demo.currency))
+            .join("")}</details>`;
+        })
+        .join("")
+    : "<p>Sin filas</p>"
+}</section>`;
 }
 export function renderDashboard(demo, { selected = false } = {}) {
   const coverage = demo.coverage;
@@ -142,28 +210,8 @@ ${table(
   ]),
 )}
 <p>Atribución por consenso de tareas; unknown no prueba rol de orquestador o subagente.</p>
-${table(
-  `Costos manuales comparativos — ${demo.currency}`,
-  [
-    "Agente",
-    "Proveedor",
-    "Modelo",
-    "Entradas",
-    "Total del grupo",
-    "Cobertura",
-    "Razones",
-  ],
-  demo.costs.map((g) => [
-    g.agent,
-    g.provider,
-    g.model,
-    g.entries,
-    g.total,
-    `${g.coverage.complete ? "complete" : "incomplete"}; completeQuotes: ${g.coverage.completeQuotes}; incompleteEntries: ${g.coverage.incompleteEntries}`,
-    g.reasons.join("; "),
-  ]),
-)}
-<p>Moneda explícita: ${escape(demo.currency)}. Orden por identidad, no por dinero.
+${agentDetails(demo)}
+<p>Moneda explícita: ${escape(demo.currency)}. Grupos por identidad dentro de cada agente, no por dinero.
 Total null significa incompleto: no hay subtotal ni total global. Cero explícito es conocido.
 Proyección de cotizaciones API: sin recalcular precios, conversión ni factura.</p>
 <h2>Runtime — separado de costos manuales</h2>

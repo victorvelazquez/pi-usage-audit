@@ -123,6 +123,14 @@
       "provider": "synthetic",
       "model": "priced",
       "entries": 2,
+      "sessions": 2,
+      "tokens": {
+        "input": "18014398509481982",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "18014398509481982"
+      },
       "total": "18014398509.481982000000",
       "coverage": {
         "complete": true,
@@ -136,6 +144,14 @@
       "provider": null,
       "model": null,
       "entries": 1,
+      "sessions": 1,
+      "tokens": {
+        "input": "1",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "1"
+      },
       "total": null,
       "coverage": {
         "complete": false,
@@ -149,6 +165,14 @@
       "provider": "synthetic",
       "model": "unpriced",
       "entries": 1,
+      "sessions": 1,
+      "tokens": {
+        "input": "2",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "2"
+      },
       "total": null,
       "coverage": {
         "complete": false,
@@ -162,6 +186,14 @@
       "provider": "synthetic",
       "model": "zero",
       "entries": 1,
+      "sessions": 1,
+      "tokens": {
+        "input": "0",
+        "output": "0",
+        "cacheRead": "0",
+        "cacheWrite": "0",
+        "totalTokens": "0"
+      },
       "total": "0.000000000000",
       "coverage": {
         "complete": true,
