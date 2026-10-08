@@ -1,4 +1,5 @@
 import { manualPriceForm } from "./manual-price-form.js";
+import { sessionFilterForm } from "./session-filter-form.js";
 
 const tokenKeys = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
 
@@ -140,9 +141,7 @@ export function renderDashboard(
   demo,
   { selected = false, sessionSelected = false, allowManualPrices = false } = {},
 ) {
-  const scope = sessionSelected
-    ? "Sesión seleccionada al arrancar"
-    : "Alcance global";
+  const scope = sessionSelected ? "Sesión seleccionada" : "Alcance global";
   const editable = selected && allowManualPrices === true;
   const coverage = demo.coverage;
   const evolution = demo.evolution;
@@ -150,7 +149,7 @@ export function renderDashboard(
     ? "BASE SELECCIONADA — snapshot local, sin captura"
     : "DEMO — datos sintéticos, sin captura";
   const description = selected
-    ? "Snapshot estático al arrancar de la base existente seleccionada. Sin refresco, captura ni validación de sesiones reales. Lectura SQLite readonly: puede usar WAL/SHM. Sin inicialización ni reparación." +
+    ? "Snapshot de la base existente seleccionada. Consulta explícita de alcance sin captura ni validación de sesiones reales. Lectura SQLite readonly: puede usar WAL/SHM. Sin inicialización ni reparación." +
       (editable
         ? " Guardado manual opt-in habilitado."
         : " Sin escrituras por API.")
@@ -169,7 +168,9 @@ td { font-variant-numeric: tabular-nums; }
 </style><main><aside>${escape(banner)}</aside>
 <h1>Agentes, modelos y costos estimados</h1>
 <p>${escape(description)}</p>
-${selected ? `<p>${scope}. Reiniciar para cambiar el alcance.</p>` : ""}
+${selected ? sessionFilterForm : ""}
+<div id="dashboard-report">
+${selected ? `<p data-dashboard-scope>${scope}. Recargar restaura el snapshot de arranque.</p>` : ""}
 <p>Agentes, modelos y costos describen las mismas entradas: vistas no aditivas.
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
 <p>Entradas propias confirmadas: ${escape(coverage.includedEntries)}.
@@ -236,6 +237,7 @@ ${table(
   ["Importe"],
   demo.runtime.amounts.map((amount) => [amount]),
 )}
+</div>
 ${editable ? manualPriceForm : ""}
 </main></html>`;
 }

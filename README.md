@@ -14,8 +14,8 @@ commit `3cefedb`). The cost API session filter is delivered in PR #31 (main
 PR #32 (main `b537af8`, commit `b3f9aa1`). The composite dashboard session filter
 is delivered in PR #33 (main `02aaa49`, commit `fab58d5`). Startup dashboard
 session selection is delivered in PR #34 (main `098a119`, commit `ad18abd`).
-Interactive filtering unit A is the current inactive parser candidate; unit B
-(route/UI activation) requires separate authorization. Real-session validation
+Interactive filtering admission unit A is delivered in PR #35. Full unit B
+(route/UI activation) is an authorized candidate, not reviewed or delivered. Real-session validation
 remains pending; review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
@@ -58,7 +58,8 @@ The selected-base banner is not a claim of verified real-session data. One
 the startup selector delegates `{currency,session}` to the same composite API.
 projection retains summaries, not IDs or selected prices, without repricing.
 The reader closes before listen, including report/render failures. HTML stays
-static until restart: no refresh, capture, discovery or external calls.
+cached for GET/refresh; explicit filter submissions read fresh joint snapshots.
+No polling, capture, discovery or external calls.
 The delivered startup selector accepts optional `startDashboard({ db, currency, port, session,
 allowManualPrices })` or one `--session ID` flag. Session is literal, nonempty,
 ≤512 UTF-16 code units, without trim/case folding/Unicode normalization; invalid
@@ -67,30 +68,37 @@ API values fail before storage/listen with `Dashboard unavailable`. Omission
 CLI rejects duplicate/missing/empty/oversized values and values beginning with
 `--` (no equals syntax), with `Invalid dashboard arguments` and exit 2.
 SSR labels global or selected-session scope without printing the ID or path;
-no selector control or query route exists. Restart to change the static snapshot.
+the selector control never puts IDs in a URL or reflects them in feedback.
+Reload restores the cached startup scope and snapshot.
 The selector never filters HTML/JSON or reclassifies lineage. Tariff opt-in and
 the existing POST remain database-wide, independent of report scope.
-Default/demo pages have no form, client scripts or network writes.
+Demo remains scriptless/GET-only. Selected readonly pages have a query form,
+not a tariff writer; the manual form still requires explicit opt-in.
 Opening never creates/initializes/repairs a base. SQLite readonly may use WAL/SHM;
 this is not a guarantee of zero physical filesystem effects. Labels remain
 user-provided metadata: do not store secrets in them. Validation uses synthetic
 bases only; real-session validation remains pending. The opt-in form's synthetic
 actual-browser verification completed in Edge 154 before PR #28 delivery.
 
-### Interactive session filtering — inactive unit A candidate
+### Interactive session filtering — unit B candidate (not reviewed/delivered)
 
-Internal `parseSessionFilterRequest` admits a prospective POST `/session-filter`
-without storage: JSON `{}` selects global scope; the sole own `session` key must
+Internal `parseSessionFilterRequest` admits POST `/session-filter` before storage: JSON `{}` selects global scope; the sole own `session` key must
 contain literal nonempty text of ≤512 UTF-16 units. Extra keys are rejected.
 Admission shares the manual-price reader: exact loopback Host and mandatory
 Origin, no duplicate headers, same-origin Fetch-site when present, JSON only,
 8192-byte limit, fatal UTF-8, absolute 5-second deadline and cleanup. Rejections
 are sanitized, never echoing IDs. Manual-price behavior is unchanged.
-No server route or control is activated: demo/readonly GET returns 404 and POST
-405. Opt-in unrelated POSTs retain their existing transport rejection. Startup
-`--session`, static snapshots, demo/readonly behavior and CSP are unchanged.
-Only synthetic parser/HTTP tests are authorized here; browser verification is
-not applicable to this no-UI unit. Unit B and real sessions remain unauthorized.
+Selected readonly and opt-in pages enable a stateless selector: explicit global
+or literal session (empty invalid, whitespace valid). Each admitted submission
+opens readonly, obtains one joint report, projects/renders and closes before reply.
+Later imports and tariffs affect that submission; there is no polling or server-wide
+selection. GET/refresh restores startup HTML. Demo remains fixed and GET-only.
+The exact-hashed static script posts JSON only to the fixed route, disables controls
+while pending and never retries. It validates HTML/status and a scriptfree report/scope
+region before one DOM replacement. Selector and manual forms stay outside that region,
+preserving their inputs/handlers/feedback. Failure keeps the previous report intact.
+Selected CSP permits only exact script hashes and same-origin connections; demo keeps
+script/connect none. Only synthetic validation is authorized; real sessions remain pending.
 
 ### Opt-in manual tariff form (delivered PR #28)
 
@@ -112,7 +120,8 @@ Prices are append-only/versioned: a conflicting rate cannot replace the same
 identity/currency/category/effective time; another effective time is another version.
 Saving never reprices or refreshes the static cost snapshot. Estimates are not
 invoices. The trusted inline script has an exact CSP SHA-256 hash; only opted-in
-pages allow same-origin connections. Demo/readonly CSP and behavior stay unchanged.
+tariff pages include its hash; selected readonly pages permit the filter hash only.
+Both selected modes allow same-origin connections; demo remains unchanged.
 PR #28 delivered this form after independent synthetic verification in Edge 154
 (12 groups; suite 99/99) and native review `review-78b87faea124bc1e`, approved and
 acknowledged before delivery. This historical evidence does not review or approve
@@ -448,7 +457,7 @@ runtime tests only: no HTTP, dashboard form, CLI change or real-session validati
 
 Selected databases can opt in with CLI `--allow-manual-prices` (valueless), or
 `startDashboard({ db, currency, allowManualPrices: true })`. The API accepts only
-booleans; omitted/false stays GET-only and never opens a writer. Demo cannot opt in.
+booleans; omitted/false permits readonly filtering but never opens a writer. Demo cannot opt in.
 No startup RW preflight occurs. Each admitted POST `/manual-prices` opens the
 existing validated RW ledger, saves synchronously and closes in `finally`.
 

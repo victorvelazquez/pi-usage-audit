@@ -4,6 +4,11 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { projectDemo, renderDashboard } from "./dashboard-report.js";
 import { manualPriceScript } from "./manual-price-form.js";
+import { sessionFilterScript } from "./session-filter-form.js";
+
+const sessionScriptHash = createHash("sha256")
+  .update(sessionFilterScript)
+  .digest("base64");
 
 const manualScriptHash = createHash("sha256")
   .update(manualPriceScript)
@@ -141,7 +146,7 @@ export async function parseManualPriceRequest(req, expectedOrigin) {
   }
 }
 
-// Prospective POST admission only: not wired into serve, no storage or ID echo.
+// POST admission only: no storage or ID echo.
 // Exported for synthetic tests; a selector is not a report or an HTTP response.
 export async function parseSessionFilterRequest(req, expectedOrigin) {
   const value = await parseJsonRequest(
@@ -218,7 +223,7 @@ export async function startDashboard({
     } finally {
       ledger.close();
     }
-    return await serve(html, port, allowManualPrices ? db : undefined);
+    return await serve(html, port, { db, currency, allowManualPrices });
   } catch {
     throw new Error("Dashboard unavailable");
   }
@@ -256,7 +261,44 @@ async function saveManualPrice(req, res, origin, db) {
   res.end(JSON.stringify(result));
 }
 
-async function serve(html, port, writeDb) {
+async function filterSession(req, res, origin, options) {
+  let html;
+  try {
+    const selector = await parseSessionFilterRequest(req, origin);
+    const { openReadonlyLedger } = await import("./ledger.js");
+    const reader = openReadonlyLedger(options.db);
+    try {
+      const snapshot = reader.dashboardReport({
+        currency: options.currency,
+        ...selector,
+      });
+      html = renderDashboard(
+        projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
+        {
+          selected: true,
+          sessionSelected: selector.session !== undefined,
+          allowManualPrices: options.allowManualPrices,
+        },
+      );
+    } finally {
+      reader.close();
+    }
+  } catch (error) {
+    if (error instanceof SessionFilterRequestError) {
+      req.socket.destroy();
+      return;
+    }
+    if (req.socket.destroyed || res.destroyed) return;
+    res.writeHead(500);
+    res.end("Session filter operation failed");
+    return;
+  }
+  if (res.destroyed) return;
+  res.writeHead(200);
+  res.end(html);
+}
+
+async function serve(html, port, options) {
   const server = http.createServer((req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
@@ -265,14 +307,24 @@ async function serve(html, port, writeDb) {
     res.setHeader(
       "Content-Security-Policy",
       `default-src 'none'; ${
-        writeDb === undefined
+        options === undefined
           ? "script-src 'none'; connect-src 'none'"
-          : `script-src 'sha256-${manualScriptHash}'; connect-src 'self'`
+          : `script-src 'sha256-${sessionScriptHash}'${
+              options.allowManualPrices ? ` 'sha256-${manualScriptHash}'` : ""
+            }; connect-src 'self'`
       }; frame-src 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`,
     );
     const host = `127.0.0.1:${server.address().port}`;
-    if (writeDb !== undefined && req.method === "POST") {
-      void saveManualPrice(req, res, `http://${host}`, writeDb);
+    if (
+      options !== undefined &&
+      req.method === "POST" &&
+      req.url === "/session-filter"
+    ) {
+      void filterSession(req, res, `http://${host}`, options);
+      return;
+    }
+    if (options?.allowManualPrices && req.method === "POST") {
+      void saveManualPrice(req, res, `http://${host}`, options.db);
       return;
     }
     const site = req.headers["sec-fetch-site"];

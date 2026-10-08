@@ -15,6 +15,262 @@ import { openLedger } from "../src/ledger.js";
 import { projectDemo, renderDashboard } from "../src/dashboard-report.js";
 import { startDemo } from "../src/dashboard.js";
 
+test("session filter fresh joint reports, admission and atomic failures", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  const writer = seeded(path);
+  const literal = " 私😀e\u0301 ";
+  for (const table of ["sources", "entries"])
+    writer.db
+      .prepare(`UPDATE ${table} SET session=? WHERE session='a'`)
+      .run(literal);
+  writer.close();
+  for (const allowManualPrices of [false, true]) {
+    const server = await dashboard.startDashboard({
+      db: path,
+      currency: "EUR",
+      allowManualPrices,
+    });
+    try {
+      const port = server.address().port;
+      const startup = await request(port);
+      assert.ok(startup.body.includes('id="session-filter-form"'));
+      for (const session of [
+        undefined,
+        literal,
+        literal.trim(),
+        " ",
+        "absent",
+      ]) {
+        const selector = session === undefined ? {} : { session };
+        const reader = ledgerModule.openReadonlyLedger(path);
+        const snapshot = reader.dashboardReport({
+          currency: "EUR",
+          ...selector,
+        });
+        reader.close();
+        const expected = renderDashboard(
+          projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
+          {
+            selected: true,
+            sessionSelected: session !== undefined,
+            allowManualPrices,
+          },
+        );
+        const response = await postPrice(port, selector, {
+          path: "/session-filter",
+        });
+        assert.equal(response.status, 200);
+        assert.equal(response.body, expected);
+        assert.ok(!response.body.includes(literal));
+        assert.equal((await request(port)).body, startup.body);
+      }
+      let closes = 0;
+      const close = DatabaseSync.prototype.close;
+      t.mock.method(DatabaseSync.prototype, "close", function () {
+        closes++;
+        return close.call(this);
+      });
+      await assert.rejects(
+        postPrice(
+          port,
+          {},
+          {
+            path: "/session-filter",
+            headers: { Origin: "http://evil.test" },
+          },
+        ),
+      );
+      assert.equal(closes, 0);
+      const end = http.ServerResponse.prototype.end;
+      t.mock.method(http.ServerResponse.prototype, "end", function (...args) {
+        assert.equal(closes, 1, "readonly must close before reply");
+        return end.apply(this, args);
+      });
+      assert.equal(
+        (await postPrice(port, {}, { path: "/session-filter" })).status,
+        200,
+      );
+      t.mock.restoreAll();
+      t.mock.method(DatabaseSync.prototype, "close", function () {
+        closes++;
+        return close.call(this);
+      });
+      assert.equal(closes, 1);
+      t.mock.method(DatabaseSync.prototype, "prepare", () => {
+        throw new Error(literal + path);
+      });
+      const failed = await postPrice(port, {}, { path: "/session-filter" });
+      assert.equal(failed.status, 500);
+      assert.equal(failed.body, "Session filter operation failed");
+      assert.equal(closes, 2);
+      t.mock.restoreAll();
+      t.mock.method(DatabaseSync.prototype, "close", function () {
+        close.call(this);
+        throw new Error(literal + path);
+      });
+      assert.equal(
+        (await postPrice(port, {}, { path: "/session-filter" })).body,
+        "Session filter operation failed",
+      );
+      t.mock.restoreAll();
+      const later = openLedger(path);
+      later.db.exec("UPDATE tasks SET agent='fresh-synthetic-agent'");
+      const imported = allowManualPrices ? "new-opt" : "new-read";
+      later.db
+        .prepare("INSERT INTO sources VALUES (?,?,NULL)")
+        .run(imported, imported);
+      later.db
+        .prepare(`INSERT INTO entries SELECT ?, entry, data, evidence, conflict
+          FROM entries WHERE session='d'`)
+        .run(imported);
+      for (const category of categories)
+        later.addManualPrice({
+          ...priceValue,
+          model: "unpriced",
+          category,
+          ratePerMillion: "3",
+        });
+      later.close();
+      const fresh = await postPrice(port, {}, { path: "/session-filter" });
+      assert.ok(fresh.body.includes("fresh-synthetic-agent"));
+      const reader = ledgerModule.openReadonlyLedger(path);
+      const snapshot = reader.dashboardReport({ currency: "EUR" });
+      reader.close();
+      assert.equal(
+        fresh.body,
+        renderDashboard(
+          projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
+          { selected: true, allowManualPrices },
+        ),
+      );
+      assert.equal((await request(port)).body, startup.body);
+      if (allowManualPrices) assert.equal((await postPrice(port)).status, 200);
+    } finally {
+      t.mock.restoreAll();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+});
+
+test("session filter client literal payload, pending and atomic DOM validation", async () => {
+  const { sessionFilterScript } = await import("../src/session-filter-form.js");
+  const fields = { mode: { value: "session" }, session: { value: " 私😀 " } };
+  const button = {};
+  const feedback = {};
+  let submit, settle, parsed;
+  let replacements = 0;
+  const region = {
+    replaceWith(node) {
+      assert.equal(node, parsed);
+      replacements++;
+    },
+  };
+  const form = {
+    elements: { namedItem: (key) => fields[key] },
+    addEventListener(name, handler) {
+      assert.equal(name, "submit");
+      submit = handler;
+    },
+  };
+  const calls = [];
+  let outcome;
+  runInNewContext(sessionFilterScript, {
+    document: {
+      getElementById: (id) =>
+        ({
+          "session-filter-form": form,
+          "session-filter-submit": button,
+          "session-filter-feedback": feedback,
+          "dashboard-report": region,
+        })[id],
+    },
+    DOMParser: class {
+      parseFromString(body, type) {
+        assert.equal(body, "synthetic HTML");
+        assert.equal(type, "text/html");
+        parsed = {
+          querySelector: (selector) =>
+            selector === "[data-dashboard-scope]"
+              ? outcome === "scope"
+                ? null
+                : {}
+              : outcome === "script"
+                ? {}
+                : null,
+        };
+        return {
+          querySelectorAll: () => (outcome === "malformed" ? [] : [parsed]),
+        };
+      }
+    },
+    fetch(url, options) {
+      calls.push({ url, options });
+      return new Promise((resolve, reject) => {
+        settle = { resolve, reject };
+      });
+    },
+  });
+  for (outcome of [
+    "success",
+    "global",
+    "empty",
+    "malformed",
+    "script",
+    "scope",
+    "type",
+    "operation",
+    "network",
+    "body",
+  ]) {
+    fields.mode.value = outcome === "global" ? "global" : "session";
+    fields.session.value = outcome === "empty" ? "" : " 私😀 ";
+    const count = calls.length;
+    const before = replacements;
+    const pending = submit({ preventDefault() {} });
+    await submit({ preventDefault() {} });
+    if (outcome === "empty") {
+      assert.equal(calls.length, count);
+      continue;
+    }
+    assert.equal(calls.length, count + 1);
+    assert.equal(button.disabled, true);
+    assert.ok(Object.values(fields).every((field) => field.disabled));
+    assert.equal(calls.at(-1).url, "/session-filter");
+    assert.equal(calls.at(-1).options.method, "POST");
+    assert.deepEqual(
+      JSON.parse(calls.at(-1).options.body),
+      outcome === "global" ? {} : { session: " 私😀 " },
+    );
+    if (outcome === "network") settle.reject(new Error("PRIVATE"));
+    else
+      settle.resolve({
+        status: outcome === "operation" ? 500 : 200,
+        headers: {
+          get: () =>
+            outcome === "type"
+              ? "application/json"
+              : "text/html; charset=utf-8",
+        },
+        text: async () => {
+          if (outcome === "body") throw new Error("PRIVATE");
+          return "synthetic HTML";
+        },
+      });
+    await pending;
+    assert.equal(
+      replacements,
+      before + (["success", "global"].includes(outcome) ? 1 : 0),
+    );
+    assert.equal(button.disabled, false);
+    assert.ok(Object.values(fields).every((field) => !field.disabled));
+    assert.ok(!feedback.textContent.includes("PRIVATE"));
+    assert.equal(fields.session.value, " 私😀 ");
+  }
+});
+
 const priceOrigin = "http://127.0.0.1:1234";
 const priceValue = {
   provider: "synthetic",
@@ -217,20 +473,13 @@ test("session filter HTTP body limits, fatal UTF8 and deadline cleanup", async (
   assert.equal(clear.mock.callCount(), 1);
 });
 
-test("session filter HTTP production route remains inactive in demo and readonly", async () => {
+test("session filter HTTP production demo remains inactive", async () => {
   const path = join(
     mkdtempSync("test/.runtime-dashboard-"),
     "synthetic.sqlite",
   );
   openLedger(path).close();
-  for (const server of [
-    await startDemo(0),
-    await dashboard.startDashboard({
-      db: path,
-      currency: "EUR",
-      session: "PRIVATE_ID",
-    }),
-  ]) {
+  for (const server of [await startDemo(0)]) {
     try {
       const port = server.address().port;
       assert.equal((await request(port, "/session-filter")).status, 404);
@@ -1339,9 +1588,7 @@ test("dashboard session API and CLI equal the joint projected snapshot", async (
         assert.equal(page.body, expected);
         assert.match(
           page.body,
-          session === undefined
-            ? /Alcance global/
-            : /Sesión seleccionada al arrancar/,
+          session === undefined ? /Alcance global/ : /Sesión seleccionada/,
         );
         assert.ok(!page.body.includes(literal));
         if (session === literal) {
@@ -1372,7 +1619,7 @@ test("dashboard session API and CLI equal the joint projected snapshot", async (
         );
         assert.ok(
           page.headers["content-security-policy"].includes(
-            "script-src 'none'; connect-src 'none'",
+            "connect-src 'self'",
           ),
         );
         if (session === literal) {
@@ -1663,19 +1910,23 @@ test("manual form gating and exact script CSP", async () => {
     try {
       const page = await request(server.address().port);
       const scripts = [...page.body.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-      assert.equal(scripts.length, mode === true ? 1 : 0);
+      assert.equal(scripts.length, mode === "demo" ? 0 : mode === true ? 2 : 1);
       assert.equal(
         (page.body.match(/<form\b/g) ?? []).length,
-        mode === true ? 1 : 0,
+        mode === "demo" ? 0 : mode === true ? 2 : 1,
       );
       const csp = page.headers["content-security-policy"];
+      for (const [, script] of scripts) {
+        const hash = createHash("sha256").update(script).digest("base64");
+        assert.ok(csp.includes(`'sha256-${hash}'`));
+      }
+      const region = page.body
+        .split('<div id="dashboard-report">')[1]
+        .split('</div>\n<section aria-labelledby="manual-price-title">')[0];
       if (mode === true) {
-        const hash = createHash("sha256")
-          .update(scripts[0][1])
-          .digest("base64");
-        assert.ok(csp.includes(`script-src 'sha256-${hash}'`));
+        assert.ok(!region.includes("<form") && !region.includes("<script"));
         assert.ok(csp.includes("connect-src 'self'"));
-        assert.equal((page.body.match(/<label\b/g) ?? []).length, 6);
+        assert.equal((page.body.match(/<label\b/g) ?? []).length, 8);
         for (const key of Object.keys(priceValue))
           assert.ok(page.body.includes(`name="${key}"`));
         for (const category of ["input", "output", "cacheRead", "cacheWrite"])
@@ -1684,7 +1935,13 @@ test("manual form gating and exact script CSP", async () => {
         assert.match(page.body, /no son una factura/);
         assert.ok(!scripts[0][1].includes("innerHTML"));
       } else {
-        assert.ok(csp.includes("script-src 'none'; connect-src 'none'"));
+        assert.ok(
+          csp.includes(
+            mode === "demo"
+              ? "script-src 'none'; connect-src 'none'"
+              : "connect-src 'self'",
+          ),
+        );
       }
       assert.ok(csp.includes("frame-src 'none'; frame-ancestors 'none'"));
       assert.ok(
@@ -1817,10 +2074,7 @@ test("CLI effective URL, occupied port and signal shutdown", async () => {
         assert.equal((await postPrice(port)).status, 200);
       assert.match(page.body, /<caption>Evolución diaria — UTC<\/caption>/);
       assert.ok(page.body.includes("18014398509481985"));
-      assert.equal(
-        page.body.includes("<script"),
-        args.includes("--allow-manual-prices"),
-      );
+      assert.equal(page.body.includes("<script"), !args.includes("--demo"));
       const busy = cli([...args, "--port", String(port)]);
       assert.equal(busy.status, 1);
       assert.ok(busy.stderr.trim().endsWith(error));
