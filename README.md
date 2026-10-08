@@ -19,7 +19,9 @@ PR #36 (main `52f33ed`, commit `1c64a66`). Project identity is delivered in
 PR #37; runtime project filtering API is delivered in PR #39 (main `86a283d`,
 merged `d4d86a7`). CLI project filtering is delivered in PR #40 (`8203814`),
 with the PR #41 refactor (`ee3d657`) integrated on main `10043b5`.
-Cost project filtering API is the current implementation candidate.
+Cost project filtering API is delivered in PR #42 (main `7a9a582`, commit
+`d71721c`). Evolution project filtering API is the current implementation candidate;
+no native approval or delivery is claimed for this unit.
 Real-session validation remains pending;
 review and delivery remain parent-owned.
 
@@ -245,7 +247,7 @@ views retain their shapes; missing amounts remain missing, not zero.
 No writes, rebinding, task-project/cwd/Git inference or per-entry mapping lookup.
 Global/session behavior and the readonly allowlist remain unchanged: the filter
 is on the writable-ledger API; the delivered CLI below delegates to it.
-Dashboard/evolution project filters are not added; cost API selection is described below.
+Dashboard project filters are not added; cost and candidate evolution API selection are described below.
 
 ## Accounting and coverage
 
@@ -293,6 +295,16 @@ and rollback errors are generic: `Model usage operation failed`. Existing APIs
 and CLI outputs are unchanged; no dashboard, live capture or automatic model policy.
 
 ## Daily token evolution (API A delivered PR #20)
+
+The current API-only candidate accepts `ledger.tokenEvolution({ projectId: 'Repo_1' })`.
+Choose global `{}`, literal `{session}`, or `{projectId}`, never both selectors.
+Project IDs use the cost API's exact ASCII validation and shared conservative
+membership: exactly one mapped source locator; aliases are not selected.
+Full lineage classification precedes selection in the same deferred snapshot;
+external parents remain evidence, not implicit members. Unknown/unmapped projects
+and absent mapping tables yield the existing empty shape without writes/repair.
+Daily UTC buckets, exact BigInt token strings, undated accounting and certainty
+exclusions are unchanged. No dashboardReport, readonly exposure, CLI or UI extension.
 
 `ledger.tokenEvolution({})` preserves the delivered global report. PR #32
 also delivered `{ session: 'literal-id' }`: a single own key, nonempty string of at
@@ -448,7 +460,7 @@ Session must be nonempty and at most 512 UTF-16 code units; no trim/case folding
 Extra own keys (including symbols/nonenumerables) and invalid values fail before
 SQL: `Invalid cost report`. Omission preserves the global report.
 
-The current API candidate additionally accepts
+The API delivered in PR #42 additionally accepts
 `ledger.costReport({ currency: 'USD', projectId: 'Repo_1' })`.
 Choose no selector, session, or projectId, never both. Project IDs are literal,
 case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`; invalid selectors and extra own keys
@@ -462,7 +474,7 @@ snapshot. Only selected rows enter groups, quotes and coverage; external parents
 remain evidence, never selected implicitly. Unknown projects or an absent optional
 mapping table return the existing empty shape with requested currency, without
 repair or writes. Exact complete-or-null amounts and known zero remain unchanged.
-No CLI/UI, dashboardReport or tokenEvolution project selection is added.
+No cost CLI/UI or dashboardReport project selection is added.
 
 Classification retains the full imported lineage snapshot, then selects rows
 before counting coverage, exclusions, grouping or quoting. External parents
