@@ -221,8 +221,8 @@ export async function startDashboard({
     try {
       const snapshot = ledger.dashboardReport({
         currency,
-        ...(session !== undefined ? { session } : {}),
-        ...(projectId !== undefined ? { projectId } : {}),
+        ...(session === undefined ? {} : { session }),
+        ...(projectId === undefined ? {} : { projectId }),
       });
       html = renderDashboard(
         projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
