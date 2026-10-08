@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Motor, dashboard, formulario opt-in, APIs por sesión y selector de arranque entregados; admisión interactiva A entregada PR #35; B candidata, sin sesiones reales.**
+**Filtro interactivo B entregado PR #36; identidad de proyecto API en curso, sin sesiones reales.**
 
-- **Última tarea terminada:** admisión interactiva A entregada en PR #35; base `main` `870a6bc`.
-- **En curso:** unidad B implementada y verificada con datos sintéticos; revisión del candidato funcional cerrada, entrega pendiente.
-- **Siguiente propuesta:** guardar y publicar B sólo con autorización; validación real requiere autorización separada.
+- **Última tarea terminada:** filtro interactivo B, PR #36; main `52f33ed`, commit `1c64a66`.
+- **En curso:** identidad declarada de proyecto API; entrega pendiente, revisión del padre.
+- **Siguiente propuesta:** revisar esta base acotada; UI/filtros por proyecto y datos reales requieren autorización separada.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -30,7 +30,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
-| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B implementada y verificada, entrega pendiente; sin mapping de repositorios |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API en curso, no Git verificado |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
@@ -77,10 +77,29 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
-| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A entregada PR #35, B candidata | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
+| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API en curso | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Filtro interactivo — unidad B verificada, entrega pendiente
+## Identidad declarada de proyecto — API, entrega pendiente
+
+- Mapping explícito path hash → ID ASCII literal; sin leer locator/cwd ni descubrir Git.
+- Binding inmutable/idempotente; conflicto revierte toda la importación y su reporte.
+- Reader de snapshot: missing/unmapped/ambiguous conservadores; readonly legado sin repair.
+- No cambia tareas, atribución histórica, accounting, CLI/UI ni dependencias.
+- RED: patrón `project identity`, 0/4; API/tabla ausentes, validación/conflicto faltantes.
+- GREEN inicial: mismo patrón, 4/4; reinicio, privacidad, aliases y rollback sintéticos.
+- Final: `npm test` 122/122; sintaxis de ambos JS aprobada. Primer suite 120/122:
+  dos allowlists readonly actualizadas al reader nuevo. Sin revisión nativa.
+- LSP primario no disponible; diagnósticos automáticos parciales y avisos de estilo
+  preexistentes fuera del diff. Browser N/A; no formatter global ejecutado.
+- Browser N/A: API-only. Datos reales no autorizados; entrega/revisión del padre.
+- Rollback sólo de este diff en `src/ledger.js`, `test/audit.test.js`, `README.md`,
+  `ROADMAP.md`; preservar código/datos anteriores. Techo 400 líneas formateadas.
+
+## Filtro interactivo — unidad B entregada PR #36
+
+Main `52f33ed`, commit `1c64a66`. La evidencia siguiente es histórica de B,
+no revisión ni autorización de identidad de proyecto.
 
 - Ruta POST exacta y formulario en readonly/opt-in; demo fijo y scriptless. Parser A sin cambios semánticos, sin IDs reflejados ni selectores en URLs.
 - Cada envío abre readonly y lee un reporte conjunto fresco (incluye importaciones/tarifas posteriores); cierre antes de respuesta. Sin polling ni selección compartida: GET/recarga restaura snapshot/alcance de arranque.
@@ -88,7 +107,7 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 - CSP seleccionada con hash exacto del filtro, más hash manual sólo opt-in; connect self. Default/frame/base/form-action none conservados.
 - Excepción exclusiva B: exactamente 510 líneas formateadas incluidas pruebas/docs, autorizadas tras el recuento final; no amplía límites futuros. Rollback sólo del diff B en las seis superficies autorizadas, preservando entregas/bases/historia.
 - RED observado: patrón enfocado 13/15, faltan formulario y módulo cliente. GREEN/triangulación 15/15: equivalencia conjunta literal/global/vacío, frescura sintética, barreras, cierres/fallos, hashes y cliente pending/DOM/fallos; suite 118/118.
-- Verificación independiente: 118/118, sintaxis y diff limpios; Edge aislado 154.0.4258.53 con SQLite sintético, 21 comprobaciones funcionales aprobadas; temporales propios eliminados. LSP primario limpio. Revisión del candidato funcional `review-b1bfded02121f761` aprobada y reconocida antes de esta actualización documental; sin entrega ni validación visual, de accesibilidad o de sesiones reales.
+- Verificación independiente: 118/118, sintaxis y diff limpios; Edge aislado 154.0.4258.53 con SQLite sintético, 21 comprobaciones funcionales aprobadas; temporales propios eliminados. LSP primario limpio. Revisión del candidato funcional `review-b1bfded02121f761` aprobada y reconocida antes de esta actualización documental; en ese momento sin entrega ni validación visual, de accesibilidad o de sesiones reales.
 
 ## Filtro interactivo — unidad A entregada PR #35
 
