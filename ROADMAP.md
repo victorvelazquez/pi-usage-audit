@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Evolución por proyecto API PR #43 entregada; compuesto readonly API candidato, sin datos reales.**
+**Compuesto readonly proyecto PR #44 entregado; selector dashboard de arranque candidato, sin datos reales.**
 
-- **Última tarea terminada:** evolución proyecto PR #43 (`547cda6`), entregada en main `f546be9`; costos PR #42 y runtime API/CLI conservados.
-- **En curso:** `dashboardReport({ currency, projectId })` API readonly con pruebas sintéticas; candidato sin entrega ni aprobación afirmada.
-- **Siguiente propuesta:** evaluación/entrega de este candidato por el padre; UI/HTTP/CLI por proyecto y datos reales necesitan autorización separada.
+- **Última tarea terminada:** compuesto proyecto PR #44 (`d46fb5c`), integrado en main `655a15e`; entregas anteriores conservadas.
+- **En curso:** API `startDashboard({ projectId })` y CLI `--project ID`, pruebas sintéticas; candidato no revisado ni entregado.
+- **Siguiente propuesta:** evaluación/entrega por el padre; filtro interactivo por proyecto y datos reales necesitan autorización separada.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -30,7 +30,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
-| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto candidato |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque candidato |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
@@ -77,10 +77,33 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
-| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
+| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Compuesto readonly API por proyecto — candidato actual
+## Selector dashboard de proyecto al arrancar — candidato no revisado ni entregado
+
+- Base limpia main `655a15e`, compuesto PR #44 (`d46fb5c`) integrado.
+- API `projectId` y CLI `--project ID`: ASCII literal 1–64, exclusivo con sesión,
+  incompatible con demo; validación antes de storage/listen y errores sanitizados.
+- Delega al compuesto entregado; etiqueta SSR sin ID/path. POST sesión/global
+  reemplaza alcance, no lo combina; recarga restaura snapshot de arranque.
+- Sólo sintéticos: equivalencia API/CLI, límites/case/vacío, opt-in/readonly,
+  cierre antes de listen, snapshot estático y conservación de precios/CSP.
+- Sin esquema/deps/ledger, datos reales, rutas/forms de proyecto ni publicación.
+  Browser visual y accesibilidad pendientes; revisión/entrega pertenecen al padre.
+- Rollback: sólo diff de dashboard, dashboard-report, dashboard tests y estas docs
+  respecto a `655a15e`; preservar entregas y artefactos sintéticos.
+- RED: `node --test --test-name-pattern="dashboard project" test/dashboard.test.js`
+  0/2: scope ignorado y 17 accesos storage frente a cero. GREEN: mismo comando 2/2.
+- `node --test test/dashboard.test.js`: 36/36; `npm test`: 137/137.
+  `node --check` en los tres JS cambiados y `git diff --check`: OK.
+  LSP primario no disponible al escritor; diagnósticos de edición JS limpios.
+- Techo 400 líneas formateadas incluidas pruebas/docs; evidencia sólo sintética.
+
+## Compuesto readonly API por proyecto — entregado PR #44 (evidencia histórica)
+
+PR #44 integrado en main `655a15e`, commit `d46fb5c`.
+Las notas siguientes conservan la evidencia histórica del candidato anterior.
 
 - Base limpia main `f546be9`; evolución PR #43 (`547cda6`) entregada.
 - [x] Validación propia estricta antes de SQL: moneda requerida, proyecto ASCII
