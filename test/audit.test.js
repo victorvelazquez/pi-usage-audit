@@ -328,6 +328,275 @@ test("project identity readonly old schema and optional table validation", () =>
   }
 });
 
+test("tokenEvolution project validation precedes SQL", () => {
+  const ledger = openLedger(":memory:");
+  const exec = ledger.db.exec;
+  const prepare = ledger.db.prepare;
+  try {
+    ledger.db.exec = ledger.db.prepare = () =>
+      assert.fail("invalid reached SQL");
+    for (const value of [
+      ...[
+        "",
+        " Repo",
+        "Repo ",
+        "Répo",
+        "Repo\n",
+        "a.b",
+        "a/b",
+        "x".repeat(65),
+        null,
+        undefined,
+        1,
+        {},
+        [],
+      ].map((projectId) => ({ projectId })),
+      { projectId: "Repo", session: "s" },
+      { projectId: "Repo", session: undefined },
+      { projectId: "Repo", extra: 1 },
+      { projectId: "Repo", [Symbol()]: 1 },
+      Object.defineProperty({ projectId: "Repo" }, "hidden", { value: 1 }),
+    ])
+      assert.throws(
+        () => ledger.tokenEvolution(value),
+        /^Error: Invalid token evolution$/,
+      );
+    ledger.db.exec = exec;
+    ledger.db.prepare = prepare;
+    const empty = ledger.tokenEvolution({});
+    for (const projectId of ["Repo", "x".repeat(64), "A-z_09"])
+      assert.deepEqual(ledger.tokenEvolution({ projectId }), empty);
+    assert.deepEqual(
+      ledger.tokenEvolution(
+        Object.defineProperty({}, "projectId", { value: "Repo" }),
+      ),
+      empty,
+    );
+    assert.deepEqual(
+      ledger.tokenEvolution(Object.create({ projectId: "Repo" })),
+      empty,
+    );
+  } finally {
+    ledger.db.exec = exec;
+    ledger.db.prepare = prepare;
+    ledger.close();
+  }
+});
+
+test("tokenEvolution project membership, dates, exact totals and external lineage", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  const huge = {
+    input: Number.MAX_SAFE_INTEGER,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: Number.MAX_SAFE_INTEGER,
+  };
+  const dated = (id, timestamp, tokens = usage) => ({
+    ...message(id, { usage: tokens }),
+    timestamp,
+  });
+  const a = f.file("worktree-a.jsonl", [
+    header("a"),
+    dated("large", "2024-02-29T23:59:59.999Z", huge),
+    dated("large2", "2024-02-29T00:00:00.000Z", huge),
+    dated("zero", "2024-03-01T00:00:00.000Z", {
+      ...huge,
+      input: 0,
+      totalTokens: 0,
+    }),
+    dated("missing", undefined),
+    dated("null", null),
+    dated("invalid", "2023-02-29T00:00:00.000Z"),
+    dated("offset", "2024-02-29T01:00:00.000+01:00"),
+    message("incomplete", { usage: { ...usage, input: null } }),
+  ]);
+  const b = f.file("worktree-b.jsonl", [header("b"), message("b")]);
+  const parent = f.file("parent.jsonl", [header("parent"), message("copy")]);
+  const child = f.file("child.jsonl", [
+    header("child", { parentSession: parent }),
+    message("copy"),
+    message("new"),
+  ]);
+  const alias = f.file("alias.jsonl", [header("alias"), message("alias")]);
+  const alias2 = f.file("alias2.jsonl", [header("alias")]);
+  const lower = f.file("lower.jsonl", [header("lower"), message("lower")]);
+  const mapping = (sessionPath, projectId = "Repo") => ({
+    sessionPath,
+    projectId,
+  });
+  const request = { projectId: "Repo" };
+  try {
+    ledger.importFiles({
+      sessions: [a, b, child, alias, alias2, lower],
+      projectMappings: [
+        mapping(a),
+        mapping(child),
+        mapping(alias),
+        mapping(lower, "repo"),
+      ],
+    });
+    assert.deepEqual(
+      ledger.tokenEvolution(request).coverage.excludedByCertainty,
+      { incomplete: 1, "lineage-unresolved": 2 },
+    );
+    ledger.importFiles({ sessions: [parent], projectMappings: [mapping(b)] });
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    const global = ledger.tokenEvolution({});
+    const selected = ledger.tokenEvolution(request);
+    assert.deepEqual(selected.buckets, [
+      { day: "2024-02-29", entries: 2, totalTokens: "18014398509481982" },
+      { day: "2024-03-01", entries: 1, totalTokens: "0" },
+      { day: "2026-01-01", entries: 1, totalTokens: "19" },
+    ]);
+    assert.deepEqual(selected.undated, {
+      entries: 4,
+      totalTokens: "76",
+      missingTimestampEntries: 2,
+      invalidTimestampEntries: 2,
+    });
+    assert.deepEqual(selected.coverage, {
+      includedEntries: 8,
+      excludedEntries: 3,
+      excludedByCertainty: {
+        incomplete: 1,
+        copied: 1,
+        "lineage-unresolved": 1,
+      },
+    });
+    assert.deepEqual(selected.coverage, ledger.runtimeReport(request).coverage);
+    assert.deepEqual(
+      selected.coverage,
+      ledger.costReport({ currency: "USD", ...request }).coverage,
+    );
+    assert.equal(
+      ledger.tokenEvolution({ projectId: "repo" }).coverage.includedEntries,
+      1,
+    );
+    assert.deepEqual(
+      ledger.tokenEvolution({ projectId: "unknown" }).buckets,
+      [],
+    );
+    assert.equal(
+      ledger.tokenEvolution({ projectId: "unknown" }).coverage.excludedEntries,
+      0,
+    );
+    assert.deepEqual(
+      ledger.tokenEvolution({ session: "a" }).buckets,
+      selected.buckets.slice(0, 2),
+    );
+    assert.deepEqual(ledger.tokenEvolution({}), global);
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.deepEqual(ledger.tokenEvolution(request), selected);
+    selected.buckets[0].totalTokens = "0";
+    assert.equal(
+      ledger.tokenEvolution(request).buckets[0].totalTokens,
+      "18014398509481982",
+    );
+    ledger.importFiles({ projectMappings: [mapping(alias2)] });
+    assert.equal(ledger.tokenEvolution(request).coverage.includedEntries, 8);
+    const parentAlias = f.file("parent-alias.jsonl", [header("parent")]);
+    ledger.importFiles({ sessions: [parentAlias] });
+    assert.equal(
+      ledger.tokenEvolution(request).coverage.excludedByCertainty[
+        "session-ambiguous"
+      ],
+      2,
+    );
+    assert.deepEqual(
+      ledger.tokenEvolution(request).coverage,
+      ledger.runtimeReport(request).coverage,
+    );
+  } finally {
+    ledger.close();
+  }
+});
+
+test("tokenEvolution project coherent mapping snapshot and transaction recovery", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const other = openLedger(f.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const exec = ledger.db.exec.bind(ledger.db);
+  const path = f.file("s.jsonl", [header("s"), message("a")]);
+  const request = { projectId: "Repo" };
+  try {
+    ledger.importFiles({
+      sessions: [path],
+      projectMappings: [{ sessionPath: path, projectId: "Repo" }],
+    });
+    const before = ledger.tokenEvolution(request);
+    let fired = false;
+    ledger.db.prepare = (sql) => {
+      if (sql === "SELECT * FROM entries" && !fired) {
+        fired = true;
+        other.db.exec("BEGIN IMMEDIATE");
+        other.db.exec("UPDATE project_mappings SET projectId='Other'");
+        other.db.exec(`UPDATE entries SET data=json_set(data,
+          '$.input',20,'$.totalTokens',29,'$.timestamp','2026-02-01T00:00:00.000Z')`);
+        other.db.exec("COMMIT");
+      }
+      return prepare(sql);
+    };
+    assert.deepEqual(ledger.tokenEvolution(request), before);
+    assert.equal(fired, true);
+    assert.equal(ledger.tokenEvolution(request).coverage.includedEntries, 0);
+    const next = ledger.tokenEvolution({ projectId: "Other" });
+    assert.deepEqual(next.buckets, [
+      { day: "2026-02-01", entries: 1, totalTokens: "29" },
+    ]);
+    for (const failure of ["read", "commit", "rollback"]) {
+      ledger.db.prepare = (sql) => {
+        if (failure !== "commit") throw new Error("PRIVATE_SENTINEL");
+        return prepare(sql);
+      };
+      ledger.db.exec = (sql) => {
+        if (sql === "COMMIT") throw new Error("PRIVATE_SENTINEL");
+        const result = exec(sql);
+        if (sql === "ROLLBACK" && failure === "rollback")
+          throw new Error("PRIVATE_SENTINEL");
+        return result;
+      };
+      assert.throws(
+        () => ledger.tokenEvolution(request),
+        /^Error: Token evolution operation failed$/,
+      );
+      ledger.db.prepare = prepare;
+      ledger.db.exec = exec;
+      assert.equal(ledger.db.isTransaction, false);
+      assert.deepEqual(ledger.tokenEvolution({ projectId: "Other" }), next);
+    }
+    other.db.exec("ALTER TABLE project_mappings RENAME TO saved_mappings");
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    assert.equal(
+      ledger.tokenEvolution({ projectId: "Other" }).coverage.includedEntries,
+      0,
+    );
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    assert.equal(
+      ledger.db
+        .prepare("SELECT name FROM sqlite_schema WHERE name='project_mappings'")
+        .get(),
+      undefined,
+    );
+    assert.deepEqual(ledger.tokenEvolution({ session: "s" }), next);
+  } finally {
+    ledger.db.prepare = prepare;
+    ledger.db.exec = exec;
+    other.close();
+    ledger.close();
+  }
+});
+
 test("tokenEvolution strict requests, detached results and recovery", () => {
   const ledger = openLedger(":memory:");
   const exec = ledger.db.exec.bind(ledger.db);

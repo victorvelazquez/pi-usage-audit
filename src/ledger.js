@@ -736,10 +736,19 @@ function createLedgerApi(db, secret) {
       if (!value || typeof value !== "object" || Array.isArray(value))
         throw new Error("Invalid token evolution");
       const keys = Reflect.ownKeys(value);
-      if (keys.length > 1 || (keys.length === 1 && keys[0] !== "session"))
+      if (
+        keys.length > 1 ||
+        (keys.length === 1 && !["session", "projectId"].includes(keys[0]))
+      )
         throw new Error("Invalid token evolution");
-      const session = keys.length === 1 ? value.session : null;
-      if (keys.length === 1 && !text(session))
+      const session = keys[0] === "session" ? value.session : null;
+      const projectId = keys[0] === "projectId" ? value.projectId : null;
+      if (
+        (keys[0] === "session" && !text(session)) ||
+        (keys[0] === "projectId" &&
+          (typeof projectId !== "string" ||
+            projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !== projectId))
+      )
         throw new Error("Invalid token evolution");
       try {
         return reportTransaction(() => {
@@ -753,9 +762,14 @@ function createLedgerApi(db, secret) {
           };
           let includedEntries = 0;
           let excludedEntries = 0;
-          for (const row of snapshot()) {
-            // Classify complete lineage before selecting literal session rows.
+          // Classify complete lineage before selecting project or session rows.
+          const classified = snapshot();
+          const projectSessions =
+            projectId === null ? null : mappedProjectSessions(projectId);
+          for (const row of classified) {
             if (session !== null && row.session !== session) continue;
+            if (projectSessions !== null && !projectSessions.has(row.session))
+              continue;
             if (row.certainty !== "own") {
               excludedEntries++;
               excluded.set(
