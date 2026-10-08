@@ -20,8 +20,9 @@ PR #37; runtime project filtering API is delivered in PR #39 (main `86a283d`,
 merged `d4d86a7`). CLI project filtering is delivered in PR #40 (`8203814`),
 with the PR #41 refactor (`ee3d657`) integrated on main `10043b5`.
 Cost project filtering API is delivered in PR #42 (main `7a9a582`, commit
-`d71721c`). Evolution project filtering API is the current implementation candidate;
-no native approval or delivery is claimed for this unit.
+`d71721c`). Evolution project filtering API is delivered in PR #43 (main
+`f546be9`, commit `547cda6`). Composite readonly project reporting is the current
+API-only candidate; no approval or delivery is claimed for this unit.
 Real-session validation remains pending;
 review and delivery remain parent-owned.
 
@@ -137,7 +138,8 @@ the current startup dashboard session-selector candidate. No real sessions are a
 ## Readonly dashboard reports (API delivered PR #18)
 
 `openReadonlyLedger(filename)` from `src/ledger.js` requires an explicit existing
-SQLite file initialized by `openLedger`. It returns only `{ dashboardReport, close }`:
+SQLite file initialized by `openLedger`. It returns only
+`{ dashboardReport, projectIdentity, close }`:
 no database handle, imports or pricing writes. Opening uses `readOnly: true` and
 `timeout: 5000`; schema columns/primary keys and the stored fingerprint key are
 checked by reads. Missing, empty, corrupt or incompatible storage fails with
@@ -150,12 +152,23 @@ All three reports use **one deferred transaction** spanning
 entries, lineage, task attribution and tariffs. Own currency is required:
 three uppercase ASCII letters, no default/conversion. PR #33 additionally
 accepts `reader.dashboardReport({ currency: 'USD', session: 'literal-id' })`.
-Only these own keys are allowed, including nonenumerable keys; extra own keys
-(including symbols) are rejected. Session is nonempty, ≤512 UTF-16 code units,
-without trim, case folding or normalization. Omission preserves the global report.
+The current API-only candidate additionally accepts
+`reader.dashboardReport({ currency: 'USD', projectId: 'Repo_1' })`.
+Choose no selector, `session`, or `projectId`, never both (even if undefined).
+Project IDs are literal case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`, without trim
+or normalization. Only own `currency`, `session` and `projectId` keys are allowed,
+including nonenumerable keys; extra own keys (including symbols) are rejected.
+Inherited selectors are ignored; currency must be own. Session is nonempty,
+≤512 UTF-16 code units, without trim, case folding or normalization.
+Omission preserves the global report.
 All subreports receive the same selector in the existing joint snapshot; complete
 lineage is classified before selection, retaining external parents as evidence.
-Unknown IDs return the three existing empty shapes with explicit cost currency.
+Project membership reuses the existing conservative helper: exactly one source
+locator explicitly mapped to the ID; every locator counts, including unmapped
+aliases. No classification duplication or result post-filtering is introduced.
+Unknown/unmapped IDs or an absent optional mapping table return the three existing
+empty shapes with explicit cost currency, without repair. Global/session reports
+are unchanged. Project selection in HTTP, UI and CLI needs a separate unit.
 Detached results, exact arithmetic and readonly boundaries remain unchanged:
 `openLedger` intentionally does not expose `dashboardReport`. Invalid requests
 fail before SQL (`Invalid dashboard report`); operational failures reject the
@@ -296,7 +309,8 @@ and CLI outputs are unchanged; no dashboard, live capture or automatic model pol
 
 ## Daily token evolution (API A delivered PR #20)
 
-The current API-only candidate accepts `ledger.tokenEvolution({ projectId: 'Repo_1' })`.
+PR #43 (main `f546be9`, commit `547cda6`) delivered
+`ledger.tokenEvolution({ projectId: 'Repo_1' })`.
 Choose global `{}`, literal `{session}`, or `{projectId}`, never both selectors.
 Project IDs use the cost API's exact ASCII validation and shared conservative
 membership: exactly one mapped source locator; aliases are not selected.
@@ -304,7 +318,8 @@ Full lineage classification precedes selection in the same deferred snapshot;
 external parents remain evidence, not implicit members. Unknown/unmapped projects
 and absent mapping tables yield the existing empty shape without writes/repair.
 Daily UTC buckets, exact BigInt token strings, undated accounting and certainty
-exclusions are unchanged. No dashboardReport, readonly exposure, CLI or UI extension.
+exclusions are unchanged. Composite readonly project selection is the candidate
+specified above; no independent readonly evolution method, CLI or UI extension.
 
 `ledger.tokenEvolution({})` preserves the delivered global report. PR #32
 also delivered `{ session: 'literal-id' }`: a single own key, nonempty string of at
@@ -474,7 +489,8 @@ snapshot. Only selected rows enter groups, quotes and coverage; external parents
 remain evidence, never selected implicitly. Unknown projects or an absent optional
 mapping table return the existing empty shape with requested currency, without
 repair or writes. Exact complete-or-null amounts and known zero remain unchanged.
-No cost CLI/UI or dashboardReport project selection is added.
+No cost CLI/UI project selection is added; composite readonly API selection is
+specified above.
 
 Classification retains the full imported lineage snapshot, then selects rows
 before counting coverage, exclusions, grouping or quoting. External parents

@@ -61,6 +61,29 @@ function fixture() {
   return { dir, db, file, task };
 }
 
+function assertProjectDashboard(writer, filename, projectIds = ["Repo"]) {
+  const reader = ledgerModule.openReadonlyLedger(filename);
+  try {
+    for (const projectId of projectIds) {
+      const selection = { projectId };
+      const request = { currency: "USD", ...selection };
+      const expected = {
+        runtime: writer.runtimeReport(selection),
+        costs: writer.costReport(request),
+        evolution: writer.tokenEvolution(selection),
+      };
+      const result = reader.dashboardReport(request);
+      assert.deepEqual(result, expected);
+      result.runtime.agents.length = 0;
+      result.costs.groups.length = 0;
+      result.evolution.buckets.length = 0;
+      assert.deepEqual(reader.dashboardReport(request), expected);
+    }
+  } finally {
+    reader.close();
+  }
+}
+
 test("project identity durable explicit bindings, aliases and privacy", () => {
   const f = fixture();
   const a = f.file("PRIVATE_PATH-a.jsonl", [
@@ -305,6 +328,13 @@ test("project identity readonly old schema and optional table validation", () =>
       reader.dashboardReport({ currency: "USD" }).runtime,
       expected,
     );
+    const selected = reader.dashboardReport({
+      currency: "USD",
+      projectId: "Repo",
+    });
+    assert.equal(selected.runtime.coverage.includedEntries, 0);
+    assert.deepEqual(selected.costs.groups, []);
+    assert.deepEqual(selected.evolution.buckets, []);
   } finally {
     reader.close();
   }
@@ -441,7 +471,9 @@ test("tokenEvolution project membership, dates, exact totals and external lineag
       ledger.tokenEvolution(request).coverage.excludedByCertainty,
       { incomplete: 1, "lineage-unresolved": 2 },
     );
+    assertProjectDashboard(ledger, f.db, ["Repo", "repo", "unknown"]);
     ledger.importFiles({ sessions: [parent], projectMappings: [mapping(b)] });
+    assertProjectDashboard(ledger, f.db, ["Repo", "repo", "unknown", "a"]);
     const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
     const global = ledger.tokenEvolution({});
     const selected = ledger.tokenEvolution(request);
@@ -501,6 +533,7 @@ test("tokenEvolution project membership, dates, exact totals and external lineag
     );
     ledger.importFiles({ projectMappings: [mapping(alias2)] });
     assert.equal(ledger.tokenEvolution(request).coverage.includedEntries, 8);
+    assertProjectDashboard(ledger, f.db);
     const parentAlias = f.file("parent-alias.jsonl", [header("parent")]);
     ledger.importFiles({ sessions: [parentAlias] });
     assert.equal(
@@ -513,6 +546,7 @@ test("tokenEvolution project membership, dates, exact totals and external lineag
       ledger.tokenEvolution(request).coverage,
       ledger.runtimeReport(request).coverage,
     );
+    assertProjectDashboard(ledger, f.db);
   } finally {
     ledger.close();
   }
@@ -1280,6 +1314,29 @@ test("readonly dashboard allowlist, strict validation, preservation and recovery
     queries.length = 0;
     transactions.length = 0;
     for (const value of [
+      ...[
+        undefined,
+        null,
+        1,
+        [],
+        {},
+        "",
+        " Repo",
+        "Repo ",
+        "Répo",
+        "Repo\n",
+        "a.b",
+        "a/b",
+        "x".repeat(65),
+      ].map((projectId) => ({ currency: "USD", projectId })),
+      { currency: "USD", projectId: "Repo", session: "s" },
+      { currency: "USD", projectId: "Repo", session: undefined },
+      { currency: "USD", projectId: "Repo", extra: 1 },
+      { currency: "USD", projectId: "Repo", [Symbol()]: 1 },
+      Object.defineProperty({ currency: "USD", projectId: "Repo" }, "hidden", {
+        value: 1,
+      }),
+      Object.create({ currency: "USD" }, { projectId: { value: "Repo" } }),
       undefined,
       null,
       [],
@@ -1312,10 +1369,23 @@ test("readonly dashboard allowlist, strict validation, preservation and recovery
       );
     assert.deepEqual(queries, []);
     assert.deepEqual(transactions, []);
+    for (const projectId of ["Repo", "x".repeat(64), "A-z_09", "a"]) {
+      const request = Object.defineProperty({ currency: "USD" }, "projectId", {
+        value: projectId,
+      });
+      assert.deepEqual(reader.dashboardReport(request), empty);
+    }
+    transactions.length = 0;
     const first = reader.dashboardReport({ currency: "USD" });
     assert.equal(first.runtime.agents[0].totalTokens, "19");
     assert.equal(first.costs.groups[0].total, null);
     assert.deepEqual(transactions, ["BEGIN DEFERRED", "COMMIT"]);
+    assert.deepEqual(
+      reader.dashboardReport(
+        Object.create({ projectId: "Repo" }, { currency: { value: "USD" } }),
+      ),
+      first,
+    );
     assert.deepEqual(first.evolution, writer.tokenEvolution({}));
     const hidden = Object.defineProperty({}, "currency", { value: "USD" });
     assert.deepEqual(reader.dashboardReport(hidden), first);
@@ -1384,7 +1454,10 @@ test("dashboardReport literal sessions, lineage, detached restart and recovery",
       message("copy"),
       message("new"),
     ]);
-    writer.importFiles({ sessions: [...paths, parent, child] });
+    writer.importFiles({
+      sessions: [...paths, parent, child],
+      projectMappings: [{ sessionPath: paths[1], projectId: "Repo" }],
+    });
     const tables = [
       "sources",
       "entries",
@@ -1443,35 +1516,53 @@ test("dashboardReport literal sessions, lineage, detached restart and recovery",
     literal.costs.groups[0].quotes[0].observation.usage.input = 0;
     const request = { currency: "EUR", session: " S " };
     assert.deepEqual(reader.dashboardReport(request), expected(" S "));
-    for (const failure of ["read", "commit", "rollback"]) {
-      let failed = false;
-      proto.prepare = function (sql) {
-        if (this !== writer.db && failure !== "commit" && !failed) {
-          failed = true;
-          throw new Error("SYNTHETIC_PRIVATE_PATH");
-        }
-        return prepare.call(this, sql);
+    for (const selection of [{ session: " S " }, { projectId: "Repo" }]) {
+      const recoveryRequest = { currency: "EUR", ...selection };
+      const recoveryExpected = {
+        runtime: writer.runtimeReport(selection),
+        costs: writer.costReport(recoveryRequest),
+        evolution: writer.tokenEvolution(selection),
       };
-      proto.exec = function (sql) {
-        if (
-          this !== writer.db &&
-          ((failure === "commit" && sql === "COMMIT") ||
-            (failure === "rollback" && sql === "ROLLBACK"))
-        )
-          throw new Error("SYNTHETIC_PRIVATE_PATH");
-        return exec.call(this, sql);
-      };
-      assert.throws(
-        () => reader.dashboardReport(request),
-        /^Error: Dashboard report operation failed$/,
-      );
-      proto.prepare = prepare;
-      proto.exec = exec;
-      if (failure !== "rollback")
-        assert.deepEqual(reader.dashboardReport(request), expected(" S "));
-      reader.close();
-      reader = ledgerModule.openReadonlyLedger(f.db);
-      assert.deepEqual(reader.dashboardReport(request), expected(" S "));
+      for (const failure of ["read", "commit", "rollback"]) {
+        let failed = false;
+        proto.prepare = function (sql) {
+          if (this !== writer.db && failure !== "commit" && !failed) {
+            failed = true;
+            throw new Error("SYNTHETIC_PRIVATE_PATH");
+          }
+          return prepare.call(this, sql);
+        };
+        proto.exec = function (sql) {
+          if (
+            this !== writer.db &&
+            ((failure === "commit" && sql === "COMMIT") ||
+              (failure === "rollback" && sql === "ROLLBACK"))
+          )
+            throw new Error("SYNTHETIC_PRIVATE_PATH");
+          return exec.call(this, sql);
+        };
+        assert.throws(
+          () => reader.dashboardReport(recoveryRequest),
+          /^Error: Dashboard report operation failed$/,
+        );
+        proto.prepare = prepare;
+        proto.exec = exec;
+        if (failure !== "rollback")
+          assert.deepEqual(
+            reader.dashboardReport(recoveryRequest),
+            recoveryExpected,
+          );
+        reader.close();
+        assert.throws(
+          () => reader.dashboardReport(recoveryRequest),
+          /^Error: Dashboard report operation failed$/,
+        );
+        reader = ledgerModule.openReadonlyLedger(f.db);
+        assert.deepEqual(
+          reader.dashboardReport(recoveryRequest),
+          recoveryExpected,
+        );
+      }
     }
     assert.deepEqual(rows(), before);
     assert.deepEqual(readFileSync(f.db), bytes);
@@ -1483,11 +1574,12 @@ test("dashboardReport literal sessions, lineage, detached restart and recovery",
   }
 });
 
-function dashboardSnapshot(session) {
+function dashboardSnapshot(session, projectId) {
   const f = fixture();
   const writer = openLedger(f.db);
   const proto = DatabaseSync.prototype;
   const prepare = proto.prepare;
+  const exec = proto.exec;
   let reader;
   try {
     const path = f.file("s.jsonl", [header("s"), message("a")]);
@@ -1495,6 +1587,10 @@ function dashboardSnapshot(session) {
     writer.importFiles({
       sessions: [path, child],
       tasks: [f.task("t", path, "old")],
+      projectMappings: [path, child].map((sessionPath) => ({
+        sessionPath,
+        projectId: "Repo",
+      })),
     });
     for (const category of ["input", "output", "cacheRead", "cacheWrite"])
       writer.addManualPrice({
@@ -1512,7 +1608,8 @@ function dashboardSnapshot(session) {
       );
     const before = counts();
     reader = ledgerModule.openReadonlyLedger(f.db);
-    const request = session === undefined ? {} : { session };
+    let request = session === undefined ? {} : { session };
+    if (projectId !== undefined) request = { projectId };
     const standalone = () => ({
       runtime: writer.runtimeReport(request),
       costs: writer.costReport({ currency: "USD", ...request }),
@@ -1539,19 +1636,35 @@ function dashboardSnapshot(session) {
         writer.db
           .prepare("UPDATE entries SET data=? WHERE session='s'")
           .run(JSON.stringify(data));
+        if (projectId !== undefined)
+          writer.db.exec("UPDATE project_mappings SET projectId='Other'");
         writer.db.exec(`UPDATE tasks SET agent='new';
           UPDATE manual_prices SET ratePerMillion='2.000000';
           UPDATE sources SET parent='missing' WHERE session='child'; COMMIT`);
       }
       return prepare.call(this, sql);
     };
+    const transactions = [];
+    proto.exec = function (sql) {
+      if (this !== writer.db) transactions.push(sql);
+      return exec.call(this, sql);
+    };
     const first = reader.dashboardReport({ currency: "USD", ...request });
+    assert.deepEqual(transactions, ["BEGIN DEFERRED", "COMMIT"]);
+    transactions.length = 0;
     assert.equal(sources, 3);
     assert.deepEqual(first, expected);
     const next = reader.dashboardReport({ currency: "USD", ...request });
+    assert.deepEqual(transactions, ["BEGIN DEFERRED", "COMMIT"]);
     assert.deepEqual(next, standalone());
     assert.notDeepEqual(next, first);
     assert.deepEqual(counts(), before);
+    if (projectId !== undefined) {
+      assert.equal(first.runtime.coverage.includedEntries, 2);
+      assert.equal(next.runtime.coverage.includedEntries, 0);
+      assertProjectDashboard(writer, f.db, ["Repo", "Other"]);
+      return;
+    }
     if (session !== undefined) return;
     assert.deepEqual(first.evolution.buckets, [
       { day: "2026-01-01", entries: 2, totalTokens: "38" },
@@ -1582,6 +1695,7 @@ function dashboardSnapshot(session) {
     );
   } finally {
     proto.prepare = prepare;
+    proto.exec = exec;
     reader?.close();
     writer.close();
   }
@@ -1591,6 +1705,10 @@ for (const session of [undefined, "s", "child"])
   test(`dashboardReport snapshot between reports (${session ?? "global"})`, () => {
     dashboardSnapshot(session);
   });
+
+test("dashboardReport project snapshot between reports", () => {
+  dashboardSnapshot(undefined, "Repo");
+});
 
 test("costReport strict requests, detached empty result and generic recovery", () => {
   const f = fixture();
@@ -2121,6 +2239,7 @@ test("costReport project membership, exact money, external lineage and restart",
     const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
     const global = ledger.costReport({ currency: "USD" });
     const selected = ledger.costReport(request);
+    assertProjectDashboard(ledger, f.db, ["Repo", "repo", "unknown"]);
     assert.equal(selected.coverage.includedEntries, 5);
     assert.equal(selected.coverage.excludedEntries, 3);
     assertMembership();
@@ -2376,6 +2495,7 @@ test("runtimeReport project groups worktrees with exact views, aliases and exter
     ledger.projectIdentity = () =>
       assert.fail("nested transactional public reader");
     const report = ledger.runtimeReport({ projectId: "Repo" });
+    assertProjectDashboard(ledger, f.db, ["Repo", "repo", "Other", "REPO"]);
     const total = (BigInt(huge) * 2n).toString();
     assert.equal(report.provenance, "imported-own-runtime-report");
     assert.deepEqual(report.agents, [

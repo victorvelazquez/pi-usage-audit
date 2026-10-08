@@ -703,9 +703,15 @@ function createLedgerApi(db, secret) {
         Array.isArray(value) ||
         !Object.hasOwn(value, "currency") ||
         Reflect.ownKeys(value).some(
-          (key) => key !== "currency" && key !== "session",
+          (key) => !["currency", "session", "projectId"].includes(key),
         ) ||
+        (Object.hasOwn(value, "session") &&
+          Object.hasOwn(value, "projectId")) ||
         (Object.hasOwn(value, "session") && !text(value.session)) ||
+        (Object.hasOwn(value, "projectId") &&
+          (typeof value.projectId !== "string" ||
+            value.projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !==
+              value.projectId)) ||
         typeof value.currency !== "string" ||
         value.currency.length !== 3 ||
         !/^[A-Z]{3}$/.test(value.currency)
@@ -713,7 +719,9 @@ function createLedgerApi(db, secret) {
         throw new Error("Invalid dashboard report");
       const selection = Object.hasOwn(value, "session")
         ? { session: value.session }
-        : {};
+        : Object.hasOwn(value, "projectId")
+          ? { projectId: value.projectId }
+          : {};
       const request = { currency: value.currency, ...selection };
       try {
         return readTransaction(() => {
