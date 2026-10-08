@@ -1523,6 +1523,222 @@ test("HTTP loopback, exact route, headers and origin boundaries", async () => {
   }
 });
 
+test("dashboard project startup API CLI and replacement scope", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  const writer = seeded(path);
+  const literal = "Private_Project-1";
+  for (const session of ["a", "c", "e", "f"])
+    writer.db
+      .prepare("INSERT INTO project_mappings VALUES (?,?)")
+      .run(session, literal);
+  writer.db
+    .prepare("INSERT INTO project_mappings VALUES (?,?)")
+    .run("b", "Other");
+  writer.close();
+  const before = readFileSync(path);
+  const expected = (selector, allowManualPrices = false) => {
+    const reader = ledgerModule.openReadonlyLedger(path);
+    let snapshot;
+    try {
+      snapshot = reader.dashboardReport({ currency: "EUR", ...selector });
+    } finally {
+      reader.close();
+    }
+    return renderDashboard(
+      projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
+      {
+        selected: true,
+        projectSelected: selector.projectId !== undefined,
+        sessionSelected: selector.session !== undefined,
+        allowManualPrices,
+      },
+    );
+  };
+  for (const projectId of [
+    literal,
+    literal.toLowerCase(),
+    "absent",
+    "x",
+    "x".repeat(64),
+    "_-0",
+  ])
+    for (const allowManualPrices of [false, true]) {
+      const html = expected({ projectId }, allowManualPrices);
+      let closes = 0;
+      const close = DatabaseSync.prototype.close;
+      const listen = http.Server.prototype.listen;
+      t.mock.method(DatabaseSync.prototype, "close", function () {
+        closes++;
+        return close.call(this);
+      });
+      t.mock.method(http.Server.prototype, "listen", function (...args) {
+        assert.equal(closes, 1, "readonly closed before listen");
+        return listen.apply(this, args);
+      });
+      const server = await dashboard.startDashboard({
+        db: path,
+        currency: "EUR",
+        projectId,
+        allowManualPrices,
+      });
+      t.mock.restoreAll();
+      try {
+        const port = server.address().port;
+        const page = await request(port);
+        assert.equal(page.body, html);
+        if (projectId === literal && !allowManualPrices)
+          assert.deepEqual(readFileSync(path), before);
+        assert.match(page.body, /Proyecto seleccionado/);
+        assert.ok(!page.body.includes(literal));
+        assert.ok(!page.body.includes(path));
+        assert.ok(
+          page.headers["content-security-policy"].includes(
+            "connect-src 'self'",
+          ),
+        );
+        assert.equal(
+          page.body.includes('id="manual-price-form"'),
+          allowManualPrices,
+        );
+        if (projectId === literal) {
+          assert.ok(html.includes("9007199254740991"));
+          assert.ok(html.includes("0.000000000000"));
+          assert.ok(html.includes("Desconocido (null)"));
+          // Existing submissions replace, never intersect with, startup project.
+          for (const selector of [{ session: "b" }, {}]) {
+            const response = await postPrice(port, selector, {
+              path: "/session-filter",
+            });
+            assert.equal(response.status, 200);
+            assert.equal(response.body, expected(selector, allowManualPrices));
+            assert.equal(
+              response.headers["content-security-policy"],
+              page.headers["content-security-policy"],
+            );
+            assert.ok(!response.body.includes("Proyecto seleccionado"));
+          }
+          const later = openLedger(path);
+          later.db.exec(
+            "UPDATE tasks SET agent='later-project-agent' WHERE id='a'",
+          );
+          later.close();
+          assert.equal((await request(port)).body, html);
+          const reset = openLedger(path);
+          reset.db.exec("UPDATE tasks SET agent='<demo>' WHERE id='a'");
+          reset.close();
+        } else assert.ok(html.includes("Sin filas"));
+        assert.equal((await request(port, "/?project=Other")).status, 404);
+        if (!allowManualPrices)
+          assert.equal(
+            (await request(port, "/manual-prices", { method: "POST" })).status,
+            405,
+          );
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+      const args = [
+        "src/dashboard.js",
+        "--db",
+        path,
+        "--currency",
+        "EUR",
+        "--project",
+        projectId,
+      ];
+      if (allowManualPrices) args.push("--allow-manual-prices");
+      const child = spawn(process.execPath, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const exited = once(child, "exit");
+      try {
+        const output = await Promise.race([
+          once(child.stdout, "data"),
+          exited.then(() => {
+            throw new Error("CLI failed before listen");
+          }),
+        ]);
+        const port = Number(new URL(output[0].toString().trim()).port);
+        assert.equal((await request(port)).body, html);
+      } finally {
+        child.kill("SIGTERM");
+        await exited;
+      }
+    }
+});
+
+test("dashboard project invalid before storage listen and CLI startup", async (t) => {
+  const path = join(mkdtempSync("test/.runtime-dashboard-"), "missing.sqlite");
+  seeded(path).close();
+  let reads = 0;
+  let listens = 0;
+  for (const method of ["prepare", "exec"])
+    t.mock.method(DatabaseSync.prototype, method, () => {
+      reads++;
+      throw new Error("private storage failure");
+    });
+  t.mock.method(http.Server.prototype, "listen", () => {
+    listens++;
+    throw new Error();
+  });
+  for (const projectId of [
+    "",
+    "x".repeat(65),
+    "x\n",
+    " x",
+    "x ",
+    "a/b",
+    "a.b",
+    "é",
+    "😀",
+    null,
+    1,
+    true,
+    [],
+    {},
+    new String("x"),
+  ])
+    await assert.rejects(
+      dashboard.startDashboard({ db: path, currency: "EUR", projectId }),
+      { message: "Dashboard unavailable" },
+    );
+  for (const projectId of ["x", "x".repeat(64)])
+    await assert.rejects(
+      dashboard.startDashboard({
+        db: path,
+        currency: "EUR",
+        projectId,
+        session: "a",
+      }),
+      { message: "Dashboard unavailable" },
+    );
+  assert.equal(reads, 0);
+  assert.equal(listens, 0);
+  t.mock.restoreAll();
+  assert.ok(cli(["--help"]).stdout.includes("--project ID"));
+  for (const flags of [
+    ["--project"],
+    ["--project", ""],
+    ["--project", "x".repeat(65)],
+    ["--project", "x\n"],
+    ["--project", "é"],
+    ["--project", "a/b"],
+    ["--project", "--literal"],
+    ["--project=x"],
+    ["--project", "x", "--project", "y"],
+    ["--project", "x", "--session", "a"],
+    ["--session", "a", "--project", "x"],
+  ]) {
+    const result = cli(["--db", path, "--currency", "EUR", ...flags]);
+    assert.equal(result.status, 2);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, "Invalid dashboard arguments\n");
+  }
+  assert.equal(cli(["--demo", "--project", "x"]).status, 2);
+});
+
 test("dashboard session API and CLI equal the joint projected snapshot", async (t) => {
   const path = join(
     mkdtempSync("test/.runtime-dashboard-"),

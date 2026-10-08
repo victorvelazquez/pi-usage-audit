@@ -21,8 +21,9 @@ merged `d4d86a7`). CLI project filtering is delivered in PR #40 (`8203814`),
 with the PR #41 refactor (`ee3d657`) integrated on main `10043b5`.
 Cost project filtering API is delivered in PR #42 (main `7a9a582`, commit
 `d71721c`). Evolution project filtering API is delivered in PR #43 (main
-`f546be9`, commit `547cda6`). Composite readonly project reporting is the current
-API-only candidate; no approval or delivery is claimed for this unit.
+`f546be9`, commit `547cda6`). Composite readonly project reporting is delivered
+in PR #44 (main `655a15e`, commit `d46fb5c`). Startup dashboard project selection
+is the current candidate, not reviewed or delivered.
 Real-session validation remains pending;
 review and delivery remain parent-owned.
 
@@ -56,7 +57,7 @@ node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --session 'l
 ```
 
 Currency is required: exactly three uppercase ASCII letters, without inference or
-conversion. Demo cannot combine with database/currency/session flags. Duplicate, missing
+conversion. Demo cannot combine with database/currency/session/project flags. Duplicate, missing
 or invalid arguments fail before opening storage or listening; help opens neither.
 Exit codes are 0 for help/success, 2 for arguments, 1 for sanitized operational errors.
 The same loopback, Host/Origin/Fetch-site restrictions and CSP protect both modes.
@@ -87,6 +88,24 @@ this is not a guarantee of zero physical filesystem effects. Labels remain
 user-provided metadata: do not store secrets in them. Validation uses synthetic
 bases only; real-session validation remains pending. The opt-in form's synthetic
 actual-browser verification completed in Edge 154 before PR #28 delivery.
+
+### Startup project scope — candidate, not reviewed or delivered
+
+```sh
+node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --project Repo_1
+```
+
+Optional API `projectId` or one CLI `--project ID` selects the delivered PR #44
+joint report directly. ID is literal case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`;
+no trimming, normalization or inference. It is exclusive with `session`/`--session`
+and incompatible with demo. Invalid values fail before storage/listen; CLI
+also rejects duplicate/missing flags, `--` values and equals syntax.
+API omission/`undefined` preserves global scope; unknown projects render empty.
+SSR says “Proyecto seleccionado”, never the literal ID or private path.
+The existing session/global form **replaces** project scope, never intersects it;
+reload restores the static startup project snapshot. No interactive project
+control, payload, route or shared selector state is added. Manual prices remain
+explicit opt-in and database-wide; CSP and readonly-close-before-listen unchanged.
 
 ### Interactive session filtering — unit B delivered PR #36
 
@@ -152,7 +171,7 @@ All three reports use **one deferred transaction** spanning
 entries, lineage, task attribution and tariffs. Own currency is required:
 three uppercase ASCII letters, no default/conversion. PR #33 additionally
 accepts `reader.dashboardReport({ currency: 'USD', session: 'literal-id' })`.
-The current API-only candidate additionally accepts
+PR #44 additionally accepts
 `reader.dashboardReport({ currency: 'USD', projectId: 'Repo_1' })`.
 Choose no selector, `session`, or `projectId`, never both (even if undefined).
 Project IDs are literal case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`, without trim
@@ -168,7 +187,8 @@ locator explicitly mapped to the ID; every locator counts, including unmapped
 aliases. No classification duplication or result post-filtering is introduced.
 Unknown/unmapped IDs or an absent optional mapping table return the three existing
 empty shapes with explicit cost currency, without repair. Global/session reports
-are unchanged. Project selection in HTTP, UI and CLI needs a separate unit.
+are unchanged. Startup dashboard project selection is the bounded candidate above;
+interactive project filtering remains out of scope.
 Detached results, exact arithmetic and readonly boundaries remain unchanged:
 `openLedger` intentionally does not expose `dashboardReport`. Invalid requests
 fail before SQL (`Invalid dashboard report`); operational failures reject the
@@ -318,8 +338,8 @@ Full lineage classification precedes selection in the same deferred snapshot;
 external parents remain evidence, not implicit members. Unknown/unmapped projects
 and absent mapping tables yield the existing empty shape without writes/repair.
 Daily UTC buckets, exact BigInt token strings, undated accounting and certainty
-exclusions are unchanged. Composite readonly project selection is the candidate
-specified above; no independent readonly evolution method, CLI or UI extension.
+exclusions are unchanged. Composite readonly project selection is delivered PR #44;
+no independent readonly evolution method is added.
 
 `ledger.tokenEvolution({})` preserves the delivered global report. PR #32
 also delivered `{ session: 'literal-id' }`: a single own key, nonempty string of at

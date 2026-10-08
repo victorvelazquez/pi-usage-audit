@@ -189,16 +189,26 @@ function validSession(session) {
   );
 }
 
+function validProject(projectId) {
+  return (
+    typeof projectId === "string" &&
+    projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] === projectId
+  );
+}
+
 export async function startDashboard({
   db,
   currency,
   session,
+  projectId,
   port = 0,
   allowManualPrices = false,
 }) {
   try {
     if (
       (session !== undefined && !validSession(session)) ||
+      (projectId !== undefined && !validProject(projectId)) ||
+      (session !== undefined && projectId !== undefined) ||
       typeof allowManualPrices !== "boolean" ||
       typeof db !== "string" ||
       !db ||
@@ -209,20 +219,25 @@ export async function startDashboard({
     const ledger = openReadonlyLedger(db);
     let html;
     try {
-      const snapshot = ledger.dashboardReport(
-        session === undefined ? { currency } : { currency, session },
-      );
+      const snapshot = ledger.dashboardReport({
+        currency,
+        ...(session !== undefined ? { session } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
+      });
       html = renderDashboard(
         projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
         {
           selected: true,
           sessionSelected: session !== undefined,
+          projectSelected: projectId !== undefined,
           allowManualPrices,
         },
       );
     } finally {
       ledger.close();
     }
+    // Interactive session/global submissions replace startup scope entirely.
+    // Retain only the static HTML, not a project selector in route options.
     return await serve(html, port, { db, currency, allowManualPrices });
   } catch {
     throw new Error("Dashboard unavailable");
@@ -365,6 +380,7 @@ function parse(args) {
         "--db",
         "--currency",
         "--session",
+        "--project",
         "--allow-manual-prices",
       ].includes(flag)
     )
@@ -382,18 +398,21 @@ function parse(args) {
       if (
         !value ||
         value.startsWith("--") ||
-        (flag === "--session" && !validSession(value))
+        (flag === "--session" && !validSession(value)) ||
+        (flag === "--project" && !validProject(value))
       )
         throw new Error();
-      options[flag.slice(2)] = value;
+      options[flag === "--project" ? "projectId" : flag.slice(2)] = value;
     }
   }
+  if (seen.has("--session") && seen.has("--project")) throw new Error();
   options.demo = seen.has("--demo");
   if (options.demo) {
     if (
       seen.has("--db") ||
       seen.has("--currency") ||
       seen.has("--session") ||
+      seen.has("--project") ||
       options.allowManualPrices
     )
       throw new Error();
@@ -413,7 +432,7 @@ async function main() {
   }
   if (options === null) {
     console.log(
-      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N] [--session ID] [--allow-manual-prices]\n       node src/dashboard.js --help",
+      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N] [--session ID | --project ID] [--allow-manual-prices]\n       node src/dashboard.js --help",
     );
     return;
   }

@@ -139,9 +139,18 @@ ${
 }
 export function renderDashboard(
   demo,
-  { selected = false, sessionSelected = false, allowManualPrices = false } = {},
+  {
+    selected = false,
+    sessionSelected = false,
+    projectSelected = false,
+    allowManualPrices = false,
+  } = {},
 ) {
-  const scope = sessionSelected ? "Sesión seleccionada" : "Alcance global";
+  const scope = projectSelected
+    ? "Proyecto seleccionado"
+    : sessionSelected
+      ? "Sesión seleccionada"
+      : "Alcance global";
   const editable = selected && allowManualPrices === true;
   const coverage = demo.coverage;
   const evolution = demo.evolution;
@@ -170,7 +179,7 @@ td { font-variant-numeric: tabular-nums; }
 <p>${escape(description)}</p>
 ${selected ? sessionFilterForm : ""}
 <div id="dashboard-report">
-${selected ? `<p data-dashboard-scope>${scope}. Recargar restaura el snapshot de arranque.</p>` : ""}
+${selected ? `<p data-dashboard-scope>${scope}. Recargar restaura el snapshot de arranque.${projectSelected ? " Consultar sesión o global reemplaza este alcance; no combina filtros." : ""}</p>` : ""}
 <p>Agentes, modelos y costos describen las mismas entradas: vistas no aditivas.
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
 <p>Entradas propias confirmadas: ${escape(coverage.includedEntries)}.
