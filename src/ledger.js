@@ -623,6 +623,33 @@ function createLedgerApi(db, secret) {
       actor: consensus("agent") === "unknown" ? "unknown" : "agent",
     };
   };
+  // Call only inside the report snapshot, after full lineage classification.
+  const mappedProjectSessions = (projectId) => {
+    const selected = new Set();
+    const table = db
+      .prepare("SELECT name FROM sqlite_schema WHERE name='project_mappings'")
+      .get();
+    if (table) {
+      // Count every locator, not only those mapped to the selected ID.
+      const sources = db.prepare("SELECT session, path FROM sources").all();
+      const counts = new Map();
+      for (const source of sources)
+        counts.set(source.session, (counts.get(source.session) ?? 0) + 1);
+      const mappings = new Map(
+        db
+          .prepare("SELECT path, projectId FROM project_mappings")
+          .all()
+          .map((row) => [row.path, row.projectId]),
+      );
+      for (const source of sources)
+        if (
+          counts.get(source.session) === 1 &&
+          mappings.get(source.path) === projectId
+        )
+          selected.add(source.session);
+    }
+    return selected;
+  };
   const api = {
     db,
     close: () => db.close(),
@@ -793,9 +820,15 @@ function createLedgerApi(db, secret) {
         Array.isArray(value) ||
         !Object.hasOwn(value, "currency") ||
         Reflect.ownKeys(value).some(
-          (key) => key !== "currency" && key !== "session",
+          (key) => !["currency", "session", "projectId"].includes(key),
         ) ||
+        (Object.hasOwn(value, "session") &&
+          Object.hasOwn(value, "projectId")) ||
         (Object.hasOwn(value, "session") && !text(value.session)) ||
+        (Object.hasOwn(value, "projectId") &&
+          (typeof value.projectId !== "string" ||
+            value.projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !==
+              value.projectId)) ||
         typeof value.currency !== "string" ||
         value.currency.length !== 3 ||
         !/^[A-Z]{3}$/.test(value.currency)
@@ -803,6 +836,9 @@ function createLedgerApi(db, secret) {
         throw new Error("Invalid cost report");
       const currency = value.currency;
       const session = Object.hasOwn(value, "session") ? value.session : null;
+      const projectId = Object.hasOwn(value, "projectId")
+        ? value.projectId
+        : null;
       try {
         return reportTransaction(() => {
           const groups = new Map();
@@ -812,9 +848,14 @@ function createLedgerApi(db, secret) {
             excludedEntries: 0,
             excludedByCertainty: {},
           };
-          for (const row of snapshot()) {
-            // Retain complete lineage evidence before selecting literal session rows.
+          const classified = snapshot();
+          const projectSessions =
+            projectId === null ? null : mappedProjectSessions(projectId);
+          for (const row of classified) {
+            // Retain complete lineage evidence before selecting project/session rows.
             if (session !== null && row.session !== session) continue;
+            if (projectSessions !== null && !projectSessions.has(row.session))
+              continue;
             if (row.certainty !== "own") {
               coverage.excludedEntries++;
               const key = row.certainty;
@@ -1413,39 +1454,8 @@ function createLedgerApi(db, secret) {
           };
           // Classify the full ledger before selecting project or session rows.
           const classified = snapshot();
-          let projectSessions = null;
-          if (projectId !== null) {
-            projectSessions = new Set();
-            const table = db
-              .prepare(
-                "SELECT name FROM sqlite_schema WHERE name='project_mappings'",
-              )
-              .get();
-            if (table) {
-              // Count every locator, not only those mapped to the selected ID.
-              const sources = db
-                .prepare("SELECT session, path FROM sources")
-                .all();
-              const counts = new Map();
-              for (const source of sources)
-                counts.set(
-                  source.session,
-                  (counts.get(source.session) ?? 0) + 1,
-                );
-              const mappings = new Map(
-                db
-                  .prepare("SELECT path, projectId FROM project_mappings")
-                  .all()
-                  .map((row) => [row.path, row.projectId]),
-              );
-              for (const source of sources)
-                if (
-                  counts.get(source.session) === 1 &&
-                  mappings.get(source.path) === projectId
-                )
-                  projectSessions.add(source.session);
-            }
-          }
+          const projectSessions =
+            projectId === null ? null : mappedProjectSessions(projectId);
           for (const row of classified) {
             if (session !== null && row.session !== session) continue;
             if (projectSessions !== null && !projectSessions.has(row.session))
