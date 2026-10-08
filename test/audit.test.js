@@ -1704,6 +1704,284 @@ test("costReport single snapshot includes attribution and tariff selection", () 
   }
 });
 
+test("costReport project strict selectors precede SQL", () => {
+  const ledger = openLedger(":memory:");
+  const exec = ledger.db.exec;
+  const prepare = ledger.db.prepare;
+  try {
+    ledger.db.exec = ledger.db.prepare = () =>
+      assert.fail("invalid reached SQL");
+    for (const value of [
+      { projectId: "Repo" },
+      { currency: "usd", projectId: "Repo" },
+      ...[
+        "",
+        " Repo",
+        "Repo ",
+        "Répo",
+        "Repo\n",
+        "a.b",
+        "a/b",
+        "x".repeat(65),
+        null,
+        undefined,
+        1,
+        {},
+        [],
+      ].map((projectId) => ({ currency: "USD", projectId })),
+      { currency: "USD", projectId: "Repo", session: "s" },
+      { currency: "USD", projectId: "Repo", session: undefined },
+      { currency: "USD", projectId: "Repo", extra: 1 },
+      { currency: "USD", projectId: "Repo", [Symbol()]: 1 },
+      Object.defineProperty({ currency: "USD", projectId: "Repo" }, "hidden", {
+        value: 1,
+      }),
+    ])
+      assert.throws(
+        () => ledger.costReport(value),
+        /^Error: Invalid cost report$/,
+      );
+    ledger.db.exec = exec;
+    ledger.db.prepare = prepare;
+    const empty = ledger.costReport({ currency: "JPY" });
+    for (const projectId of ["Repo", "x".repeat(64), "A-z_09"])
+      assert.deepEqual(
+        ledger.costReport({ currency: "JPY", projectId }),
+        empty,
+      );
+    const hidden = Object.defineProperties(
+      {},
+      {
+        currency: { value: "JPY" },
+        projectId: { value: "Repo" },
+      },
+    );
+    assert.deepEqual(ledger.costReport(hidden), empty);
+    const inherited = Object.assign(Object.create({ projectId: "Repo" }), {
+      currency: "JPY",
+    });
+    assert.deepEqual(ledger.costReport(inherited), empty);
+  } finally {
+    ledger.db.exec = exec;
+    ledger.db.prepare = prepare;
+    ledger.close();
+  }
+});
+
+test("costReport project membership, exact money, external lineage and restart", () => {
+  const f = fixture();
+  let ledger = openLedger(f.db);
+  const huge = {
+    input: Number.MAX_SAFE_INTEGER,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: Number.MAX_SAFE_INTEGER,
+  };
+  const a = f.file("worktree-a.jsonl", [
+    header("a"),
+    message("large", { usage: huge }),
+    message("large2", { usage: huge }),
+    message("zero", {
+      model: "zero",
+      usage: { ...huge, input: 0, totalTokens: 0 },
+    }),
+    message("missing", { model: "missing" }),
+    message("nested", { role: "toolResult" }),
+  ]);
+  const b = f.file("worktree-b.jsonl", [header("b"), message("b")]);
+  const parent = f.file("parent.jsonl", [header("parent"), message("copy")]);
+  const child = f.file("child.jsonl", [
+    header("child", { parentSession: parent }),
+    message("copy"),
+    message("new"),
+  ]);
+  const alias = f.file("alias.jsonl", [header("alias"), message("alias")]);
+  const alias2 = f.file("alias2.jsonl", [header("alias")]);
+  const unmapped = f.file("unmapped.jsonl", [header("unmapped"), message("u")]);
+  const lower = f.file("lower.jsonl", [header("lower"), message("l")]);
+  const mapping = (sessionPath, projectId = "Repo") => ({
+    sessionPath,
+    projectId,
+  });
+  const request = { currency: "USD", projectId: "Repo" };
+  try {
+    ledger.importFiles({
+      sessions: [a, b, child, alias, alias2, unmapped, lower],
+      projectMappings: [
+        mapping(a),
+        mapping(child),
+        mapping(alias),
+        mapping(lower, "repo"),
+      ],
+    });
+    const assertMembership = () =>
+      assert.deepEqual(
+        ledger.costReport(request).coverage,
+        ledger.runtimeReport({ projectId: "Repo" }).coverage,
+      );
+    assertMembership();
+    assert.equal(
+      ledger.costReport(request).coverage.excludedByCertainty[
+        "lineage-unresolved"
+      ],
+      2,
+    );
+    ledger.importFiles({ sessions: [parent], projectMappings: [mapping(b)] });
+    for (const model of ["fixture", "zero"])
+      for (const category of ["input", "output", "cacheRead", "cacheWrite"])
+        ledger.addManualPrice({
+          ...manualPrice,
+          model,
+          category,
+          ratePerMillion: model === "zero" ? "0" : "999999999999.999999",
+        });
+    const state = () =>
+      [
+        "config",
+        "sources",
+        "entries",
+        "tasks",
+        "imports",
+        "project_mappings",
+        "manual_prices",
+        "manual_estimates",
+        "imported_estimates",
+      ].map((table) => ledger.db.prepare(`SELECT * FROM ${table}`).all());
+    const before = state();
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    const global = ledger.costReport({ currency: "USD" });
+    const selected = ledger.costReport(request);
+    assert.equal(selected.coverage.includedEntries, 5);
+    assert.equal(selected.coverage.excludedEntries, 3);
+    assertMembership();
+    assert.deepEqual(selected.coverage.excludedByCertainty, {
+      "nested-unknown": 1,
+      copied: 1,
+      "lineage-unresolved": 1,
+    });
+    const joint = selected.groups.find((g) => g.model === "fixture");
+    assert.equal(joint.entries, 3);
+    assert.deepEqual(
+      joint.quotes.map((q) => q.session),
+      ["a", "a", "b"],
+    );
+    assert.equal(
+      joint.quotes[0].quote.total,
+      "9007199254740990990992.800745259009",
+    );
+    assert.equal(joint.total, "18014398509482000981985.601490517999");
+    assert.equal(
+      selected.groups.find((g) => g.model === "zero").total,
+      "0.000000000000",
+    );
+    const missing = selected.groups.find((g) => g.model === "missing");
+    assert.equal(missing.total, null);
+    assert.equal(missing.quotes[0].quote.coverage.missingPrices.length, 4);
+    assert.equal(
+      ledger.costReport({ currency: "USD", projectId: "repo" }).coverage
+        .includedEntries,
+      1,
+    );
+    assert.deepEqual(
+      ledger.costReport({ currency: "JPY", projectId: "unknown" }),
+      {
+        provenance: "imported-own-manual-cost-report",
+        currency: "JPY",
+        groups: [],
+        coverage: {
+          includedEntries: 0,
+          excludedEntries: 0,
+          excludedByCertainty: {},
+        },
+      },
+    );
+    assert.deepEqual(ledger.costReport({ currency: "USD" }), global);
+    assert.deepEqual(state(), before);
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    selected.groups[0].quotes[0].observation.usage.input = 0;
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.equal(
+      ledger.costReport(request).groups.find((g) => g.model === "fixture")
+        .total,
+      joint.total,
+    );
+    ledger.importFiles({ projectMappings: [mapping(alias2)] });
+    assertMembership();
+    assert.deepEqual(ledger.costReport(request).coverage, selected.coverage);
+    const alias3 = f.file("alias3.jsonl", [header("alias")]);
+    ledger.importFiles({
+      sessions: [alias3],
+      projectMappings: [mapping(alias3, "Other")],
+    });
+    assertMembership();
+    assert.deepEqual(ledger.costReport(request).coverage, selected.coverage);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("costReport project membership and tariffs share a snapshot; missing table and recovery", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const other = openLedger(f.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const path = f.file("s.jsonl", [header("s"), message("a")]);
+  const request = { currency: "USD", projectId: "Repo" };
+  try {
+    ledger.importFiles({
+      sessions: [path],
+      projectMappings: [{ sessionPath: path, projectId: "Repo" }],
+    });
+    const before = ledger.costReport(request);
+    let fired = false;
+    ledger.db.prepare = (sql) => {
+      if (sql === "SELECT * FROM entries" && !fired) {
+        fired = true;
+        other.importFiles({
+          sessions: [f.file("alias.jsonl", [header("s")])],
+          tasks: [f.task("t", path, "late")],
+        });
+        for (const category of ["input", "output", "cacheRead", "cacheWrite"])
+          other.addManualPrice({ ...manualPrice, category });
+      }
+      return prepare(sql);
+    };
+    assert.deepEqual(ledger.costReport(request), before);
+    assert.equal(fired, true);
+    assert.equal(ledger.costReport(request).coverage.includedEntries, 0);
+    ledger.db.prepare = () => {
+      throw new Error("PRIVATE_SENTINEL");
+    };
+    assert.throws(
+      () => ledger.costReport(request),
+      /^Error: Cost report operation failed$/,
+    );
+    ledger.db.prepare = prepare;
+    ledger.db.exec("DROP TABLE project_mappings");
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    assert.deepEqual(ledger.costReport(request).groups, []);
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    assert.equal(
+      ledger.db
+        .prepare("SELECT name FROM sqlite_schema WHERE name='project_mappings'")
+        .get(),
+      undefined,
+    );
+  } finally {
+    ledger.db.prepare = prepare;
+    other.close();
+    ledger.close();
+  }
+});
+
 test("runtimeReport project strict own keys and sanitized validation before SQL", () => {
   const f = fixture();
   const ledger = openLedger(f.db);

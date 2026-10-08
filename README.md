@@ -17,8 +17,10 @@ session selection is delivered in PR #34 (main `098a119`, commit `ad18abd`).
 Interactive filtering admission A is delivered in PR #35; B is delivered in
 PR #36 (main `52f33ed`, commit `1c64a66`). Project identity is delivered in
 PR #37; runtime project filtering API is delivered in PR #39 (main `86a283d`,
-merged `d4d86a7`). CLI project filtering is the current implementation candidate,
-not reviewed or delivered. Real-session validation remains pending;
+merged `d4d86a7`). CLI project filtering is delivered in PR #40 (`8203814`),
+with the PR #41 refactor (`ee3d657`) integrated on main `10043b5`.
+Cost project filtering API is the current implementation candidate.
+Real-session validation remains pending;
 review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
@@ -220,7 +222,7 @@ This declares grouping, **not verified Git membership**. Legacy task/workspace
 `attribution.project`, accounting and report shapes are unchanged. No CLI/UI,
 automatic Git discovery, session-cwd inference or new dependencies are added.
 
-### Runtime project filter (API delivered PR #39; CLI candidate)
+### Runtime project filter (API delivered PR #39; CLI delivered PR #40)
 
 ```js
 ledger.runtimeReport({ projectId: 'Repo_1' });
@@ -242,8 +244,8 @@ views retain their shapes; missing amounts remain missing, not zero.
 
 No writes, rebinding, task-project/cwd/Git inference or per-entry mapping lookup.
 Global/session behavior and the readonly allowlist remain unchanged: the filter
-is on the writable-ledger API; the CLI candidate below delegates to it.
-Dashboard/costs/evolution project filters are not added.
+is on the writable-ledger API; the delivered CLI below delegates to it.
+Dashboard/evolution project filters are not added; cost API selection is described below.
 
 ## Accounting and coverage
 
@@ -401,7 +403,7 @@ cannot be selected through this CLI. `costs` still rejects `--session`.
 No dashboard filter, repository/worktree mapping, schema, pricing change or
 real-session authorization is added. CLI delivered in PR #30 (main `63bdcdb`).
 
-The current CLI candidate accepts one `report --project ID`, mutually exclusive
+The CLI delivered in PR #40 accepts one `report --project ID`, mutually exclusive
 with `--session`. ID is literal case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`;
 no trimming, normalization or inference. Duplicate, missing, empty, invalid IDs
 and both selectors (in either order) fail before storage opens, without echoing
@@ -445,6 +447,22 @@ inference or conversion. The API delivered in PR #31 additionally accepts
 Session must be nonempty and at most 512 UTF-16 code units; no trim/case folding.
 Extra own keys (including symbols/nonenumerables) and invalid values fail before
 SQL: `Invalid cost report`. Omission preserves the global report.
+
+The current API candidate additionally accepts
+`ledger.costReport({ currency: 'USD', projectId: 'Repo_1' })`.
+Choose no selector, session, or projectId, never both. Project IDs are literal,
+case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`; invalid selectors and extra own keys
+(including symbols/nonenumerables) fail before SQL. Nonenumerable allowed keys
+are accepted; inherited selectors are ignored.
+Membership uses the runtime project's conservative rule: exactly one source
+locator mapped to that ID, across explicit worktree mappings. Every locator
+counts; equal/different mappings or unmapped aliases remain ambiguous.
+Full lineage classification, membership, attribution and pricing share one
+snapshot. Only selected rows enter groups, quotes and coverage; external parents
+remain evidence, never selected implicitly. Unknown projects or an absent optional
+mapping table return the existing empty shape with requested currency, without
+repair or writes. Exact complete-or-null amounts and known zero remain unchanged.
+No CLI/UI, dashboardReport or tokenEvolution project selection is added.
 
 Classification retains the full imported lineage snapshot, then selects rows
 before counting coverage, exclusions, grouping or quoting. External parents
