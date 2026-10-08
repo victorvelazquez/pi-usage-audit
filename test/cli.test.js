@@ -228,6 +228,141 @@ test("CLI report session matches API, isolates coverage and preserves literal ID
   assert.equal(existsSync(join(f.home, ".local")), false);
 });
 
+test("CLI report project validates selectors before storage without leaking IDs", () => {
+  const f = fixture();
+  for (const flags of [
+    ["--project"],
+    ["--project", ""],
+    ["--project", "PRIVATE_SENTINEL", "--project", "other"],
+    ["--project", "x".repeat(65)],
+    ["--project", " Repo_1"],
+    ["--project", "Repo_1 "],
+    ["--project", "Repo.1"],
+    ["--project", "é"],
+    ["--project", "Repo_1\n"],
+    ["--project", "--literal"],
+    ["--project=Repo_1"],
+    ["--project", "PRIVATE_SENTINEL", "--session", "s"],
+    ["--session", "s", "--project", "PRIVATE_SENTINEL"],
+    ["--help", "--project", "bad/id"],
+  ]) {
+    const result = f.run("report", "--db", f.db, ...flags);
+    assert.equal(result.status, 2, JSON.stringify(flags));
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, "Invalid arguments. Use --help.\n");
+    assert.equal(existsSync(join(f.dir, "db")), false);
+  }
+  for (const command of ["import", "costs"]) {
+    const result = f.run(command, "--db", f.db, "--project", "Repo_1");
+    assert.equal(result.status, 2);
+    assert.equal(existsSync(join(f.dir, "db")), false);
+  }
+  const help = f.run("report", "--help");
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /--project id/);
+  assert.match(help.stdout, /ASCII.*1.*64/);
+  assert.match(help.stdout, /mutually exclusive/);
+  const missing = f.run("report", "--db", f.db, "--project", "Repo_1");
+  assert.equal(missing.status, 1);
+  assert.equal(missing.stderr, "Report failed. Check database access.\n");
+  assert.equal(existsSync(join(f.dir, "db")), false);
+  assert.equal(existsSync(join(f.home, ".local")), false);
+});
+
+test("CLI report project delegates literal selection across synthetic worktrees", () => {
+  const f = fixture();
+  const ids = ["Repo_1", "repo_1", "Z".repeat(64), "_"];
+  const sources = [
+    ["worktree-a", "a", ids[0]],
+    ["worktree-b", "b", ids[0]],
+    ["case", "case", ids[1]],
+    ["limit", "limit", ids[2]],
+    ["minimum", "minimum", ids[3]],
+    ["unmapped", "unmapped", null],
+    ["alias-a", "ambiguous", ids[0]],
+    ["alias-b", "ambiguous", ids[0]],
+    ["external", "parent", ids[1]],
+  ];
+  const paths = sources.map(([name, id], index) => {
+    const row = message(id === "parent" ? "copy" : "one");
+    row.message.model = `fixture-${index}`;
+    if (index === 0) row.message.usage.cost = { total: 0 };
+    return f.file(`${name}.jsonl`, [header(id), row]);
+  });
+  const copied = message("copy");
+  copied.message.model = "fixture-8";
+  const child = f.file("child.jsonl", [
+    header("child", { parentSession: paths[8] }),
+    copied,
+    message("unresolved"),
+  ]);
+  const ledger = openLedger(f.db);
+  try {
+    ledger.importFiles({
+      sessions: [...paths, child],
+      projectMappings: [
+        ...sources.flatMap(([, , projectId], index) =>
+          projectId ? [{ sessionPath: paths[index], projectId }] : [],
+        ),
+        { sessionPath: child, projectId: ids[0] },
+      ],
+    });
+  } finally {
+    ledger.close();
+  }
+  const reopened = openLedger(f.db);
+  try {
+    for (const projectId of [...ids, "unknown"]) {
+      const actual = json(
+        f.run("report", "--db", f.db, "--project", projectId),
+      );
+      assert.deepEqual(actual, reopened.runtimeReport({ projectId }));
+      assert.equal(
+        actual.coverage.includedEntries,
+        projectId === ids[0] || projectId === ids[1]
+          ? 2
+          : projectId === "unknown"
+            ? 0
+            : 1,
+      );
+      assert.equal(actual.runtime.total, null);
+      assert.equal(actual.runtime.currency, null);
+    }
+    const selected = json(f.run("report", "--db", f.db, "--project", ids[0]));
+    assert.deepEqual(selected.coverage.excludedByCertainty, {
+      copied: 1,
+      "lineage-unresolved": 1,
+    });
+    assert.equal(selected.runtime.coverage.recordedEntries, 1);
+    assert.equal(selected.runtime.coverage.missingEntries, 1);
+    assert.equal(selected.runtime.observations[0].amount, 0);
+    assert.deepEqual(
+      json(f.run("report", "--db", f.db)),
+      reopened.runtimeReport({}),
+    );
+    assert.deepEqual(
+      json(f.run("report", "--db", f.db, "--session", "unmapped")),
+      reopened.runtimeReport({ session: "unmapped" }),
+    );
+  } finally {
+    reopened.close();
+  }
+  const corrupt = f.file("PRIVATE_SENTINEL.sqlite", [{ invalid: true }]);
+  const failed = f.run(
+    "report",
+    "--db",
+    corrupt,
+    "--project",
+    "PRIVATE_SENTINEL",
+  );
+  assert.equal(failed.status, 1);
+  assert.equal(failed.stdout, "");
+  assert.match(failed.stderr, /^Report failed\. Check database access\.\n/);
+  assert.equal(failed.stderr.includes("PRIVATE_SENTINEL"), false);
+  assert.equal(failed.stderr.includes(f.dir), false);
+  assert.equal(existsSync(join(f.home, ".local")), false);
+});
+
 test("CLI report session retains external parent classification before selection", () => {
   const f = fixture();
   const parent = f.file("parent.jsonl", [header("parent"), message("copy")]);

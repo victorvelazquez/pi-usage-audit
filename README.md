@@ -15,8 +15,10 @@ PR #32 (main `b537af8`, commit `b3f9aa1`). The composite dashboard session filte
 is delivered in PR #33 (main `02aaa49`, commit `fab58d5`). Startup dashboard
 session selection is delivered in PR #34 (main `098a119`, commit `ad18abd`).
 Interactive filtering admission A is delivered in PR #35; B is delivered in
-PR #36 (main `52f33ed`, commit `1c64a66`). Project identity foundation is the
-current API-only unit, delivery pending. Real-session validation remains pending;
+PR #36 (main `52f33ed`, commit `1c64a66`). Project identity is delivered in
+PR #37; runtime project filtering API is delivered in PR #39 (main `86a283d`,
+merged `d4d86a7`). CLI project filtering is the current implementation candidate,
+not reviewed or delivered. Real-session validation remains pending;
 review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
@@ -218,7 +220,7 @@ This declares grouping, **not verified Git membership**. Legacy task/workspace
 `attribution.project`, accounting and report shapes are unchanged. No CLI/UI,
 automatic Git discovery, session-cwd inference or new dependencies are added.
 
-### Runtime project filter (API candidate; delivery/review pending)
+### Runtime project filter (API delivered PR #39; CLI candidate)
 
 ```js
 ledger.runtimeReport({ projectId: 'Repo_1' });
@@ -240,7 +242,8 @@ views retain their shapes; missing amounts remain missing, not zero.
 
 No writes, rebinding, task-project/cwd/Git inference or per-entry mapping lookup.
 Global/session behavior and the readonly allowlist remain unchanged: the filter
-is on the writable-ledger API only, not CLI/dashboard/costs/evolution.
+is on the writable-ledger API; the CLI candidate below delegates to it.
+Dashboard/costs/evolution project filters are not added.
 
 ## Accounting and coverage
 
@@ -370,6 +373,7 @@ Historical rollback surface for this detail unit: `src/dashboard-report.js`,
 ```sh
 node src/cli.js report --db /explicit/existing.sqlite
 node src/cli.js report --db /explicit/existing.sqlite --session 'literal-id'
+node src/cli.js report --db /explicit/existing.sqlite --project Repo_1
 node src/cli.js report --help
 ```
 
@@ -396,6 +400,19 @@ rejects values starting with `--` and does not support `--flag=value`, so such I
 cannot be selected through this CLI. `costs` still rejects `--session`.
 No dashboard filter, repository/worktree mapping, schema, pricing change or
 real-session authorization is added. CLI delivered in PR #30 (main `63bdcdb`).
+
+The current CLI candidate accepts one `report --project ID`, mutually exclusive
+with `--session`. ID is literal case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`;
+no trimming, normalization or inference. Duplicate, missing, empty, invalid IDs
+and both selectors (in either order) fail before storage opens, without echoing
+selectors. Existing rejection of `--` values and equals syntax also applies.
+Only `report` accepts the flag: import and costs remain unchanged. It delegates
+`{ projectId: ID }` unchanged to the delivered API, not a JSON post-filter.
+Unknown projects return the existing empty shape. Explicit mappings may group
+synthetic worktrees; unmapped/multisource sessions stay excluded, and external
+parents retain lineage evidence. No CLI mapping writer or Git discovery is added.
+The existing writable opener/WAL caveat below remains applicable.
+
 Historical API #29 writer evidence: suite 100/100; native review
 `review-ac9fb5a8946953ce` approved and acknowledged before delivery. That evidence
 does not review the current startup dashboard session-selector candidate.

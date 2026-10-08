@@ -1,10 +1,12 @@
 const help = `Usage: node src/cli.js import [--db path] --session path [--session path ...]
        node src/cli.js import [--db path] --task path [--task path ...]
-       node src/cli.js report --db existing.sqlite [--session id]
+       node src/cli.js report --db existing.sqlite [--session id] [--project id]
        node src/cli.js costs --db existing.sqlite --currency USD
 Import sessions and tasks may be combined; file flags are repeatable.
 Only explicitly selected files are read.
 Report --session: one literal nonempty ID, at most 512 UTF-16 code units.
+Report --project: one literal case-sensitive ASCII ID [A-Za-z0-9_-], 1 to 64 characters.
+Report --session and --project are mutually exclusive.
 Values starting with -- are rejected; --flag=value syntax is not supported.
 Default database: ~/.local/state/pi-usage-audit/usage.sqlite
 --help: show help without opening storage.
@@ -25,7 +27,7 @@ function parse(args) {
         options.command === "costs"
           ? ["--db", "--currency"]
           : options.command === "report"
-            ? ["--db", "--session"]
+            ? ["--db", "--session", "--project"]
             : ["--db", "--session", "--task"]
       ).includes(flag)
     )
@@ -44,9 +46,22 @@ function parse(args) {
         throw new Error("arguments");
       options.currency = value;
     } else if (options.command === "report" && flag === "--session") {
-      if (options.session !== undefined || value.length > 512)
+      if (
+        options.session !== undefined ||
+        options.projectId !== undefined ||
+        value.length > 512
+      )
         throw new Error("arguments");
       options.session = value;
+    } else if (flag === "--project") {
+      if (
+        options.projectId !== undefined ||
+        options.session !== undefined ||
+        value.length > 64 ||
+        /[^A-Za-z0-9_-]/.test(value)
+      )
+        throw new Error("arguments");
+      options.projectId = value;
     } else options[flag === "--session" ? "sessions" : "tasks"].push(value);
   }
   if (
@@ -81,7 +96,11 @@ else if (options) {
       console.log(
         JSON.stringify(
           ledger.runtimeReport(
-            options.session === undefined ? {} : { session: options.session },
+            options.projectId !== undefined
+              ? { projectId: options.projectId }
+              : options.session !== undefined
+                ? { session: options.session }
+                : {},
           ),
         ),
       );
