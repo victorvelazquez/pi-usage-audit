@@ -96,11 +96,11 @@ else if (options) {
       console.log(
         JSON.stringify(
           ledger.runtimeReport(
-            options.projectId !== undefined
-              ? { projectId: options.projectId }
-              : options.session !== undefined
-                ? { session: options.session }
-                : {},
+            options.projectId === undefined
+              ? options.session === undefined
+                ? {}
+                : { session: options.session }
+              : { projectId: options.projectId },
           ),
         ),
       );
