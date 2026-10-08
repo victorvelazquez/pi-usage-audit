@@ -61,6 +61,273 @@ function fixture() {
   return { dir, db, file, task };
 }
 
+test("project identity durable explicit bindings, aliases and privacy", () => {
+  const f = fixture();
+  const a = f.file("PRIVATE_PATH-a.jsonl", [
+    header("a", { cwd: "/nonexistent/PRIVATE_CWD/worktree-a" }),
+    message("1"),
+  ]);
+  const b = f.file("b.jsonl", [
+    header("b", { cwd: "/nonexistent/PRIVATE_CWD/worktree-b" }),
+    message("1"),
+  ]);
+  let ledger = openLedger(f.db);
+  const mapping = (sessionPath, projectId = "Repo") => ({
+    sessionPath,
+    projectId,
+  });
+  const result = (projectId, reason = null) => ({
+    projectId,
+    provenance: "caller-explicit",
+    reason,
+  });
+  try {
+    ledger.importFiles({ projectMappings: [mapping(a)] });
+    assert.deepEqual(
+      ledger.projectIdentity({ session: "a" }),
+      result(null, "session-not-found"),
+    );
+    ledger.importFiles({ sessions: [a, b] });
+    assert.deepEqual(ledger.projectIdentity({ session: "a" }), result("Repo"));
+    assert.deepEqual(
+      ledger.projectIdentity({ session: "b" }),
+      result(null, "unmapped"),
+    );
+    ledger.importFiles({
+      projectMappings: [
+        mapping(b),
+        mapping(join(f.dir, ".", "PRIVATE_PATH-a.jsonl")),
+      ],
+    });
+    assert.equal(
+      ledger.db.prepare("SELECT count(*) AS n FROM project_mappings").get().n,
+      2,
+    );
+    const writer = openLedger(f.db);
+    const prepare = ledger.db.prepare.bind(ledger.db);
+    try {
+      ledger.db.prepare = (sql) => {
+        if (sql.startsWith("SELECT path FROM sources")) {
+          const statement = prepare(sql);
+          return {
+            all: (...args) => {
+              const rows = statement.all(...args);
+              writer.importFiles({
+                sessions: [f.file("b-copy.jsonl", [header("b")])],
+              });
+              return rows;
+            },
+          };
+        }
+        return prepare(sql);
+      };
+      assert.deepEqual(
+        ledger.projectIdentity({ session: "b" }),
+        result("Repo"),
+      );
+    } finally {
+      ledger.db.prepare = prepare;
+      writer.close();
+    }
+    assert.equal(
+      ledger.projectIdentity({ session: "b" }).reason,
+      "session-ambiguous",
+    );
+    const accounting = ledger.accounting();
+    assert.equal(ledger.attribution("a").project, "unknown");
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.deepEqual(ledger.accounting(), accounting);
+    assert.equal(
+      ledger.projectIdentity({ session: "b" }).reason,
+      "session-ambiguous",
+    );
+    const c = f.file("c.jsonl", [header(" c "), message("1")]);
+    ledger.importFiles({
+      sessions: [c],
+      projectMappings: [mapping(c, "repo")],
+    });
+    assert.deepEqual(
+      ledger.projectIdentity({ session: " c " }),
+      result("repo"),
+    );
+    assert.deepEqual(
+      ledger.projectIdentity({ session: "c" }),
+      result(null, "session-not-found"),
+    );
+    const copy = f.file("copy.jsonl", [header("a"), message("1")]);
+    ledger.importFiles({ sessions: [copy], projectMappings: [mapping(copy)] });
+    assert.deepEqual(
+      ledger.projectIdentity({ session: "a" }),
+      result(null, "session-ambiguous"),
+    );
+    const output = JSON.stringify([
+      ledger.projectIdentity({ session: "a" }),
+      ledger.entries(),
+    ]);
+    for (const sentinel of [
+      "PRIVATE_PATH",
+      "PRIVATE_CWD",
+      "PRIVATE_SENTINEL",
+    ]) {
+      assert.equal(output.includes(sentinel), false);
+      for (const suffix of ["", "-wal"])
+        assert.equal(readFileSync(f.db + suffix).includes(sentinel), false);
+    }
+  } finally {
+    ledger.close();
+  }
+});
+
+test("project identity invalid inputs precede SQL and source reads", () => {
+  const ledger = openLedger(":memory:");
+  const exec = ledger.db.exec.bind(ledger.db);
+  const prepare = ledger.db.prepare.bind(ledger.db);
+  const good = { sessionPath: "/nonexistent/mapping-only", projectId: "A_1-z" };
+  try {
+    ledger.db.exec = ledger.db.prepare = () =>
+      assert.fail("invalid reached SQL");
+    for (const projectMappings of [
+      null,
+      {},
+      "x",
+      [undefined],
+      Array(1),
+      [null],
+      [[]],
+      ...["", " padded", "a.b", "a\n", "x".repeat(65), 1].map((projectId) => [
+        { ...good, projectId },
+      ]),
+      ...["", null, 1].map((sessionPath) => [{ ...good, sessionPath }]),
+      [{ ...good, extra: 1 }],
+      [{ ...good, [Symbol()]: 1 }],
+      [Object.defineProperty({ ...good }, "hidden", { value: 1 })],
+      [Object.create(good)],
+    ])
+      assert.throws(
+        () =>
+          ledger.importFiles({ sessions: ["/unreadable"], projectMappings }),
+        /Invalid project mappings/,
+      );
+    for (const value of [
+      undefined,
+      null,
+      [],
+      {},
+      { session: "" },
+      { session: 1 },
+      { session: "x".repeat(513) },
+      { session: "😀".repeat(257) },
+      { session: "a", extra: 1 },
+      { session: "a", [Symbol()]: 1 },
+      Object.defineProperty({ session: "a" }, "hidden", { value: 1 }),
+    ])
+      assert.throws(
+        () => ledger.projectIdentity(value),
+        /Invalid project identity/,
+      );
+    ledger.db.exec = exec;
+    ledger.db.prepare = prepare;
+    ledger.importFiles({ projectMappings: [good] });
+    const request = Object.defineProperty({}, "session", {
+      value: "x".repeat(512),
+    });
+    assert.equal(ledger.projectIdentity(request).reason, "session-not-found");
+  } finally {
+    ledger.db.exec = exec;
+    ledger.db.prepare = prepare;
+    ledger.close();
+  }
+});
+
+test("project identity conflicts roll back whole imports and batches", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const a = f.file("a.jsonl", [header("a"), message("1")]);
+  const b = f.file("b.jsonl", [header("b"), message("1")]);
+  const mapping = (sessionPath, projectId) => ({ sessionPath, projectId });
+  try {
+    ledger.importFiles({ sessions: [a], projectMappings: [mapping(a, "A")] });
+    const before = [ledger.entries(), ledger.coverage(), ledger.accounting()];
+    for (const projectMappings of [
+      [mapping(b, "B"), mapping(a, "changed")],
+      [mapping(b, "B"), mapping(b, "b")],
+    ]) {
+      assert.throws(
+        () => ledger.importFiles({ sessions: [b], projectMappings }),
+        /Project mapping conflict/,
+      );
+      assert.deepEqual(
+        [ledger.entries(), ledger.coverage(), ledger.accounting()],
+        before,
+      );
+      assert.equal(
+        ledger.db.prepare("SELECT count(*) AS n FROM project_mappings").get().n,
+        1,
+      );
+    }
+    assert.throws(
+      () =>
+        ledger.importFiles({
+          sessions: ["/unreadable"],
+          projectMappings: [mapping(b, "B")],
+        }),
+      /Explicit source could not be read/,
+    );
+    assert.equal(
+      ledger.db.prepare("SELECT count(*) AS n FROM project_mappings").get().n,
+      1,
+    );
+    ledger.importFiles({ projectMappings: [mapping(a, "A"), mapping(a, "A")] });
+    assert.equal(ledger.projectIdentity({ session: "a" }).projectId, "A");
+  } finally {
+    ledger.close();
+  }
+});
+
+test("project identity readonly old schema and optional table validation", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  ledger.importFiles({
+    sessions: [f.file("a.jsonl", [header("a"), message("1")])],
+  });
+  const expected = ledger.runtimeReport({});
+  ledger.db.exec("DROP TABLE project_mappings");
+  ledger.close();
+  const reader = ledgerModule.openReadonlyLedger(f.db);
+  try {
+    assert.equal(reader.projectIdentity({ session: "a" }).reason, "unmapped");
+    assert.equal(
+      reader.projectIdentity({ session: "absent" }).reason,
+      "session-not-found",
+    );
+    assert.deepEqual(
+      reader.dashboardReport({ currency: "USD" }).runtime,
+      expected,
+    );
+  } finally {
+    reader.close();
+  }
+  const db = new DatabaseSync(f.db);
+  try {
+    assert.equal(
+      db
+        .prepare("SELECT name FROM sqlite_schema WHERE name='project_mappings'")
+        .get(),
+      undefined,
+    );
+    db.exec(
+      "CREATE TABLE project_mappings(path TEXT PRIMARY KEY, projectId TEXT)",
+    );
+    assert.throws(
+      () => ledgerModule.openReadonlyLedger(f.db),
+      /Readonly ledger open failed/,
+    );
+  } finally {
+    db.close();
+  }
+});
+
 test("tokenEvolution strict requests, detached results and recovery", () => {
   const ledger = openLedger(":memory:");
   const exec = ledger.db.exec.bind(ledger.db);
@@ -565,6 +832,7 @@ test("openExistingLedger encodes paths, preserves storage and persists atomic ta
         assert.deepEqual(Reflect.ownKeys(reader).sort(), [
           "close",
           "dashboardReport",
+          "projectIdentity",
         ]);
         const costs = reader.dashboardReport({ currency: "USD" }).costs;
         assert.deepEqual(
@@ -734,6 +1002,7 @@ test("readonly dashboard allowlist, strict validation, preservation and recovery
     assert.deepEqual(Reflect.ownKeys(reader).sort(), [
       "close",
       "dashboardReport",
+      "projectIdentity",
     ]);
     assert.throws(
       () => exec.call(readonlyDb, "DELETE FROM entries"),

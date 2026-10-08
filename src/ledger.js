@@ -280,6 +280,39 @@ function validateManual(value, keys, error = "Invalid manual price") {
   return { ...value, ratePerMillion: `${whole}.${fraction.padEnd(6, "0")}` };
 }
 
+function validateProjectMappings(values) {
+  const invalid = () => {
+    throw new Error("Invalid project mappings");
+  };
+  if (!Array.isArray(values)) invalid();
+  if (Reflect.ownKeys(values).length !== values.length + 1) invalid();
+  const mappings = new Map();
+  for (let index = 0; index < values.length; index++) {
+    if (!Object.hasOwn(values, index)) invalid();
+    const value = values[index];
+    if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
+    const keys = Reflect.ownKeys(value);
+    if (
+      keys.length !== 2 ||
+      !keys.includes("sessionPath") ||
+      !keys.includes("projectId")
+    )
+      invalid();
+    const { sessionPath, projectId } = value;
+    if (typeof sessionPath !== "string" || !sessionPath) invalid();
+    if (
+      typeof projectId !== "string" ||
+      projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !== projectId
+    )
+      invalid();
+    const key = pathKey(sessionPath);
+    if (mappings.has(key) && mappings.get(key) !== projectId)
+      throw new Error("Project mapping conflict");
+    mappings.set(key, projectId);
+  }
+  return mappings;
+}
+
 export function validateManualPrice(value) {
   return validateManual(value, manualKeys);
 }
@@ -299,6 +332,8 @@ export function openLedger(path = defaultDatabasePath()) {
       CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, path TEXT NOT NULL,
         agent TEXT, project TEXT, feature TEXT, parent TEXT);
       CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY, report TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS project_mappings (
+        path TEXT PRIMARY KEY, projectId TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS manual_prices (
         provider TEXT NOT NULL, model TEXT NOT NULL, category TEXT NOT NULL,
         currency TEXT NOT NULL, effectiveFrom TEXT NOT NULL, ratePerMillion TEXT NOT NULL,
@@ -379,6 +414,15 @@ function openValidatedLedger(path, writable) {
       ["manual_estimates", "id request estimate", "TEXT TEXT TEXT", "id"],
       ["imported_estimates", "id request estimate", "TEXT TEXT TEXT", "id"],
     ];
+    const mappingTable = db
+      .prepare("SELECT type FROM sqlite_schema WHERE name='project_mappings'")
+      .get();
+    if (mappingTable) {
+      schema.push(["project_mappings", "path projectId", "TEXT TEXT", "path"]);
+      const columns = db.prepare("PRAGMA table_info(project_mappings)").all();
+      if (!columns.find((column) => column.name === "projectId")?.notnull)
+        throw new Error();
+    }
     for (const [table, names, types, keys] of schema) {
       const columns = db.prepare(`PRAGMA table_info(${table})`).all();
       const tableRow = db
@@ -416,7 +460,11 @@ function openValidatedLedger(path, writable) {
           manualPrices: api.manualPrices,
           close: api.close,
         }
-      : { dashboardReport: api.dashboardReport, close: api.close };
+      : {
+          dashboardReport: api.dashboardReport,
+          projectIdentity: api.projectIdentity,
+          close: api.close,
+        };
   } catch {
     try {
       db?.close();
@@ -579,6 +627,48 @@ function createLedgerApi(db, secret) {
     db,
     close: () => db.close(),
     attribution,
+    projectIdentity(value) {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Reflect.ownKeys(value).length !== 1 ||
+        !Object.hasOwn(value, "session") ||
+        !text(value.session)
+      )
+        throw new Error("Invalid project identity");
+      const session = value.session;
+      try {
+        return readTransaction(() => {
+          const sources = db
+            .prepare("SELECT path FROM sources WHERE session=?")
+            .all(session);
+          let projectId = null;
+          let reason = "unmapped";
+          if (sources.length === 0) reason = "session-not-found";
+          else if (sources.length > 1) reason = "session-ambiguous";
+          if (sources.length === 1) {
+            const table = db
+              .prepare(
+                "SELECT name FROM sqlite_schema WHERE name='project_mappings'",
+              )
+              .get();
+            if (table) {
+              projectId =
+                db
+                  .prepare(
+                    "SELECT projectId FROM project_mappings WHERE path=?",
+                  )
+                  .get(sources[0].path)?.projectId ?? null;
+              if (projectId !== null) reason = null;
+            }
+          }
+          return { projectId, provenance: "caller-explicit", reason };
+        });
+      } catch {
+        throw new Error("Project identity operation failed");
+      }
+    },
     dashboardReport: (value) => {
       if (
         !value ||
@@ -1534,7 +1624,8 @@ function createLedgerApi(db, secret) {
         .prepare("SELECT report FROM imports ORDER BY id")
         .all()
         .map((row) => storedJson(row.report)),
-    importFiles({ sessions = [], tasks = [] } = {}) {
+    importFiles({ sessions = [], tasks = [], projectMappings = [] } = {}) {
+      const mappings = validateProjectMappings(projectMappings);
       const report = {
         malformed: 0,
         incomplete: 0,
@@ -1547,6 +1638,17 @@ function createLedgerApi(db, secret) {
       };
       db.exec("BEGIN IMMEDIATE");
       try {
+        for (const [path, projectId] of mappings) {
+          const old = db
+            .prepare("SELECT projectId FROM project_mappings WHERE path=?")
+            .get(path);
+          if (old && old.projectId !== projectId)
+            throw new Error("Project mapping conflict");
+          db.prepare("INSERT OR IGNORE INTO project_mappings VALUES (?,?)").run(
+            path,
+            projectId,
+          );
+        }
         for (const path of sessions) {
           const lines = read(path).split("\n");
           let session;

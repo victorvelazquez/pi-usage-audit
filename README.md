@@ -14,9 +14,10 @@ commit `3cefedb`). The cost API session filter is delivered in PR #31 (main
 PR #32 (main `b537af8`, commit `b3f9aa1`). The composite dashboard session filter
 is delivered in PR #33 (main `02aaa49`, commit `fab58d5`). Startup dashboard
 session selection is delivered in PR #34 (main `098a119`, commit `ad18abd`).
-Interactive filtering admission unit A is delivered in PR #35. Full unit B
-(route/UI activation) is an authorized candidate, not reviewed or delivered. Real-session validation
-remains pending; review and delivery remain parent-owned.
+Interactive filtering admission A is delivered in PR #35; B is delivered in
+PR #36 (main `52f33ed`, commit `1c64a66`). Project identity foundation is the
+current API-only unit, delivery pending. Real-session validation remains pending;
+review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
 
@@ -80,7 +81,7 @@ user-provided metadata: do not store secrets in them. Validation uses synthetic
 bases only; real-session validation remains pending. The opt-in form's synthetic
 actual-browser verification completed in Edge 154 before PR #28 delivery.
 
-### Interactive session filtering — unit B candidate (not reviewed/delivered)
+### Interactive session filtering — unit B delivered PR #36
 
 Internal `parseSessionFilterRequest` admits POST `/session-filter` before storage: JSON `{}` selects global scope; the sole own `session` key must
 contain literal nonempty text of ≤512 UTF-16 units. Extra keys are rejected.
@@ -189,6 +190,34 @@ try {
 
 Pass a database filename to `openLedger(filename)` to override storage. Keep it outside your repository. No directory discovery or parent-file auto-reading occurs. Relative import paths use the caller's working directory; relative `task.sessionPath` and header `parentSession` use their containing file's directory.
 
+## Declared project identity (API only; delivery pending)
+
+```js
+ledger.importFiles({
+  projectMappings: [{ sessionPath: '/selected/session.jsonl', projectId: 'Repo_1' }],
+});
+ledger.projectIdentity({ session: 'literal-session-id' });
+```
+
+Mappings are optional (`[]`); mapping-only imports never open/stat/discover the
+locator. Paths use the same normalized hash as imported sources, relative to the
+caller working directory. Dense arrays contain objects with exactly two own keys;
+symbol/nonenumerable extras are rejected before SQL or source reads. IDs are
+caller-explicit, case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`, without trimming.
+A path binding is immutable: identical repeats are idempotent; a changed ID or
+conflicting batch rolls back mappings, entries and the entire import report.
+Choose a non-sensitive ID: it is persisted verbatim, not hashed.
+
+The reader requires exactly one own `session` key, literal nonempty text ≤512
+UTF-16 units. One snapshot returns `{projectId, provenance: 'caller-explicit',
+reason}`: mapped ID/null reason, or null ID with `session-not-found`, `unmapped`
+or `session-ambiguous`. Multiple source files are ambiguous even with equal IDs.
+Readonly exposes this reader; older databases without the optional table remain
+unmapped without repair. Writable initialization adds `project_mappings`.
+This declares grouping, **not verified Git membership**. Legacy task/workspace
+`attribution.project`, accounting and report shapes are unchanged. No CLI/UI,
+automatic Git discovery, session-cwd inference or new dependencies are added.
+
 ## Accounting and coverage
 
 - Version 2/3 sessions: finalized assistant usage, standalone `usage` (including unknown kinds), compaction and branch-summary usage. Effective provider/model comes only from the usage-bearing record; missing values remain null. Streaming/pending messages are excluded.
@@ -270,7 +299,7 @@ API A adds `evolution` to `dashboardReport`'s shared runtime/cost transaction.
 Readonly still exposes only `dashboardReport`/`close`, not independent `tokenEvolution`.
 This filter is delivered in PR #32 (`b537af8`, commit `b3f9aa1`). Composite
 filtering is delivered in PR #33 (`02aaa49`, commit `fab58d5`). Startup CLI/API
-selection for the dashboard is the current candidate, not an interactive UI filter.
+selection is delivered in PR #34; interactive filtering is delivered in PR #36.
 
 ### Daily evolution dashboard (delivered PR #21)
 
@@ -383,8 +412,8 @@ empty shape with the requested currency. Results remain detached and one-snapsho
 consistent; prices, complete-or-null totals and known zeros are unchanged.
 This cost API filter is delivered in PR #31 (`00d82b1`, commit `df78f9e`).
 CLI `costs` still rejects `--session`; dashboard behavior is unchanged.
-Evolution API filtering is delivered in PR #32. Coherent composite filtering is
-the current candidate; UI is proposed next, without authorization. No real sessions
+Evolution API filtering is delivered in PR #32, composite filtering in PR #33
+and interactive UI in PR #36. No real sessions
 or capture.
 
 Groups use literal joint agent/provider/model identities, binary UTF-8 order,
