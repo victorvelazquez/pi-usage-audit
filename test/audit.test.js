@@ -1704,6 +1704,354 @@ test("costReport single snapshot includes attribution and tariff selection", () 
   }
 });
 
+test("runtimeReport project strict own keys and sanitized validation before SQL", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const exec = ledger.db.exec;
+  try {
+    ledger.db.exec = () => assert.fail("invalid reached SQL");
+    for (const value of [
+      1,
+      "Repo",
+      true,
+      [],
+      null,
+      undefined,
+      ...[
+        "",
+        " Repo",
+        "Repo ",
+        "Répo",
+        "Repo\n",
+        "a.b",
+        "a/b",
+        "x".repeat(65),
+        null,
+        1,
+        {},
+      ].map((projectId) => ({ projectId })),
+      { projectId: "Repo", session: "s" },
+      { projectId: "Repo", extra: 1 },
+      { projectId: "Repo", [Symbol()]: 1 },
+      Object.defineProperty({ projectId: "Repo" }, "extra", { value: 1 }),
+      Object.create({ projectId: "Repo" }, { extra: { value: 1 } }),
+    ]) {
+      assert.throws(
+        () => ledger.runtimeReport(value),
+        /^Error: Invalid runtime report$/,
+      );
+    }
+    ledger.db.exec = exec;
+    const empty = ledger.runtimeReport({});
+    for (const projectId of ["Repo", "x".repeat(64), "A-z_09"])
+      assert.deepEqual(ledger.runtimeReport({ projectId }), empty);
+    assert.deepEqual(
+      ledger.runtimeReport(
+        Object.defineProperty({}, "projectId", { value: "Repo" }),
+      ),
+      empty,
+    );
+    assert.deepEqual(
+      ledger.runtimeReport(Object.create({ projectId: "Repo" })),
+      empty,
+    );
+  } finally {
+    ledger.db.exec = exec;
+    ledger.close();
+  }
+});
+
+test("runtimeReport project groups worktrees with exact views, aliases and external lineage", () => {
+  const f = fixture();
+  const huge = Number.MAX_SAFE_INTEGER - 3;
+  const use = (input, amount) => ({
+    input,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: input,
+    ...(amount === undefined ? {} : { cost: { total: amount } }),
+  });
+  const a = f.file("a.jsonl", [
+    header("a", { cwd: "/synthetic/Repo" }),
+    message("one", { usage: use(huge, 0) }),
+    message("missing", { usage: use(0) }),
+  ]);
+  const b = f.file("b.jsonl", [
+    header("b"),
+    message("two", { usage: use(huge, 1.25) }),
+  ]);
+  const outside = f.file("outside.jsonl", [header("outside"), message("copy")]);
+  const child = f.file("child.jsonl", [
+    header("child", { parentSession: outside }),
+    message("copy"),
+    message("new"),
+  ]);
+  const absent = f.file("absent.jsonl", [
+    header("absent", { parentSession: "missing.jsonl" }),
+    message("absent"),
+  ]);
+  const unmapped = f.file("unmapped.jsonl", [
+    header("unmapped"),
+    message("one"),
+  ]);
+  const lower = f.file("lower.jsonl", [header("lower"), message("one")]);
+  const aliases = ["same", "different", "unmapped-alias"].flatMap((id) =>
+    [0, 1].map((n) => f.file(`${id}-${n}.jsonl`, [header(id), message("one")])),
+  );
+  let ledger = openLedger(f.db);
+  try {
+    ledger.importFiles({
+      sessions: [a, b, outside, child, absent, unmapped, lower, ...aliases],
+      tasks: [
+        f.task("a-task", a, "worker", { project: "not-Repo" }),
+        f.task("b-task", b),
+        f.task("u-task", unmapped, "worker", { project: "Repo" }),
+      ],
+      projectMappings: [
+        a,
+        b,
+        child,
+        absent,
+        aliases[0],
+        aliases[1],
+        aliases[2],
+        aliases[4],
+      ]
+        .map((sessionPath) => ({ sessionPath, projectId: "Repo" }))
+        .concat([
+          { sessionPath: aliases[3], projectId: "Other" },
+          { sessionPath: lower, projectId: "repo" },
+        ]),
+    });
+    const before = ledger.db.prepare("SELECT * FROM entries").all();
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    ledger.projectIdentity = () =>
+      assert.fail("nested transactional public reader");
+    const report = ledger.runtimeReport({ projectId: "Repo" });
+    const total = (BigInt(huge) * 2n).toString();
+    assert.equal(report.provenance, "imported-own-runtime-report");
+    assert.deepEqual(report.agents, [
+      { agent: "worker", entries: 3, sessions: 2, totalTokens: total },
+    ]);
+    assert.deepEqual(report.models, [
+      {
+        provider: "synthetic",
+        model: "fixture",
+        entries: 3,
+        sessions: 2,
+        tokens: {
+          input: total,
+          output: "0",
+          cacheRead: "0",
+          cacheWrite: "0",
+          totalTokens: total,
+        },
+      },
+    ]);
+    assert.deepEqual(report.coverage, {
+      includedEntries: 3,
+      excludedEntries: 3,
+      excludedByCertainty: { copied: 1, "lineage-unresolved": 2 },
+    });
+    assert.deepEqual(report.runtime, {
+      provenance: "runtime-estimate",
+      currency: null,
+      total: null,
+      totalUnavailableReason: "runtime-currency-not-recorded",
+      observations: [
+        {
+          session: "a",
+          entry: "one",
+          provider: "synthetic",
+          model: "fixture",
+          agent: "worker",
+          amount: 0,
+        },
+        {
+          session: "b",
+          entry: "two",
+          provider: "synthetic",
+          model: "fixture",
+          agent: "worker",
+          amount: 1.25,
+        },
+      ],
+      coverage: {
+        recordedEntries: 2,
+        missingEntries: 1,
+        unknownCurrencyEntries: 2,
+      },
+    });
+    assert.equal(
+      ledger.runtimeReport({ projectId: "repo" }).coverage.includedEntries,
+      1,
+    );
+    assert.equal(
+      ledger.runtimeReport({ projectId: "Other" }).coverage.includedEntries,
+      0,
+    );
+    assert.deepEqual(
+      ledger.runtimeReport({ projectId: "REPO" }),
+      ledger.runtimeReport({ session: "unknown" }),
+    );
+    assert.equal(
+      ledger.runtimeReport({ session: "a" }).coverage.includedEntries,
+      2,
+    );
+    const global = ledger.runtimeReport({});
+    assert.equal(global.coverage.includedEntries, 6);
+    assert.equal(global.coverage.excludedByCertainty["session-ambiguous"], 3);
+    assert.deepEqual(ledger.db.prepare("SELECT * FROM entries").all(), before);
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    report.models[0].tokens.input = "0";
+    report.runtime.observations[0].amount = 99;
+    ledger.close();
+    ledger = openLedger(f.db);
+    assert.equal(
+      ledger.runtimeReport({ projectId: "Repo" }).models[0].tokens.input,
+      total,
+    );
+    assert.equal(
+      ledger.runtimeReport({ projectId: "Repo" }).runtime.observations[0]
+        .amount,
+      0,
+    );
+    ledger.importFiles({
+      projectMappings: [{ sessionPath: unmapped, projectId: "Repo" }],
+    });
+    assert.equal(
+      ledger.runtimeReport({ projectId: "Repo" }).coverage.includedEntries,
+      4,
+    );
+  } finally {
+    ledger.close();
+  }
+});
+
+test("runtimeReport project missing optional table is read-only and failure recovers", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const prepare = ledger.db.prepare;
+  try {
+    const path = f.file("s.jsonl", [header("s"), message("one")]);
+    ledger.importFiles({
+      sessions: [path],
+      projectMappings: [{ sessionPath: path, projectId: "Repo" }],
+    });
+    const expected = ledger.runtimeReport({ projectId: "Repo" });
+    const changes = ledger.db.prepare("SELECT total_changes() AS n").get().n;
+    for (const target of ["SELECT * FROM sources", "project_mappings"]) {
+      ledger.db.prepare = function (sql) {
+        if (sql.includes(target)) throw new Error("SYNTHETIC_PRIVATE_PATH");
+        return prepare.call(this, sql);
+      };
+      assert.throws(
+        () => ledger.runtimeReport({ projectId: "Repo" }),
+        /^Error: Runtime report operation failed$/,
+      );
+      ledger.db.prepare = prepare;
+      assert.deepEqual(ledger.runtimeReport({ projectId: "Repo" }), expected);
+    }
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    // Simulate the optional legacy schema without destructive schema commands.
+    ledger.db.prepare = function (sql) {
+      if (sql.includes("sqlite_schema") && sql.includes("project_mappings"))
+        return { get: () => undefined };
+      if (sql.includes("project_mappings"))
+        assert.fail("missing table queried");
+      return prepare.call(this, sql);
+    };
+    const bytes = readFileSync(f.db);
+    const empty = ledger.runtimeReport({ session: "unknown" });
+    assert.deepEqual(ledger.runtimeReport({ projectId: "Repo" }), empty);
+    assert.equal(ledger.runtimeReport({}).coverage.includedEntries, 1);
+    assert.deepEqual(readFileSync(f.db), bytes);
+    ledger.db.prepare = prepare;
+    assert.equal(
+      ledger.db.prepare("SELECT total_changes() AS n").get().n,
+      changes,
+    );
+    assert.deepEqual(ledger.runtimeReport({ projectId: "Repo" }), expected);
+  } finally {
+    ledger.db.prepare = prepare;
+    ledger.close();
+  }
+});
+
+test("runtimeReport project membership and full lineage share an independent-commit snapshot", () => {
+  const f = fixture();
+  const ledger = openLedger(f.db);
+  const prepare = ledger.db.prepare;
+  let writer;
+  try {
+    const parent = f.file("parent.jsonl", [header("parent"), message("copy")]);
+    const child = f.file("child.jsonl", [
+      header("child", { parentSession: parent }),
+      message("copy"),
+    ]);
+    const path = f.file("s.jsonl", [header("s"), message("own")]);
+    ledger.importFiles({
+      sessions: [parent, child, path],
+      projectMappings: [{ sessionPath: child, projectId: "Repo" }],
+      tasks: [f.task("t", path, "old")],
+    });
+    writer = openLedger(f.db);
+    const expected = ledger.runtimeReport({ projectId: "Repo" });
+    assert.deepEqual(expected.coverage, {
+      includedEntries: 0,
+      excludedEntries: 1,
+      excludedByCertainty: { copied: 1 },
+    });
+    let committed = false;
+    ledger.db.prepare = function (sql) {
+      const statement = prepare.call(this, sql);
+      if (sql === "SELECT * FROM sources" && !committed) {
+        return {
+          all: (...args) => {
+            const rows = statement.all(...args);
+            writer.db.exec("BEGIN IMMEDIATE");
+            const source = writer.db
+              .prepare("SELECT path FROM sources WHERE session='s'")
+              .get();
+            writer.db
+              .prepare(
+                "INSERT INTO project_mappings(path,projectId) VALUES (?,?)",
+              )
+              .run(source.path, "Repo");
+            writer.db.exec(`UPDATE sources SET parent='missing' WHERE session='child';
+              UPDATE tasks SET agent='new'; COMMIT`);
+            committed = true;
+            return rows;
+          },
+        };
+      }
+      return statement;
+    };
+    assert.deepEqual(ledger.runtimeReport({ projectId: "Repo" }), expected);
+    assert.equal(committed, true);
+    ledger.db.prepare = prepare;
+    const next = ledger.runtimeReport({ projectId: "Repo" });
+    assert.equal(next.agents[0].agent, "new");
+    assert.equal(next.agents[0].totalTokens, "19");
+    assert.deepEqual(next.coverage, {
+      includedEntries: 1,
+      excludedEntries: 1,
+      excludedByCertainty: { "lineage-unresolved": 1 },
+    });
+  } finally {
+    ledger.db.prepare = prepare;
+    writer?.close();
+    ledger.close();
+  }
+});
+
 test("runtimeReport strict requests, empty result and generic recovery", () => {
   const f = fixture();
   const ledger = openLedger(f.db);

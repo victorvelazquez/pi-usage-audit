@@ -190,7 +190,7 @@ try {
 
 Pass a database filename to `openLedger(filename)` to override storage. Keep it outside your repository. No directory discovery or parent-file auto-reading occurs. Relative import paths use the caller's working directory; relative `task.sessionPath` and header `parentSession` use their containing file's directory.
 
-## Declared project identity (API only; delivery pending)
+## Declared project identity (API only; delivered in PR #37)
 
 ```js
 ledger.importFiles({
@@ -217,6 +217,30 @@ unmapped without repair. Writable initialization adds `project_mappings`.
 This declares grouping, **not verified Git membership**. Legacy task/workspace
 `attribution.project`, accounting and report shapes are unchanged. No CLI/UI,
 automatic Git discovery, session-cwd inference or new dependencies are added.
+
+### Runtime project filter (API candidate; delivery/review pending)
+
+```js
+ledger.runtimeReport({ projectId: 'Repo_1' });
+```
+
+Use `{}`, `{ session: 'literal-session-id' }`, or exactly one own `projectId`
+key; session/project filters cannot be combined. Extra own keys (including
+symbols/nonenumerables), arrays, primitives and invalid IDs fail before SQL
+with `Invalid runtime report`. Project IDs follow the exact ASCII contract above.
+
+Only sessions with one source locator mapped to that ID are selected. All
+locators count before matching: equal/different mappings or an unmapped alias
+still make a multisource session ambiguous. Unmapped sessions are excluded;
+unknown IDs or a missing optional mapping table return the existing empty shape.
+Membership and complete-ledger lineage classification share one deferred read
+transaction. External parents remain evidence; grouping never promotes copied
+or unresolved entries to own. Models, agents, observations and both coverage
+views retain their shapes; missing amounts remain missing, not zero.
+
+No writes, rebinding, task-project/cwd/Git inference or per-entry mapping lookup.
+Global/session behavior and the readonly allowlist remain unchanged: the filter
+is on the writable-ledger API only, not CLI/dashboard/costs/evolution.
 
 ## Accounting and coverage
 

@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Filtro interactivo B entregado PR #36; identidad de proyecto API en curso, sin sesiones reales.**
+**Identidad API entregada PR #37; base PR #38 en main `a1fc334`; filtro runtime por proyecto candidato, sin datos reales.**
 
-- **Última tarea terminada:** filtro interactivo B, PR #36; main `52f33ed`, commit `1c64a66`.
-- **En curso:** identidad declarada de proyecto API; entrega pendiente, revisión del padre.
-- **Siguiente propuesta:** revisar esta base acotada; UI/filtros por proyecto y datos reales requieren autorización separada.
+- **Última tarea terminada:** identidad declarada API, PR #37; merge `7f52101`, commit `15bdaad`; base posterior PR #38 en main `a1fc334`.
+- **En curso:** filtro `runtimeReport({ projectId })` API implementado como candidato; no entregado ni revisado nativamente.
+- **Siguiente propuesta:** revisión/disposición del padre; CLI/UI, costos/evolución por proyecto y datos reales necesitan autorización separada.
 - **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
 
 ## Qué ya podés hacer
@@ -30,7 +30,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
-| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API en curso, no Git verificado |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto candidato, no Git verificado |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
@@ -77,10 +77,29 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 2. Cobertura y atribución | Parcial, por completar | Orquestador, subagentes, auxiliares y consumo desconocido visibles, con evidencia y huecos declarados |
 | 3. Precios manuales | Catálogo, cotizaciones, estimaciones, colector, enumeración, lector y resumen seleccionado entregados | Tarifas por proveedor/modelo/categoría, moneda y vigencia, sin reescribir costos históricos |
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
-| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API en curso | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
+| 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API entregada PR #37; filtro runtime por proyecto candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## Identidad declarada de proyecto — API, entrega pendiente
+## Filtro runtime por proyecto — candidato API actual
+
+- Base: main `a1fc334` (PR #38); identidad entregada PR #37, merge `7f52101`, commit `15bdaad`.
+- Selección explícita y case-sensitive; todos los locators cuentan antes del mapping.
+- Membresía dentro de la transacción; snapshot completo conserva padres externos.
+- Pruebas sintéticas: worktrees, aliases, montos cero/grandes/faltantes, validación,
+  reinicio/mapping tardío, tabla opcional, recovery y commit independiente coherente.
+- RED observado: `node --test --test-name-pattern="runtimeReport project" test/audit.test.js`,
+  0/4; los cuatro fallaron por `Invalid runtime report` antes de implementar.
+- GREEN final: mismo comando, 4/4; `npm test` 126/126 (base del padre: 122/122).
+- `node --check src/ledger.js` y `node --check test/audit.test.js`: aprobados;
+  `git diff --check`: aprobado. Sin formatter global ni runner LSP primario disponible.
+- Diagnósticos automáticos: JS clean en escrituras; avisos preexistentes de ternarios
+  y cobertura ast-grep parcial en ledger, no evidencia de LSP completo.
+- Rollback: retirar sólo los diffs de `src/ledger.js`, `test/audit.test.js`,
+  `README.md` y `ROADMAP.md`; sin migraciones ni cambios de datos.
+- Browser N/A (API-only); no datos reales ni cambios CLI/dashboard/costos/evolución.
+- Revisión nativa y entrega pertenecen al padre; esta evidencia no las sustituye.
+
+## Identidad declarada de proyecto — API entregada PR #37 (evidencia histórica)
 
 - Mapping explícito path hash → ID ASCII literal; sin leer locator/cwd ni descubrir Git.
 - Binding inmutable/idempotente; conflicto revierte toda la importación y su reporte.
