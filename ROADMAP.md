@@ -4,13 +4,13 @@
 
 ## Dónde estamos hoy
 
-**L4-A entregado: helper y plan CLI readonly. L4-B iniciado, bloqueado por el alcance autorizado de los historiales hijos; L4 sigue abierto.**
+**L4-A entregado; L4-B tiene una muestra real verificada, pero parcial: faltan agentes y tareas retenidas en su ranking. Ampliación pendiente; L4 sigue abierto.**
 
 - **Última tarea terminada:** L4-A2 PR #52, integrado en main `666fdad`, commit `939bd07`; revisión nativa aprobada con ack, sin correcciones. 149/149 pruebas y receta sintética idempotente; 310/400 líneas. A1 PR #51 y L3 PR #50 conservados.
-- **En curso:** L4-B valida importación conjunta real y rankings por agente/modelo. El examen acotado de metadatos encontró hijos vinculados fuera del directorio autorizado; no se leyeron ni sondearon. Sin ellos no se puede comprobar la receta conjunta. No se recuperan metadatos ausentes ni se fabrica cobertura completa.
+- **En curso:** ampliar cobertura de L4-B. La muestra anterior pasó 43 comprobaciones, pero sólo importó siete de 42 tareas actualmente retenidas del proyecto. Omite `gentle-ai-explore` y `gentle-ai-verify`; los otros cuatro agentes también tienen consumo fuera de esa muestra. Raíces sin atribución siguen como `unknown`.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** autorizar el alcance preciso de los hijos y continuar L4-B en una base temporal aislada. L5 requiere cerrar los bloqueadores de utilidad; la receta sintética no sustituye evidencia real.
-- **Decisiones pendientes:** mecanismo de distribución para L5. El permiso de datos reales cubre la muestra L3; no autoriza publicación ni exploración de otras fuentes.
+- **Siguiente tarea:** validar un conjunto estable que incluya los seis agentes observados en metadatos retenidos, contrastar tokens y cobertura y después entregar evidencia. No equivale a recuperar todo el historial; L5 espera el cierre de L4.
+- **Decisiones pendientes:** mecanismo de distribución para L5. Lectura adicional de hijos vinculados a la muestra autorizada explícitamente; sin otros proyectos, modificaciones de originales ni divulgación de conversaciones. No autoriza publicación.
 
 ## Qué ya podés hacer
 
@@ -32,7 +32,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
-| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B iniciado, bloqueado por alcance de hijos |
+| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B verificado en muestra real, evidencia pendiente de entrega |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
 ## Plan de primera versión local
@@ -44,7 +44,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
 | L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
-| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | A1/A2 entregados PR #51/#52; B iniciado, bloqueado por alcance de hijos fuera del directorio autorizado; L4 no cerrado |
+| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | A1/A2 entregados PR #51/#52; B: 43 comprobaciones reales aprobadas, evidencia pendiente de entrega; L4 no cerrado |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
 | L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Pendiente de L5 |
 
@@ -84,7 +84,88 @@ El historial de pruebas y revisiones se conserva abajo, separado del seguimiento
 
 Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
 
-### L4-B — bloqueado por alcance de sesiones hijas
+### L4-B — contraste de cobertura: ranking parcial, ampliación pendiente
+
+El usuario señaló agentes ausentes. Se contrastaron 200 tareas retenidas y
+36 cabeceras del proyecto, excluyendo tareas ajenas o sin vínculo. Hay seis
+agentes observados; sólo siete de 42 tareas vinculadas fueron importadas.
+
+| Agente | Tareas retenidas / importadas |
+| --- | --- |
+| `flow-branch` | 9 / 2 |
+| `flow-commit` | 8 / 2 |
+| `flow-pr` | 8 / 2 |
+| `gentle-ai-worker` | 7 / 1 |
+| `gentle-ai-explore` | 3 / 0 |
+| `gentle-ai-verify` | 7 / 0 |
+
+Son conteos de metadatos, no tokens ni inventario histórico completo. Falta
+importar la raíz que contiene explore/verify: el helper admite 29 sesiones y
+32 tareas, aproximadamente 11,52 MB, con los seis nombres. Sus fuentes crecieron
+entre comprobaciones; no se importó ese conjunto. Debe validarse estabilidad
+antes de ampliar el ranking. La retención pasó de cinco raíces vinculadas a
+cuatro; la cobertura histórica sigue desconocida, no se deduce ausencia de uso.
+
+### L4-B — evidencia real de dos muestras, alcance parcial
+
+La evidencia siguiente sólo valida las fuentes seleccionadas, no toda la
+actividad del proyecto ni todos los agentes retenidos.
+
+Base comprobada: main `9b0226d`, PR #53 integrado, commit documental `e2d33ce`.
+Permiso humano explícito: leer sólo hijos vinculados a la muestra del proyecto
+bajo `~/.pi/agent/gentle-agents/sessions/`; sin búsqueda de otros proyectos.
+Verificador independiente: 43 comprobaciones aprobadas, sin defectos detectados.
+
+| Muestra | Sesiones / tareas | Registros | Tokens exactos |
+| --- | --- | --- | --- |
+| A | 4 / 3 | 31 | 434.944 |
+| B | 5 / 4 | 77 | 2.973.821 |
+| Conjunto | 9 / 7 | 108 | 3.408.765 |
+
+- Origen leído independientemente y normalización persistida iguales, incluidos
+  conteos y categorías: input 297.821, output 17.568, cache read 3.093.376,
+  cache write 0. Todos los registros son uso assistant confirmado propio;
+  ninguno malformado, incompleto, pendiente, conflictivo ni excluido en la muestra.
+- Dos planes por muestra deterministas; sin cambios de archivos temporales antes
+  de importar. `importArgs` pasado como array, `shell:false`, al import existente.
+  Reimportación: cero insertados, 31 y 77 duplicados respectivamente; rankings
+  y accounting sin cambios. Ninguna importación automática por `plan`.
+
+| Agente | Registros | Tokens |
+| --- | --- | --- |
+| `unknown` | 41 | 1.638.996 |
+| `gentle-ai-worker` | 24 | 1.331.102 |
+| `flow-pr` | 21 | 228.428 |
+| `flow-commit` | 16 | 170.421 |
+| `flow-branch` | 6 | 39.818 |
+
+- Los hijos se atribuyen por siete tareas completadas; ambas raíces siguen
+  desconocidas. Único modelo observado: `openai-codex / gpt-6.1-sol`, 108 registros
+  y 3.408.765 tokens. No se demuestra diversidad ni se infieren defaults.
+- CLI/API/lecturas readonly globales y por sesión equivalentes al origen.
+  Dashboard loopback GET, POST de selección y recarga: HTTP 200; orden de agentes,
+  contadores de modelo y detalle conjunto contrastados con API. Sin IDs/rutas
+  privados reflejados ni escrituras manuales habilitadas; sin retener HTML.
+- Sin tarifas: cinco grupos de costo manual nulos/incompletos por `missingPrices`.
+  Total/moneda runtime nulos por moneda no registrada, 108 estimaciones con moneda
+  desconocida. Tokens útiles; sin comparación de costos ni afirmación de factura.
+- Cobertura conserva `complete:false`, `referenceCoverage:"not-inspected"` y
+  `missingReferencedTasks:null`. No recupera denominador ni metadatos históricos.
+- Los 16 hashes de sesiones/tareas originales permanecieron iguales durante las
+  comprobaciones, incluido HTTP; sesiones seleccionadas: 1.963.472 bytes.
+  Base y evidencia privadas en temporal del sistema; sin copias de fuentes,
+  conversaciones, prompts, argumentos de herramientas ni threads en evidencia.
+- Sintaxis de CLI/selection/ledger/dashboard/dashboard-report y diff aprobados;
+  suite previa 149/149, no repetida en esta continuación. TDD RED no aplica:
+  validación del producto entregado, sin cambios de comportamiento ni código.
+- Límites: estabilidad fuera de la ventana y cierre definitivo no probados;
+  compaction/copias reales, filtro por proyecto y browser no verificados aquí.
+  Rollback: sólo este diff documental en `ROADMAP.md`; preservar producto y datos.
+  No commit, push ni entrega implícitos; L4 sigue abierto hasta entrega comprobada.
+
+### L4-B — bloqueo de alcance inicial (histórico, resuelto)
+
+Estas notas describen el momento anterior al permiso adicional; no son el estado actual.
 
 - Examen readonly acotado: 36 cabeceras del proyecto y 200 tareas retenidas;
   cinco raíces tienen metadatos de agentes disponibles, con 42 vínculos a hijos
