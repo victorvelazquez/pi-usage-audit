@@ -1,5 +1,6 @@
 const help = `Usage: node src/cli.js import [--db path] --session path [--session path ...]
        node src/cli.js import [--db path] --task path [--task path ...]
+       node src/cli.js watch --db path --session path [--session path ...] [--task path ...]
        node src/cli.js report --db existing.sqlite [--session id] [--project id]
        node src/cli.js costs --db existing.sqlite --currency USD
        node src/cli.js plan --root session.jsonl --tasks-dir dir --sessions-dir dir [--sessions-dir dir ...]
@@ -17,7 +18,7 @@ Default database: ~/.local/state/pi-usage-audit/usage.sqlite
 `;
 function parse(args) {
   if (args.length === 1 && args[0] === "--help") return { help: true };
-  if (!["import", "report", "costs", "plan"].includes(args[0]))
+  if (!["import", "report", "costs", "plan", "watch"].includes(args[0]))
     throw new Error("arguments");
   const options = {
     command: args[0],
@@ -89,10 +90,12 @@ function parse(args) {
       ? options.root === undefined ||
         options.tasksDir === undefined ||
         !options.sessionsDirs.length
-      : options.command === "import"
-        ? !options.sessions.length && !options.tasks.length
-        : options.db === undefined ||
-          (options.command === "costs" && options.currency === undefined))
+      : options.command === "watch"
+        ? options.db === undefined || !options.sessions.length
+        : options.command === "import"
+          ? !options.sessions.length && !options.tasks.length
+          : options.db === undefined ||
+            (options.command === "costs" && options.currency === undefined))
   )
     throw new Error("arguments");
   return options;
@@ -119,6 +122,18 @@ else if (options?.command === "plan") {
     );
   } catch {
     console.error("Session selection failed.");
+    process.exitCode = 1;
+  }
+} else if (options?.command === "watch") {
+  try {
+    const { watch } = await import("./watch.js");
+    await watch(options, (event) => console.log(JSON.stringify(event)));
+  } catch (error) {
+    console.error(
+      /^Watch failed(?: at source \d+)?\.$/.test(error.message)
+        ? error.message
+        : "Watch failed.",
+    );
     process.exitCode = 1;
   }
 } else if (options) {

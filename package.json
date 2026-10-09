@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=22.20.0" },
-  "scripts": { "test": "node --test test/audit.test.js test/cli.test.js test/dashboard.test.js" }
+  "scripts": { "test": "node --test test/audit.test.js test/cli.test.js test/dashboard.test.js test/watch.test.js" }
 }

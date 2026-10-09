@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**L5 entregado en PR #56; evidencia parcial L6 integrada en PR #57. Formulario opt-in verificado y parada manual de Node/puerto comprobada; prompt visual no confirmado. L6 sigue abierto, sin entrega ni release.**
+**L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Este nuevo registro documental es candidato local, aún sin commit ni integración.**
 
-- **Última tarea terminada:** guía L5 PR #56 integrada en main `d10dd9e`, commit `40757f9`: [LOCAL.md](LOCAL.md), repositorio fijo, Node ≥22.20 y snapshots SQLite seguros. La guía está en esa versión documental; la base de aplicación fijada `834a1be` no la incluye. Evidencia y límites de L4 conservados.
-- **En curso:** L6 sobre main `6d608e5`, PR #57 integrado. Consolidación documental candidata revisada: formulario opt-in 22/22 comprobaciones sintéticas y Ctrl+C manual con Node ausente, puerto sin listener y HTTP inaccesible. Retorno visual al prompt no confirmado; suite 149/149 y recorrido readonly son evidencia histórica, no repetida.
+- **Última tarea terminada:** aceptación humana de L6 para uso local del producto existente en main `41f1f1e`, Node 22.20; código de aplicación fijo `834a1be` y guía L5 `d10dd9e` conservados. Evidencia posterior integrada en PR #57/#58; no se cambian los pins de [LOCAL.md](LOCAL.md).
+- **En curso:** F2 captura automática opt-in de archivos explícitos: candidata local de código, pruebas y docs, no entregada ni integrada. El registro documental de L6 conserva su decisión y evidencia.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** pedir decisión humana sobre el límite visual pendiente y la entrega local; la revisión documental aplicable está completada, pero este diff aún no está entregado. El prompt visual sigue sin confirmar; no se solicitan más comprobaciones técnicas al usuario. Avanzar tareas no autoriza release, captura continua ni recuperación histórica.
+- **Siguiente tarea:** verificar/revisar la candidata F2 y decidir su entrega con autorización separada; sin release ni recuperación histórica/datos reales. Excepción `EXACTauthorize_f2_single_unit_800`: una unidad F2, hasta 800 líneas completas formateadas incluyendo pruebas/docs y 39 líneas documentales previas; no cambia el techo general.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -33,7 +33,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B entregado PR #55: seis agentes y 47/47 tareas retenidas de la captura, no historial completo |
-| Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
+| Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | F2 en curso: candidata opt-in explícita, no entregada |
 
 ## Plan de primera versión local
 
@@ -46,7 +46,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
 | L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | Entregado: A1/A2 PR #51/#52; B PR #55 (`834a1be`, `7d81bc0`), 82 comprobaciones, seis agentes y 47/47 tareas retenidas; raíces unknown, costos ausentes e historial incompleto |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Guía entregada PR #56 (`d10dd9e`, `40757f9`): repositorio fijo y recuperación consistente comprobados; Ctrl+C y recorrido visual final pertenecen a L6 |
-| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | En curso: evidencia parcial PR #57 integrada; formulario opt-in verificado, parada manual Node/puerto comprobada y consolidación documental candidata revisada; prompt visual sin confirmar, decisión/entrega pendientes |
+| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Aceptado/cerrado para uso local por decisión humana con límite visual documentado aceptado; evidencia PR #57/#58 integrada. Retorno visual al prompt no confirmado, no completado artificialmente; sin release. Este registro de cierre aún no está integrado |
 
 **Criterio de salida:** importar sesiones seleccionadas sin duplicar consumo, identificar agentes/modelos que consumen más, consultar estimaciones con tarifas explícitas, usar filtros global/sesión/proyecto, reconocer cobertura incierta y arrancar localmente siguiendo la guía. No inferir calidad por tokens ni presentar estimaciones como facturación real.
 
@@ -59,7 +59,7 @@ Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del p
 | ID | Objetivo futuro | Resultado buscado / condición para retomarlo |
 | --- | --- | --- |
 | F1 | Filtro y agrupación por tarea | Definir identidad de tarea y consultar su consumo sin inferencias ambiguas; acordar contrato y UI antes de implementar. |
-| F2 | Captura continua opt-in | Incorporar nuevas entradas sin importación manual, con deduplicación, parada y errores visibles; requiere autorización explícita. |
+| F2 | Captura continua opt-in | En curso, candidata autorizada: `watch` con archivos explícitos, baseline sin uso histórico, polling serial de 1000 ms, motor compartido/deduplicación, parada y fallos visibles. Sin descubrimiento, polling UI ni recuperación histórica; entrega pendiente. |
 | F3 | Ampliar cobertura de agentes e hijos | Priorizar formatos/casos no cubiertos observados en uso real, manteniendo consumo incierto separado y no aditivo. Los bloqueadores de la primera versión pertenecen a L4. |
 | F4 | Mejoras de comparación y navegación | Priorizar con experiencia de uso qué vistas ayudan a decidir; sin cambio automático de modelos ni equiparar costo con calidad. |
 
@@ -84,7 +84,34 @@ El historial de pruebas y revisiones se conserva abajo, separado del seguimiento
 
 Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
 
-### L6 — consolidación de evidencia y límites, sin cierre
+### L6 — aceptación humana para uso local con límite visual
+
+- Decisión mediante `ask_user_choice`: **«Aceptar la versión local»**,
+  valor `accept_local_with_documented_visual_limit`. Cierra L6 para uso local
+  del producto existente en main `41f1f1e`, no autoriza release ni nuevos datos.
+- Ctrl+C manual demostró Node ausente, puerto sin listener y HTTP inaccesible;
+  el retorno visual al prompt no fue observado. El usuario acepta ese límite:
+  no se transforma en verificación visual completada ni en defecto confirmado.
+- Formulario opt-in: 22/22 PASS sintéticos con Tab/Enter vía CDP, no teclado
+  físico. Suite 149/149 y recorrido readonly son históricos, sin nueva ejecución.
+  No se extrapolan otros sistemas operativos, facturación, calidad, cobertura
+  histórica completa ni captura continua.
+- Consolidación anterior entregada: PR #58 MERGED, confirmado
+  `2026-10-09T23:10:54Z`; commit `5cdade59fb48` ancestro de HEAD.
+  Revisión nativa anterior `review-c9f66e82017341e6`, target `766f63a2`,
+  aprobada, reconocida y cerrada. No describe la revisión de este nuevo registro.
+- Esta unidad sólo registra la decisión: candidata local sin commit/integración;
+  lectura estructural y `git diff --check` aprobados, sin commit/push/PR/release
+  autorizados. F1–F4 siguen sin iniciar. TDD RED N/A: documentación pasiva,
+  sin comportamiento nuevo; sin suite/build ni nuevas lecturas de datos reales.
+- Rollback: sólo el nuevo diff de `ROADMAP.md`; no revoca la aceptación humana
+  del producto ni su registro en memoria, ni altera historia previa, código,
+  pins de la guía, datos o procesos.
+
+### L6 — consolidación de evidencia y límites (histórica, integrada PR #58)
+
+Las notas siguientes conservan el estado previo a integración y aceptación;
+«candidata», «sin cierre» y «decisión pendiente» describen aquel momento.
 
 **Formulario opt-in verificado; parada manual de Node/puerto comprobada.**
 El retorno visual al prompt no está confirmado. Esta unidad consolida
