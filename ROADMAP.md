@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**L5 entregado en PR #56; L6 en curso: clon remoto, suite y recorrido readonly aprobados. Ctrl+C y el formulario opt-in en el recorrido visual final siguen pendientes; sin release.**
+**L5 entregado en PR #56; evidencia parcial L6 integrada en PR #57. Formulario opt-in verificado y parada manual de Node/puerto comprobada; prompt visual no confirmado. L6 sigue abierto, sin entrega ni release.**
 
 - **Última tarea terminada:** guía L5 PR #56 integrada en main `d10dd9e`, commit `40757f9`: [LOCAL.md](LOCAL.md), repositorio fijo, Node ≥22.20 y snapshots SQLite seguros. La guía está en esa versión documental; la base de aplicación fijada `834a1be` no la incluye. Evidencia y límites de L4 conservados.
-- **En curso:** L6 con datos sintéticos aislados: clon remoto nuevo, suite 149/149, 73 comprobaciones API/HTTP y siete CLI/snapshot; Edge visible con filtros/detalle por teclado. Ctrl+C no demostrado: cerrar la ventana o terminar procesos no sustituye comprobar retorno al prompt y puerto cerrado.
+- **En curso:** L6 sobre main `6d608e5`, PR #57 integrado. Consolidación documental candidata revisada: formulario opt-in 22/22 comprobaciones sintéticas y Ctrl+C manual con Node ausente, puerto sin listener y HTTP inaccesible. Retorno visual al prompt no confirmado; suite 149/149 y recorrido readonly son evidencia histórica, no repetida.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** completar parada Ctrl+C controlada y formulario opt-in visual, cerrar evidencia/revisiones y pedir decisión humana de entrega. No publicar una release por avanzar tareas; sin captura continua ni recuperación histórica.
+- **Siguiente tarea:** pedir decisión humana sobre el límite visual pendiente y la entrega local; la revisión documental aplicable está completada, pero este diff aún no está entregado. El prompt visual sigue sin confirmar; no se solicitan más comprobaciones técnicas al usuario. Avanzar tareas no autoriza release, captura continua ni recuperación histórica.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -46,7 +46,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
 | L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | Entregado: A1/A2 PR #51/#52; B PR #55 (`834a1be`, `7d81bc0`), 82 comprobaciones, seis agentes y 47/47 tareas retenidas; raíces unknown, costos ausentes e historial incompleto |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Guía entregada PR #56 (`d10dd9e`, `40757f9`): repositorio fijo y recuperación consistente comprobados; Ctrl+C y recorrido visual final pertenecen a L6 |
-| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | En curso: clon remoto, suite 149/149 y visual readonly aprobados; Ctrl+C y formulario opt-in visual pendientes, no entregado |
+| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | En curso: evidencia parcial PR #57 integrada; formulario opt-in verificado, parada manual Node/puerto comprobada y consolidación documental candidata revisada; prompt visual sin confirmar, decisión/entrega pendientes |
 
 **Criterio de salida:** importar sesiones seleccionadas sin duplicar consumo, identificar agentes/modelos que consumen más, consultar estimaciones con tarifas explícitas, usar filtros global/sesión/proyecto, reconocer cobertura incierta y arrancar localmente siguiendo la guía. No inferir calidad por tokens ni presentar estimaciones como facturación real.
 
@@ -84,7 +84,74 @@ El historial de pruebas y revisiones se conserva abajo, separado del seguimiento
 
 Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
 
-### L6 — evidencia parcial, no cierre ni entrega
+### L6 — consolidación de evidencia y límites, sin cierre
+
+**Formulario opt-in verificado; parada manual de Node/puerto comprobada.**
+El retorno visual al prompt no está confirmado. Esta unidad consolida
+la evidencia observada por el padre y completa su revisión documental aplicable;
+no entrega ni cierra L6.
+Base actual: main `6d608e5`, evidencia parcial PR #57 integrada; L5 PR #56
+entregado. Suite histórica 149/149 y recorrido readonly anterior conservados,
+sin nueva ejecución completa ni nueva lectura de datos reales.
+
+#### Parada manual y límite visual
+
+- Consola iniciada manualmente por el usuario desde Inicio, Node 22.20,
+  `node src/dashboard.js --demo` directo. Antes: HTTP 200 y listener de Node.
+  El usuario pulsó Ctrl+C; después: Node ausente, PowerShell vivo, puerto
+  sin listener y HTTP inaccesible. Sin kill ni señal programática del padre.
+- Las capturas mostraban la ventana ocluida: no prueban retorno visual al
+  prompt. Se comprueba parada Node/puerto en este montaje, no todo el criterio
+  Ctrl+C ni un defecto de aplicación. El usuario no quiere más confirmaciones
+  técnicas; el límite queda explícito para la decisión humana.
+- Test focal observado por el padre:
+  `node --test --test-name-pattern='CLI effective URL, occupied port and signal shutdown' test/dashboard.test.js`:
+  PASS 1/1, sin fallos; no sustituye Ctrl+C físico.
+- El launcher automatizado anterior seguía activo y no se probó entrega SIGINT.
+  Es una limitación del montaje, no un bug establecido. Esta unidad no limpia
+  ni toca esos procesos; las notas de intentos anteriores siguen históricas.
+
+#### Formulario opt-in: 22/22 comprobaciones aprobadas
+
+- Nueva verificación del padre en Edge visible, perfil temporal propio/CDP,
+  SQLite sintética fuera del repo y Node 22.20. Se renderizan seis campos;
+  Tab alcanza modelo, categoría, moneda, vigencia, tarifa y guardar; Enter envía.
+  Valores asignados por DOM y teclas CDP: no prueba de teclado físico.
+- Casos inválidos: required, moneda minúscula y UTC inválido no persisten.
+  Error visible genérico; no se presenta como resultado confirmado de guardado.
+- Caso válido: proveedor `synthetic`, modelo `L6-check`, input propio de un millón
+  de tokens, tarifa EUR 2.5 por millón vigente desde 2026-01-01 y uso 2026-01-02:
+  costo exacto `2.500000000000`. No tarifa real ni factura.
+- Append-only: otra tarifa 3 para la misma versión se rechaza y el reporte del
+  ledger permanece igual. Guardar no refresca el snapshot de arranque;
+  «Consultar Global» explícito muestra estimación fresca en DOM y API.
+  Recargar vuelve al snapshot cacheado de arranque, como está previsto.
+- Readonly: formulario ausente, POST 405 y sin cambios de datos.
+- Capturas locales de formulario e inválido leídas por el padre; la captura de
+  vista fresca muestra evolución, no costo. El costo se comprobó por DOM/API,
+  no se inventa evidencia visual. Evidencia privada no publicada ni copiada.
+- Browser nuevo cerrado, puertos propios sin listeners y sin Edge del perfil
+  propio; repositorio limpio al finalizar esa verificación. Esto no describe
+  ni autoriza limpiar el launcher anterior.
+
+#### Revisión documental completada; decisión pendiente
+
+- El padre contrastó el tracking y la evidencia, preservación del historial
+  L3–L5 y límites de Ctrl+C, teclado CDP, snapshots y estimaciones sintéticas.
+- La evaluación nativa clasificó esta unidad como documental pasiva: lectura
+  estructural del padre suficiente, sin verificador separado ni revisión nativa
+  adicional debida. No se afirma una aprobación formal de revisión nativa.
+- Prompt visual sin confirmar, decisión humana y entrega siguen pendientes;
+  sin autorización de release. Este diff es una candidata local, no una entrega.
+- TDD RED N/A: unidad documental pasiva, sin cambio de comportamiento.
+  `git diff --check` y lectura estructural aprobados; no rerun de suite total.
+  Rollback: retirar sólo este diff de `ROADMAP.md`, preservando historia previa,
+  producto, datos y procesos. Sin commit/push/PR ni entrega implícitos.
+
+### L6 — evidencia parcial anterior (histórica, PR #57 integrado)
+
+Las notas siguientes describen el recorrido previo; sus pendientes de formulario
+y parada no sustituyen la evidencia nueva ni implican cierre de L6.
 
 Base comprobada: main `d10dd9eba62ad99aba75b6d7a229693816ae8f1a`, PR #56 integrado.
 Validación pasiva del producto existente; TDD RED no aplica. Sólo datos sintéticos
