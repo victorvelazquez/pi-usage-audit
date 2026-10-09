@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**Compuesto readonly proyecto PR #44 entregado; selector dashboard de arranque candidato, sin datos reales.**
+**Selector dashboard de arranque entregado en PR #45; siguiente objetivo: primera versión local útil y comprobada.**
 
-- **Última tarea terminada:** compuesto proyecto PR #44 (`d46fb5c`), integrado en main `655a15e`; entregas anteriores conservadas.
-- **En curso:** API `startDashboard({ projectId })` y CLI `--project ID`, pruebas sintéticas; candidato no revisado ni entregado.
-- **Siguiente propuesta:** evaluación/entrega por el padre; filtro interactivo por proyecto y datos reales necesitan autorización separada.
-- **Decisiones pendientes:** autorización de sesiones reales y pasos posteriores; esta unidad no los autoriza.
+- **Última tarea terminada:** selector proyecto API/CLI PR #45 (`9cc6f71`, ajuste `de53b6a`), integrado en main `5f03277`; entregas anteriores conservadas.
+- **En curso:** planificación del cierre local; no hay implementación nueva iniciada.
+- **Siguiente tarea:** L1, admisión interna del selector interactivo por proyecto.
+- **Decisiones pendientes:** rutas/sesiones reales autorizadas para L3 y mecanismo de distribución para L5; este plan no autoriza acceso a datos reales ni publicación.
 
 ## Qué ya podés hacer
 
@@ -30,15 +30,50 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | --- | --- | --- |
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
-| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque candidato |
+| Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
-**Criterio de cierre propuesto:** poder importar sesiones seleccionadas, abrir la vista global, identificar quién consume más, consultar costos estimados con tarifas explícitas y reconocer datos faltantes. Debemos acordar si filtros avanzados y captura continua son obligatorios para la primera versión o posteriores; hoy no están retirados del alcance.
+## Plan de primera versión local
+
+**Prioridad acordada:** aplicación local útil, efectiva y funcional; no servicio público. Seguimos las tareas en este orden, una a una. Son seis hitos, no seis PRs garantizadas: los defectos encontrados pueden requerir unidades adicionales.
+
+| ID | Tarea | Criterio para cerrarla | Estado |
+| --- | --- | --- | --- |
+| L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Próxima; alcance por confirmar antes de implementar |
+| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Pendiente de L1 |
+| L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Pendiente de L2 y autorización |
+| L4 | Resolver bloqueadores de utilidad y atribución | Clasificar hallazgos de L3; cerrar pérdida/duplicación, atribución engañosa o fallos que impidan el recorrido, con regresiones sintéticas. Si no hay bloqueadores, registrar evidencia y cerrar sin código. | Pendiente de L3; tamaño condicionado a hallazgos |
+| L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
+| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Pendiente de L5 |
+
+**Criterio de salida:** importar sesiones seleccionadas sin duplicar consumo, identificar agentes/modelos que consumen más, consultar estimaciones con tarifas explícitas, usar filtros global/sesión/proyecto, reconocer cobertura incierta y arrancar localmente siguiendo la guía. No inferir calidad por tokens ni presentar estimaciones como facturación real.
+
+No se declara lista la versión sólo porque pasan pruebas sintéticas. L3 aporta evidencia real; L4 cierra sus bloqueadores. Cada hito conserva pruebas/evidencia y se marca entregado sólo después de su entrega comprobada.
+
+## Futuro — separado del cierre local
+
+Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del producto. La propuesta es posponerlos respecto a la primera versión; si L3 demuestra que alguno es indispensable, acordaremos el cambio antes de incorporarlo al plan.
+
+| ID | Objetivo futuro | Resultado buscado / condición para retomarlo |
+| --- | --- | --- |
+| F1 | Filtro y agrupación por tarea | Definir identidad de tarea y consultar su consumo sin inferencias ambiguas; acordar contrato y UI antes de implementar. |
+| F2 | Captura continua opt-in | Incorporar nuevas entradas sin importación manual, con deduplicación, parada y errores visibles; requiere autorización explícita. |
+| F3 | Ampliar cobertura de agentes e hijos | Priorizar formatos/casos no cubiertos observados en uso real, manteniendo consumo incierto separado y no aditivo. Los bloqueadores de la primera versión pertenecen a L4. |
+| F4 | Mejoras de comparación y navegación | Priorizar con experiencia de uso qué vistas ayudan a decidir; sin cambio automático de modelos ni equiparar costo con calidad. |
+
+Un servicio remoto/multiusuario queda fuera del enfoque actual: necesitaría una decisión de producto y un plan propio, no una extensión implícita del servidor local.
 
 ## Cómo seguir el avance
 
-Leé sólo las secciones anteriores para conocer el estado. Al empezar y terminar cada tarea actualizaremos **última terminada**, **en curso**, **siguiente** y la tabla de pendientes. Una tarea se marca lista cuando está entregada, no sólo cuando se escribió código. No usamos un porcentaje: backend terminado no equivale a producto terminado.
+Leé sólo las secciones anteriores para conocer el estado. `ROADMAP.md` es la fuente única del orden y backlog; al empezar y terminar cada tarea actualizaremos **última terminada**, **en curso**, **siguiente** y su estado L1–L6.
+
+- Sólo una tarea de implementación activa; confirmar alcance y criterio antes de escribir código.
+- Unidades acotadas con techo de 400 líneas de diff incluyendo pruebas/docs; si no cabe, dividir o pedir acuerdo antes de ampliar.
+- Un hallazgo se registra como bloqueador del hito actual o backlog futuro; no se añade funcionalidad silenciosamente.
+- Antes de pasar al siguiente hito, registrar evidencia, límites y entrega comprobada. Sin acceso a datos reales, commit, push o publicación implícitos.
+
+Una tarea se marca lista cuando está entregada, no sólo cuando se escribió código. No usamos un porcentaje: backend terminado no equivale a producto terminado. Las notas de candidatos del historial son evidencia de su momento; el estado actual está arriba.
 
 El historial de pruebas y revisiones se conserva abajo, separado del seguimiento diario.
 
