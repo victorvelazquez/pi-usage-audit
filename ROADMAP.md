@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**L2-A HTTP entregado en PR #48; L2-B UI candidato probado, no revisado ni entregado. L2 no está completo.**
+**L2 entregado; validación funcional L3 aprobada con tres sesiones reales autorizadas. Evidencia documental candidata, todavía no revisada ni entregada.**
 
-- **Última tarea terminada:** L2-A proyecto HTTP PR #48, integrado en main `b8da4ca`, commit `d3b4e65`; L1 PR #47 y entregas anteriores conservadas.
-- **En curso:** L2-B autorizado: selector UI global/sesión/proyecto con pruebas sintéticas VM/SSR y regresión; candidato no revisado ni entregado.
-- **Siguiente tarea:** verificación browser/teclado sintética del padre, revisión y entrega L2-B; sólo después considerar cierre L2 y autorización L3.
-- **Decisiones pendientes:** rutas/sesiones reales autorizadas para L3 y mecanismo de distribución para L5; este plan no autoriza acceso a datos reales ni publicación.
+- **Última tarea terminada:** L2-B selector UI PR #49, integrado en main `401f5f0`, commit `3b9e424`; L2-A PR #48 y entregas anteriores conservadas.
+- **En curso:** registrar y entregar evidencia de L3: importación/reimportación, reportes y navegador comprobados en una base aislada; límites de atribución y precios explícitos.
+- **Siguiente tarea:** cerrar evidencia/entrega L3 y confirmar clasificación L4; no se observaron bloqueadores en la muestra, sin afirmar cobertura completa.
+- **Decisiones pendientes:** mecanismo de distribución para L5. El permiso de datos reales cubre la muestra L3; no autoriza publicación ni exploración de otras fuentes.
 
 ## Qué ya podés hacer
 
@@ -31,7 +31,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
-| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | Pruebas sintéticas existentes; validación real pendiente |
+| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 funcional aprobado con tres sesiones reales autorizadas; evidencia candidata y atribución de agentes/hijos no comprobada |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
 ## Plan de primera versión local
@@ -41,8 +41,8 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | ID | Tarea | Criterio para cerrarla | Estado |
 | --- | --- | --- | --- |
 | L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
-| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | L2-A HTTP entregado PR #48 (`b8da4ca`, `d3b4e65`); L2-B UI candidato probado, no revisado/entregado; browser/teclado pendiente del padre |
-| L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Pendiente de L2 y autorización |
+| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
+| L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Validación funcional aprobada; evidencia documental candidata, no revisada/entregada |
 | L4 | Resolver bloqueadores de utilidad y atribución | Clasificar hallazgos de L3; cerrar pérdida/duplicación, atribución engañosa o fallos que impidan el recorrido, con regresiones sintéticas. Si no hay bloqueadores, registrar evidencia y cerrar sin código. | Pendiente de L3; tamaño condicionado a hallazgos |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
 | L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Pendiente de L5 |
@@ -115,7 +115,53 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## L2-B — selector UI, candidato probado no revisado ni entregado
+## L3 — validación real aprobada, evidencia candidata no revisada ni entregada
+
+- Muestra autorizada de tres historiales Pi v3 de este proyecto, alias S1–S3.
+  Lectura sin modificar fuentes; SQLite nueva aislada fuera del repositorio.
+  No conversaciones, IDs ni rutas privadas en esta evidencia pública.
+
+| Alias | Entradas (assistant + compaction) | Tokens conservados |
+| --- | --- | --- |
+| S1 | 251 + 1 | 19273446 |
+| S2 | 299 + 1 | 32642641 |
+| S3 | 100 + 0 | 7536751 |
+| Global | 650 + 2 | 59452838 |
+
+- Fuente y ledger coinciden: input 1261035, output 225467, cacheRead 57966336,
+  cacheWrite 0. Reimportación: 0 insertados, 652 duplicados; malformed,
+  incomplete, pending, conflicts y unresolved: 0. Reinicio conserva resultados.
+- API global/sesión/proyecto/desconocido, evolución UTC y proyección HTTP/DOM
+  conjuntas comprobadas. Validation_A agrupa S1/S2 y Validation_B S3 mediante
+  mappings explícitos de prueba; no son identidad Git ni descubrimiento automático.
+- Edge 154.0.4258.62 real, headless/CDP: cinco envíos con teclado, exclusión de
+  alcances, desconocido vacío, inválido sin POST, vista conservada y recarga del
+  proyecto inicial aprobados; cero excepciones. POST de tarifas readonly denegado.
+- Baseline sin tarifas: costos totales null; 650 entradas sin tarifas completas.
+  Compactions: 119264 tokens con proveedor/modelo desconocidos, sin imputación
+  al modelo assistant. Agente/actor unknown, tasks 0, evidencia no-task;
+  clasificación own relativa a las raíces importadas, no prueba independiente.
+- Clon separado con tarifas **sintéticas**, no precios reales ni factura:
+  EUR por millón input 1/output 2/cacheRead 0/cacheWrite 3. Sólo grupo assistant:
+  global 1.588878000000 EUR; A 1.388699000000; B 0.200179000000.
+  Ausencia USD y compactions conservan null; cero conocido comprobado.
+- Verificador ejecutó harnesses Node temporales de importación, browser y precios;
+  evidencia agregada y bases contables retenidas localmente fuera del repositorio,
+  sin conversaciones/toolargs. SHA256/stat de fuentes y baseline readonly intactos.
+  Servidor, proceso/perfil browser y scripts temporales cerrados/retirados.
+- No bloqueadores observados en esta muestra. Texto de reemplazo de alcance que
+  omite mencionar proyecto: hallazgo menor para clasificar en L4, sin cambio de código.
+  No demuestra atribución de hijos, cobertura completa ni preparación de producción.
+- Sólo validación funcional/documentación: sin implementación ni RED significativo;
+  no se repitió npm test ni se afirma una nueva suite por este diff documental.
+  Rollback: retirar únicamente esta actualización de `ROADMAP.md`; no tocar fuentes
+  originales ni bases de validación. Entrega requiere autorización separada.
+
+## L2-B — selector UI, entregado PR #49
+
+Integrado en main `401f5f0`, commit `3b9e424`. Suite 140/140, 15 grupos browser
+Edge 154 sintéticos y captura visual comprobados antes de entrega; revisión nativa
+aprobada y reconocida. Las notas siguientes conservan el estado histórico previo.
 
 - Base limpia `b8da4ca`; L2-A entregado PR #48 (`d3b4e65`). Sólo formulario
   estático existente: proyecto ASCII literal 1–64, sin trim/normalización;
