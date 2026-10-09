@@ -24,10 +24,10 @@ Cost project filtering API is delivered in PR #42 (main `7a9a582`, commit
 `f546be9`, commit `547cda6`). Composite readonly project reporting is delivered
 in PR #44 (main `655a15e`, commit `d46fb5c`). Startup dashboard project selection
 is delivered in PR #45. Private project admission L1 is delivered in PR #47
-(main `ada499e`, commit `c71ac11`). L2-A connects the existing private HTTP
-filter to project reports; it is a tested candidate, not reviewed or delivered.
-Project UI/browser/keyboard work (L2-B) and real-session validation remain pending;
-review and delivery remain parent-owned.
+(main `ada499e`, commit `c71ac11`). L2-A HTTP project reporting is delivered in
+PR #48 (main `b8da4ca`, commit `d3b4e65`). L2-B adds the project selector UI as a
+synthetically tested candidate, not reviewed or delivered. Actual browser/keyboard
+verification remains parent-owned and pending; real-session validation is pending.
 
 ## Synthetic dashboard demo
 
@@ -104,10 +104,9 @@ and incompatible with demo. Invalid values fail before storage/listen; CLI
 also rejects duplicate/missing flags, `--` values and equals syntax.
 API omission/`undefined` preserves global scope; unknown projects render empty.
 SSR says “Proyecto seleccionado”, never the literal ID or private path.
-The existing session/global form **replaces** project scope, never intersects it;
+The global/session/project form **replaces** scope, never intersects it;
 reload restores the static startup project snapshot. The private HTTP project
-payload is described below; there is no interactive project control, new route
-or shared selector state.
+payload and candidate UI are described below; no new route or shared state.
 Manual prices remain explicit opt-in and database-wide; CSP and
 readonly-close-before-listen unchanged.
 
@@ -121,7 +120,8 @@ Origin, no duplicate headers, same-origin Fetch-site when present, JSON only,
 8192-byte limit, fatal UTF-8, absolute 5-second deadline and cleanup. Rejections
 are sanitized, never echoing IDs. Manual-price behavior is unchanged.
 Selected readonly and opt-in pages enable a stateless selector: explicit global
-or literal session (empty invalid, whitespace valid). Each admitted submission
+or literal session (empty invalid, whitespace valid); the L2-B candidate also
+adds literal project scope. Each admitted submission
 opens readonly, obtains one joint report, projects/renders and closes before reply.
 Later imports and tariffs affect that submission; there is no polling or server-wide
 selection. GET/refresh restores startup HTML. Demo remains fixed and GET-only.
@@ -132,7 +132,7 @@ preserving their inputs/handlers/feedback. Failure keeps the previous report int
 Selected CSP permits only exact script hashes and same-origin connections; demo keeps
 script/connect none. Only synthetic validation is authorized; real sessions remain pending.
 
-### Private project HTTP filtering — L2-A tested candidate, not delivered
+### Private project HTTP filtering — L2-A delivered PR #48
 
 Internal `parseSessionFilterRequest` additionally accepts JSON
 `{ "projectId": "Repo_1" }` and returns `{ projectId: "Repo_1" }` without storage.
@@ -155,9 +155,25 @@ or previous scope. GET/refresh retains the static startup snapshot.
 Invalid admission never opens storage; operational failures return generic 500
 `Session filter operation failed`, without IDs/paths. Existing body/transport
 barriers, global/session behavior, prices, demo and CSP remain unchanged.
-No project form or new browser behavior is added. L2-B UI/browser/keyboard work
-is pending; L2 is not complete. Evidence is synthetic HTTP loopback only,
-not review/delivery or authorization to access real data.
+L2-A did not add a project form. Its evidence uses synthetic HTTP loopback,
+not real data. L2-B below adds the UI; L2 is not complete.
+
+### Interactive project selector — L2-B tested candidate, not delivered
+
+Choose Global, Sesión literal or Proyecto literal, then Consultar. Only the chosen
+scope is sent: `{}`, `{session}` or `{projectId}`. Project ID accepts exactly
+1–64 ASCII letters, digits, `_` or `-`, case-sensitive, without trim or normalization.
+Invalid active IDs or unknown modes show generic feedback without a request;
+unused inputs do not constrain the chosen scope. Native labelled controls and
+polite status feedback have no custom focus or keyboard interception.
+All selector controls disable while pending and restore after success/failure;
+double submission is ignored. Failure retains the previous report and inputs,
+without retries. One validated report-region replacement leaves selector and
+manual-price forms intact; prices remain database-wide and explicit opt-in.
+Readonly includes this query form, demo remains scriptless. Exact static-script
+CSP hashing and startup snapshot/reload behavior are unchanged.
+Synthetic VM/SSR and HTTP regressions are tested; actual browser/keyboard
+verification is pending with the parent. No real-session validation is claimed.
 
 ### Opt-in manual tariff form (delivered PR #28)
 
@@ -220,7 +236,7 @@ aliases. No classification duplication or result post-filtering is introduced.
 Unknown/unmapped IDs or an absent optional mapping table return the three existing
 empty shapes with explicit cost currency, without repair. Global/session reports
 are unchanged. Startup dashboard project selection is delivered PR #45;
-private HTTP project filtering is the bounded L2-A candidate above, without new UI.
+private HTTP project filtering is delivered PR #48; candidate UI is described above.
 Detached results, exact arithmetic and readonly boundaries remain unchanged:
 `openLedger` intentionally does not expose `dashboardReport`. Invalid requests
 fail before SQL (`Invalid dashboard report`); operational failures reject the

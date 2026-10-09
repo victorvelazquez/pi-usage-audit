@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**L1 entregado en PR #47; L2-A HTTP candidato probado, no revisado ni entregado. L2 no está completo.**
+**L2-A HTTP entregado en PR #48; L2-B UI candidato probado, no revisado ni entregado. L2 no está completo.**
 
-- **Última tarea terminada:** L1 admisión privada proyecto PR #47, integrado en main `ada499e`, commit `c71ac11`; selector de arranque PR #45 y entregas anteriores conservadas.
-- **En curso:** L2-A autorizado: conectar HTTP al compuesto readonly existente con pruebas sintéticas; candidato probado, revisión y entrega pendientes del padre.
-- **Siguiente tarea:** cerrar revisión/entrega de L2-A; L2-B UI/browser/teclado pendiente, con autorización separada.
+- **Última tarea terminada:** L2-A proyecto HTTP PR #48, integrado en main `b8da4ca`, commit `d3b4e65`; L1 PR #47 y entregas anteriores conservadas.
+- **En curso:** L2-B autorizado: selector UI global/sesión/proyecto con pruebas sintéticas VM/SSR y regresión; candidato no revisado ni entregado.
+- **Siguiente tarea:** verificación browser/teclado sintética del padre, revisión y entrega L2-B; sólo después considerar cierre L2 y autorización L3.
 - **Decisiones pendientes:** rutas/sesiones reales autorizadas para L3 y mecanismo de distribución para L5; este plan no autoriza acceso a datos reales ni publicación.
 
 ## Qué ya podés hacer
@@ -41,7 +41,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | ID | Tarea | Criterio para cerrarla | Estado |
 | --- | --- | --- | --- |
 | L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
-| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | L2-A HTTP candidato probado, no revisado/entregado; L2-B UI/browser/teclado pendiente |
+| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | L2-A HTTP entregado PR #48 (`b8da4ca`, `d3b4e65`); L2-B UI candidato probado, no revisado/entregado; browser/teclado pendiente del padre |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Pendiente de L2 y autorización |
 | L4 | Resolver bloqueadores de utilidad y atribución | Clasificar hallazgos de L3; cerrar pérdida/duplicación, atribución engañosa o fallos que impidan el recorrido, con regresiones sintéticas. Si no hay bloqueadores, registrar evidencia y cerrar sin código. | Pendiente de L3; tamaño condicionado a hallazgos |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
@@ -115,7 +115,33 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## L2-A — conexión HTTP privada, candidato probado no revisado ni entregado
+## L2-B — selector UI, candidato probado no revisado ni entregado
+
+- Base limpia `b8da4ca`; L2-A entregado PR #48 (`d3b4e65`). Sólo formulario
+  estático existente: proyecto ASCII literal 1–64, sin trim/normalización;
+  global/sesión/proyecto exclusivos, modo desconocido sin fetch.
+- Controles nativos etiquetados y status polite; pending/doble envío, restauración,
+  inputs/precios y reemplazo atómico conservados. Sin interceptar foco/teclado;
+  hash exacto CSP automático, gating readonly/opt-in/demo sin cambios.
+- RED VM/SSR significativo: payload sesión en vez de proyecto y opción ausente.
+  GREEN VM/SSR: límites ASCII/UTF-16, invalidación sin fetch, exclusión, pending,
+  errores/recovery, DOM inseguro/duplicado y gating/hash exacto.
+- `node --test --test-name-pattern="session filter client|manual form gating" test/dashboard.test.js`:
+  RED 0/2; GREEN final 2/2. Intermedio 1/2 por aserción de pattern ajena al selector,
+  corregida sólo en test. `npm test`: 140/140, reconfirmado tras triangulación.
+  Regresión `node --test --test-name-pattern="session filter|price HTTP|dashboard project|manual form" test/dashboard.test.js`: 20/20.
+  Sintaxis de ambos JS y diff check OK; diagnósticos de edición tests/docs limpios,
+  sin herramienta LSP independiente disponible. Sólo warnings SQLite/MockTimers.
+- Verificación actual browser/teclado pendiente del padre; no se afirma ejecutada.
+  Sin datos reales, esquema/deps, dashboard/ledger/report ni Git mutación.
+- Rollback sólo diff L2-B respecto a `b8da4ca` en `src/session-filter-form.js`,
+  `test/dashboard.test.js`, `README.md` y `ROADMAP.md`; conservar L2-A e historia.
+  Forecast previo 240–320 líneas, techo duro 400 incluidas pruebas/docs.
+
+## L2-A — conexión HTTP privada, entregado PR #48
+
+Integrado en main `b8da4ca`, commit `d3b4e65`. Evidencia histórica del candidato;
+no revisa ni entrega L2-B.
 
 - Base limpia `ada499e`; L1 entregado PR #47 (`c71ac11`). Handler existente
   acepta proyecto validado antes de storage y delega al compuesto readonly.
