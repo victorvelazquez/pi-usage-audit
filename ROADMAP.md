@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**L3 entregado; L4-A1 candidato: selección explícita de sesiones y metadatos de tareas para mejorar atribución de agentes. Sin CLI, revisión ni entrega de L4.**
+**L4-A1 entregado; L4-A2 candidato: plan CLI readonly y receta manual. L4 sigue abierto hasta validar la importación conjunta real en L4-B.**
 
-- **Última tarea terminada:** L3 evidencia PR #50, integrado en main `9b8cda2`, commit `b96481e`; historial y entregas anteriores conservados.
-- **En curso:** L4-A1 helper readonly y pruebas sintéticas; causa central: importar sesiones sin tareas deja atribución de agentes desconocida. Selección no recupera metadatos ausentes ni prueba cobertura completa.
-- **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado, incluidos helper nuevo, pruebas y docs; no cambia el techo general de 400. Regresión Windows de identidad de rutas: RED específico y GREEN 6/6; verificación independiente de la corrección pendiente, sin entrega.
-- **Siguiente tarea:** L4-A2 conectar plan CLI y documentar receta; después L4-B importación conjunta. Integración/reimportación de la receta pendiente de A2, sin promesa de inferir agente raíz ni modelos configurados.
+- **Última tarea terminada:** L4-A1 PR #51, integrado en main `7251450`, commit `3e01862`; revisión aprobada con ack, confiabilidad media y sin correcciones. Escritor e independiente: 146/146 y foco 6/6, incluida corrección Windows. Junctions comprobados; symlink de archivo EPERM, POSIX no ejecutado; LSP timeout inconcluso. L3 PR #50 e historia conservados.
+- **En curso:** L4-A2 conecta `plan` directamente al helper sin modificarlo. Candidato sintético, sin revisión ni entrega afirmadas; importar sesiones sin tareas deja atribución desconocida. La selección no recupera metadatos ausentes ni prueba cobertura completa.
+- **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
+- **Siguiente tarea:** después de revisión/entrega de A2, L4-B importación conjunta real autorizada. Receta sintética no prueba agente raíz, modelos configurados ni cobertura completa.
 - **Decisiones pendientes:** mecanismo de distribución para L5. El permiso de datos reales cubre la muestra L3; no autoriza publicación ni exploración de otras fuentes.
 
 ## Qué ya podés hacer
@@ -32,7 +32,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
-| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1 candidato, atribución de agentes/hijos pendiente |
+| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1 entregado PR #51, A2 candidato; validación real de agentes/hijos pendiente |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
 ## Plan de primera versión local
@@ -44,7 +44,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
 | L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
-| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | A1 candidato helper/tests; A2 plan CLI/docs y B importación conjunta pendientes; L4 no cerrado |
+| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | A1 entregado PR #51; A2 candidato plan CLI/docs; B importación conjunta real pendiente; L4 no cerrado |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
 | L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Pendiente de L5 |
 
@@ -83,6 +83,30 @@ El historial de pruebas y revisiones se conserva abajo, separado del seguimiento
 ## Historial técnico y evidencia (lectura opcional)
 
 Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
+
+### L4-A2 — evidencia del candidato, sin revisión ni entrega
+
+- CLI `plan` readonly, delegación directa y JSON con receta array; sin SQLite,
+  importación automática, inferencias ni datos reales. Helper A1 sin cambios.
+- RED: `node --test --test-name-pattern="CLI plan" test/cli.test.js`, 0/3:
+  comando válido rechazado, ayuda ausente y fallo operativo con exit 2.
+  GREEN: mismo comando 3/3. Barrera loader impide ledger/SQLite y fuentes en
+  ayuda/inválidos; snapshots de archivos/directorios intactos en planificación.
+- Subprocess real sintético: equivalencia helper/CLI, raíz/hijo/tareas, varios
+  directorios, faltantes, errores genéricos y receta manual con import existente:
+  2 insertados; reimportación 0 insertados/2 duplicados, ranking conservado.
+- `npm test`: 149/149; `node --check src/cli.js`,
+  `node --check test/cli.test.js` y `git diff --check`: aprobados.
+  Padre reconfirmó 149/149 y sintaxis/diff tras formato automático. LSP primario:
+  sin errores/warnings; tres hints de inferencia de `options.session` en CLI,
+  no se afirma diagnóstico completamente limpio. ASSESS: riesgo medio,
+  escritor grande, `under_budget`; revisión no requerida ahora, no aprobada.
+  Sólo warnings experimentales SQLite/MockTimers; junctions A1 aprobados,
+  symlink de archivo EPERM y POSIX no ejecutado. Browser N/A: sólo CLI.
+  Revisión y entrega pertenecen al padre.
+- Rollback: retirar sólo diff A2 en `src/cli.js`, `test/cli.test.js`, `README.md`
+  y `ROADMAP.md` respecto a `7251450`; preservar helper A1, historia y bases.
+  Techo ordinario 400 líneas incluyendo pruebas/docs; L4-B sigue pendiente.
 
 ### Entregas técnicas
 

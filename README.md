@@ -277,6 +277,57 @@ try {
 
 Pass a database filename to `openLedger(filename)` to override storage. Keep it outside your repository. No directory discovery or parent-file auto-reading occurs. Relative import paths use the caller's working directory; relative `task.sessionPath` and header `parentSession` use their containing file's directory.
 
+## Planificar sesiones y tareas sin importar (L4-A2 candidato)
+
+```sh
+node src/cli.js plan --root /selected/root.jsonl --tasks-dir /selected/tasks --sessions-dir /selected/sessions
+```
+
+Reemplazá estas rutas placeholder por fuentes que autorizás leer. `--root` y
+`--tasks-dir` son obligatorios y únicos; `--sessions-dir` es obligatorio y
+repetible para admitir hijos en varios directorios. No admite `--db`, `--session`
+ni `--task`, flags desconocidos, valores vacíos/faltantes, valores que empiezan
+con `--` ni sintaxis `--flag=value`. Ayuda válida no accede a fuentes; argumentos
+inválidos tampoco. `plan` no abre SQLite, crea storage ni ejecuta importaciones.
+
+El JSON es el resultado directo de `selectSessionSources`: `sources`,
+`importArgs` y `coverage`. Lee la cabecera de cada sesión seleccionada y los
+archivos `.json` del directorio explícito de tareas, sin búsqueda recursiva.
+Los hijos se admiten sólo dentro de los directorios de sesiones autorizados;
+se rechazan enlaces simbólicos y conflictos relevantes. Raíz/directorios
+inaccesibles o fuentes inválidas fallan sin rutas ni IDs; hijos referenciados
+pero ausentes se cuentan en `linkedSessionsMissing`, sin fabricar cobertura.
+
+**Privacidad:** la salida contiene rutas locales; los nombres pueden incluir
+IDs de tareas/sesiones. No la publiques sin redactar. No incluye conversaciones,
+prompts ni threads. `importArgs` es un array de argumentos, **no sintaxis shell**:
+no lo unas con espacios ni lo ejecutes como texto de terminal.
+
+Para importar manualmente después de revisar el plan, reutilizá el comando
+`import` existente mediante un array (ejemplo ESM ejecutado desde el repositorio):
+
+```js
+import { spawnSync } from 'node:child_process';
+const selected = spawnSync(process.execPath, [
+  'src/cli.js', 'plan', '--root', '/selected/root.jsonl',
+  '--tasks-dir', '/selected/tasks', '--sessions-dir', '/selected/sessions',
+], { encoding: 'utf8' });
+if (selected.status !== 0) throw new Error('Plan failed.');
+const plan = JSON.parse(selected.stdout); // revisar antes del paso manual siguiente
+// Ejecutar sólo cuando hayas autorizado la importación y elegido la base:
+const imported = spawnSync(process.execPath, [
+  'src/cli.js', 'import', '--db', '/outside/repo/usage.sqlite', ...plan.importArgs,
+], { encoding: 'utf8', shell: false });
+if (imported.status !== 0) throw new Error('Import failed.');
+```
+
+El plan mantiene `importedSessions`/`importedTasks` en cero, `complete: false`,
+`referenceCoverage: 'not-inspected'` y `missingReferencedTasks: null`: no conoce
+el denominador de tareas históricas. No recupera metadatos ausentes ni infiere
+agente raíz o modelos configurados. La receta/importación y reimportación sólo
+se comprobaron con fixtures sintéticos; validación conjunta real pendiente de
+L4-B. No hay autoimportación ni ejecución automática de recetas en `plan`.
+
 ## Declared project identity (API only; delivered in PR #37)
 
 ```js

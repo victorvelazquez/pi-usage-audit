@@ -2,6 +2,10 @@ const help = `Usage: node src/cli.js import [--db path] --session path [--sessio
        node src/cli.js import [--db path] --task path [--task path ...]
        node src/cli.js report --db existing.sqlite [--session id] [--project id]
        node src/cli.js costs --db existing.sqlite --currency USD
+       node src/cli.js plan --root session.jsonl --tasks-dir dir --sessions-dir dir [--sessions-dir dir ...]
+Plan requires one root, one tasks directory and at least one sessions directory.
+Plan reads selected sources only; no storage or import. JSON importArgs is an argument array, not shell syntax.
+Plan output contains local paths and task/session identifiers; do not publish it unredacted.
 Import sessions and tasks may be combined; file flags are repeatable.
 Only explicitly selected files are read.
 Report --session: one literal nonempty ID, at most 512 UTF-16 code units.
@@ -13,9 +17,14 @@ Default database: ~/.local/state/pi-usage-audit/usage.sqlite
 `;
 function parse(args) {
   if (args.length === 1 && args[0] === "--help") return { help: true };
-  if (!["import", "report", "costs"].includes(args[0]))
+  if (!["import", "report", "costs", "plan"].includes(args[0]))
     throw new Error("arguments");
-  const options = { command: args[0], sessions: [], tasks: [] };
+  const options = {
+    command: args[0],
+    sessions: [],
+    tasks: [],
+    sessionsDirs: [],
+  };
   for (let i = 1; i < args.length; i++) {
     const flag = args[i];
     if (flag === "--help") {
@@ -24,17 +33,27 @@ function parse(args) {
     }
     if (
       !(
-        options.command === "costs"
-          ? ["--db", "--currency"]
-          : options.command === "report"
-            ? ["--db", "--session", "--project"]
-            : ["--db", "--session", "--task"]
+        options.command === "plan"
+          ? ["--root", "--tasks-dir", "--sessions-dir"]
+          : options.command === "costs"
+            ? ["--db", "--currency"]
+            : options.command === "report"
+              ? ["--db", "--session", "--project"]
+              : ["--db", "--session", "--task"]
       ).includes(flag)
     )
       throw new Error("arguments");
     const value = args[++i];
     if (!value || value.startsWith("--")) throw new Error("arguments");
-    if (flag === "--db") {
+    if (options.command === "plan") {
+      if (flag === "--sessions-dir") {
+        options.sessionsDirs.push(value);
+      } else {
+        const key = flag === "--root" ? "root" : "tasksDir";
+        if (options[key] !== undefined) throw new Error("arguments");
+        options[key] = value;
+      }
+    } else if (flag === "--db") {
       if (options.db !== undefined) throw new Error("arguments");
       options.db = value;
     } else if (flag === "--currency") {
@@ -66,10 +85,14 @@ function parse(args) {
   }
   if (
     !options.help &&
-    (options.command === "import"
-      ? !options.sessions.length && !options.tasks.length
-      : options.db === undefined ||
-        (options.command === "costs" && options.currency === undefined))
+    (options.command === "plan"
+      ? options.root === undefined ||
+        options.tasksDir === undefined ||
+        !options.sessionsDirs.length
+      : options.command === "import"
+        ? !options.sessions.length && !options.tasks.length
+        : options.db === undefined ||
+          (options.command === "costs" && options.currency === undefined))
   )
     throw new Error("arguments");
   return options;
@@ -82,7 +105,23 @@ try {
   process.exitCode = 2;
 }
 if (options?.help) process.stdout.write(help);
-else if (options) {
+else if (options?.command === "plan") {
+  try {
+    const { selectSessionSources } = await import("./session-selection.js");
+    console.log(
+      JSON.stringify(
+        selectSessionSources({
+          root: options.root,
+          tasksDir: options.tasksDir,
+          sessionsDirs: options.sessionsDirs,
+        }),
+      ),
+    );
+  } catch {
+    console.error("Session selection failed.");
+    process.exitCode = 1;
+  }
+} else if (options) {
   let ledger;
   try {
     // Lazy loading also keeps help and parse errors free of SQLite initialization.
