@@ -381,7 +381,11 @@ test("session filter project HTTP joint scope literal freshness and privacy", as
 
 test("session filter client literal payload, pending and atomic DOM validation", async () => {
   const { sessionFilterScript } = await import("../src/session-filter-form.js");
-  const fields = { mode: { value: "session" }, session: { value: " 私😀 " } };
+  const fields = {
+    mode: { value: "session" },
+    session: { value: " 私😀 " },
+    projectId: { value: "Private_Project-1" },
+  };
   const button = {};
   const feedback = {};
   let submit, settle, parsed;
@@ -426,7 +430,12 @@ test("session filter client literal payload, pending and atomic DOM validation",
                 : null,
         };
         return {
-          querySelectorAll: () => (outcome === "malformed" ? [] : [parsed]),
+          querySelectorAll: () =>
+            outcome === "malformed"
+              ? []
+              : outcome === "duplicate"
+                ? [parsed, parsed]
+                : [parsed],
         };
       }
     },
@@ -437,20 +446,90 @@ test("session filter client literal payload, pending and atomic DOM validation",
       });
     },
   });
+  const accepted = [
+    ...["x", "X", "Repo_1", "repo_1", "_-0", "x".repeat(64)].map(
+      (projectId) => ({ projectId }),
+    ),
+    ...[" ", "x".repeat(512), "😀".repeat(256), " 私😀e\u0301 "].map(
+      (session) => ({ session }),
+    ),
+  ];
+  for (const selector of accepted) {
+    const key = Object.keys(selector)[0];
+    fields.mode.value = key === "projectId" ? "project" : "session";
+    fields[key === "projectId" ? "session" : "projectId"].value = "";
+    fields[key].value = selector[key];
+    const pending = submit({ preventDefault() {} });
+    assert.deepEqual(JSON.parse(calls.at(-1).options.body), selector);
+    assert.ok(Object.values(fields).every((field) => field.disabled));
+    settle.resolve({
+      status: 200,
+      headers: { get: () => "text/html" },
+      text: async () => "synthetic HTML",
+    });
+    await pending;
+    assert.ok(Object.values(fields).every((field) => !field.disabled));
+    assert.equal(fields[key].value, selector[key]);
+  }
+  for (const [mode, key, values] of [
+    [
+      "project",
+      "projectId",
+      [
+        "",
+        "x".repeat(65),
+        " x",
+        "x ",
+        "x\n",
+        "a/b",
+        "a.b",
+        "é",
+        "😀",
+        "x\u0000",
+      ],
+    ],
+    ["session", "session", ["", "x".repeat(513), "😀".repeat(257)]],
+    ["unknown", "session", ["Private_Session"]],
+    ["", "session", ["Private_Session"]],
+  ]) {
+    fields.mode.value = mode;
+    for (const value of values) {
+      fields[key].value = value;
+      const count = calls.length;
+      const before = replacements;
+      await submit({ preventDefault() {} });
+      assert.equal(calls.length, count);
+      assert.equal(replacements, before);
+      assert.ok(!feedback.textContent.includes("Private"));
+      assert.equal(fields[key].value, value);
+      assert.ok(Object.values(fields).every((field) => !field.disabled));
+    }
+  }
   for (outcome of [
     "success",
     "global",
     "empty",
     "malformed",
+    "duplicate",
     "script",
     "scope",
     "type",
     "operation",
     "network",
     "body",
+    "recovery",
   ]) {
-    fields.mode.value = outcome === "global" ? "global" : "session";
-    fields.session.value = outcome === "empty" ? "" : " 私😀 ";
+    fields.mode.value =
+      outcome === "global"
+        ? "global"
+        : ["success", "empty"].includes(outcome)
+          ? "session"
+          : "project";
+    fields.projectId.value = outcome === "global" ? "" : "Private_Project-1";
+    fields.session.value = ["empty", "global"].includes(outcome)
+      ? ""
+      : " 私😀 ";
+    const previousInputs = [fields.session.value, fields.projectId.value];
     const count = calls.length;
     const before = replacements;
     const pending = submit({ preventDefault() {} });
@@ -466,7 +545,11 @@ test("session filter client literal payload, pending and atomic DOM validation",
     assert.equal(calls.at(-1).options.method, "POST");
     assert.deepEqual(
       JSON.parse(calls.at(-1).options.body),
-      outcome === "global" ? {} : { session: " 私😀 " },
+      outcome === "global"
+        ? {}
+        : fields.mode.value === "session"
+          ? { session: " 私😀 " }
+          : { projectId: "Private_Project-1" },
     );
     if (outcome === "network") settle.reject(new Error("PRIVATE"));
     else
@@ -486,12 +569,15 @@ test("session filter client literal payload, pending and atomic DOM validation",
     await pending;
     assert.equal(
       replacements,
-      before + (["success", "global"].includes(outcome) ? 1 : 0),
+      before + (["success", "global", "recovery"].includes(outcome) ? 1 : 0),
     );
     assert.equal(button.disabled, false);
     assert.ok(Object.values(fields).every((field) => !field.disabled));
     assert.ok(!feedback.textContent.includes("PRIVATE"));
-    assert.equal(fields.session.value, " 私😀 ");
+    assert.deepEqual(
+      [fields.session.value, fields.projectId.value],
+      previousInputs,
+    );
   }
 });
 
@@ -2440,6 +2526,30 @@ test("manual form gating and exact script CSP", async () => {
         mode === "demo" ? 0 : mode === true ? 2 : 1,
       );
       const csp = page.headers["content-security-policy"];
+      const { sessionFilterScript } = await import(
+        "../src/session-filter-form.js"
+      );
+      if (mode === "demo") {
+        assert.ok(!page.body.includes('name="projectId"'));
+      } else {
+        assert.ok(scripts.some(([, script]) => script === sessionFilterScript));
+        assert.match(
+          page.body,
+          /<option value="project">Proyecto literal<\/option>/,
+        );
+        assert.match(page.body, /<label for="project-id">ID de proyecto/);
+        assert.match(
+          page.body,
+          /id="project-id" name="projectId" type="text" maxlength="64"/,
+        );
+        assert.match(
+          page.body,
+          /role="status" aria-live="polite" aria-atomic="true"/,
+        );
+        const projectInput = page.body.match(/<input id="project-id"[^>]*>/)[0];
+        assert.ok(!/pattern=|required|tabindex=|on\w+=/.test(projectInput));
+        assert.ok(!sessionFilterScript.includes("innerHTML"));
+      }
       for (const [, script] of scripts) {
         const hash = createHash("sha256").update(script).digest("base64");
         assert.ok(csp.includes(`'sha256-${hash}'`));
@@ -2450,7 +2560,7 @@ test("manual form gating and exact script CSP", async () => {
       if (mode === true) {
         assert.ok(!region.includes("<form") && !region.includes("<script"));
         assert.ok(csp.includes("connect-src 'self'"));
-        assert.equal((page.body.match(/<label\b/g) ?? []).length, 8);
+        assert.equal((page.body.match(/<label\b/g) ?? []).length, 9);
         for (const key of Object.keys(priceValue))
           assert.ok(page.body.includes(`name="${key}"`));
         for (const category of ["input", "output", "cacheRead", "cacheWrite"])

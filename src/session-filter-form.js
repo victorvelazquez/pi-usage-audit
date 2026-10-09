@@ -6,19 +6,33 @@ export const sessionFilterScript = `
   const feedback = document.getElementById("session-filter-feedback");
   const mode = form.elements.namedItem("mode");
   const session = form.elements.namedItem("session");
+  const project = form.elements.namedItem("projectId");
   let pending = false;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (pending) return;
-    const selector = mode.value === "global" ? {} : { session: session.value };
-    if (mode.value !== "global" &&
-        (!session.value.length || session.value.length > 512)) {
-      feedback.textContent = "Ingrese una sesión literal de 1–512 unidades UTF-16.";
+    let selector;
+    if (mode.value === "global") selector = {};
+    else if (mode.value === "session") {
+      if (!session.value.length || session.value.length > 512) {
+        feedback.textContent = "Ingrese una sesión literal de 1–512 unidades UTF-16.";
+        return;
+      }
+      selector = { session: session.value };
+    } else if (mode.value === "project") {
+      if (!project.value.length || project.value.length > 64 ||
+          /[^A-Za-z0-9_-]/.test(project.value)) {
+        feedback.textContent = "Ingrese un proyecto literal de 1–64 caracteres ASCII: letras, números, _ o -.";
+        return;
+      }
+      selector = { projectId: project.value };
+    } else {
+      feedback.textContent = "Seleccione global, sesión o proyecto.";
       return;
     }
     pending = true;
     const disable = (value) => {
-      for (const control of [button, mode, session]) control.disabled = value;
+      for (const control of [button, mode, session, project]) control.disabled = value;
     };
     disable(true);
     feedback.textContent = "Consultando…";
@@ -55,9 +69,12 @@ Sin polling. Recargar restaura el snapshot y alcance de arranque; no cambia otra
 <form id="session-filter-form">
 <p><label for="session-mode">Alcance</label>
 <select id="session-mode" name="mode"><option value="global">Global</option>
-<option value="session">Sesión literal</option></select></p>
+<option value="session">Sesión literal</option>
+<option value="project">Proyecto literal</option></select></p>
 <p><label for="session-id">ID de sesión (literal, sin normalización)</label>
 <input id="session-id" name="session" type="text" maxlength="512" autocomplete="off"></p>
+<p><label for="project-id">ID de proyecto (literal ASCII: letras, números, _ o -, sin normalización)</label>
+<input id="project-id" name="projectId" type="text" maxlength="64" autocomplete="off"></p>
 <button id="session-filter-submit" type="submit">Consultar</button>
 <p id="session-filter-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
 </form></section><script>${sessionFilterScript}</script>`;
