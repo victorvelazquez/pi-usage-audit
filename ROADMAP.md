@@ -4,13 +4,13 @@
 
 ## Dónde estamos hoy
 
-**L4-A entregado; L4-B ampliado y verificado: los seis agentes observados y 47/47 tareas retenidas vinculadas al proyecto en la captura. Evidencia pendiente de entrega; no es todo el historial.**
+**L4 entregado en PR #55; L5 en curso: guía local candidata con distribución por repositorio en commit fijo, aprobada por el usuario. No es publicación ni cierre de L5.**
 
-- **Última tarea terminada:** L4-A2 PR #52, integrado en main `666fdad`, commit `939bd07`; revisión nativa aprobada con ack, sin correcciones. 149/149 pruebas y receta sintética idempotente; 310/400 líneas. A1 PR #51 y L3 PR #50 conservados.
-- **En curso:** cierre documental de L4-B ampliado: 82 comprobaciones aprobadas, cuatro raíces, 46 sesiones y 902 registros con 48.461.109 tokens exactos. Se incluyen explore/verify y todas las tareas vinculadas retenidas de la captura; raíces desconocidas y límites históricos siguen explícitos.
+- **Última tarea terminada:** L4-B PR #55 integrado en main `834a1be47585c150d8068aa75308718b530c45cb`, commit `7d81bc0`. 82 comprobaciones; seis agentes, 47/47 tareas retenidas, cuatro raíces, 46 sesiones, 902 registros y 48.461.109 tokens. Raíces desconocidas, costos ausentes y cobertura histórica incompleta siguen explícitos; A1/A2 y L3 conservados.
+- **En curso:** L5, [guía local](LOCAL.md) candidata: Git + Node ≥22.20, commit fijo de aplicación PR #55, demo, importación explícita, base fuera del repo y recuperación segura. La guía aún no está en ese commit; entrega/integración documental pendientes.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** entregar e integrar esta evidencia antes de cerrar L4; después acordar distribución para L5. Cobertura retenida puntual comprobada, no recuperación de tareas eliminadas ni captura continua.
-- **Decisiones pendientes:** mecanismo de distribución para L5. Lectura adicional de hijos vinculados a la muestra autorizada explícitamente; sin otros proyectos, modificaciones de originales ni divulgación de conversaciones. No autoriza publicación.
+- **Siguiente tarea:** comprobar y entregar L5; después L6, recorrido final y decisión humana de entrega. Sin captura continua ni recuperación de tareas eliminadas.
+- **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
 
@@ -32,7 +32,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
-| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B ampliado a seis agentes y 47/47 tareas retenidas de la captura, evidencia pendiente de entrega |
+| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B entregado PR #55: seis agentes y 47/47 tareas retenidas de la captura, no historial completo |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
 ## Plan de primera versión local
@@ -44,8 +44,8 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
 | L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
-| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | A1/A2 entregados PR #51/#52; B ampliado: 82 comprobaciones reales aprobadas, seis agentes y 47/47 tareas retenidas de la captura; evidencia pendiente de entrega, L4 no cerrado |
-| L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
+| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | Entregado: A1/A2 PR #51/#52; B PR #55 (`834a1be`, `7d81bc0`), 82 comprobaciones, seis agentes y 47/47 tareas retenidas; raíces unknown, costos ausentes e historial incompleto |
+| L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | En curso: repositorio en commit fijo aprobado; LOCAL.md candidata, recorrido sintético/HTTP y suite aprobados; entrega/integración y recorrido visual final pendientes |
 | L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Pendiente de L5 |
 
 **Criterio de salida:** importar sesiones seleccionadas sin duplicar consumo, identificar agentes/modelos que consumen más, consultar estimaciones con tarifas explícitas, usar filtros global/sesión/proyecto, reconocer cobertura incierta y arrancar localmente siguiendo la guía. No inferir calidad por tokens ni presentar estimaciones como facturación real.
@@ -84,9 +84,43 @@ El historial de pruebas y revisiones se conserva abajo, separado del seguimiento
 
 Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
 
-### L4-B — evidencia ampliada verificada, entrega pendiente
+### L5 — guía local candidata, no entregada
 
-Base: main `e7b1dbe`, PR #54 integrado, commit documental `86c228e`.
+- Distribución humana aprobada: repositorio en commit fijo de aplicación
+  `834a1be47585c150d8068aa75308718b530c45cb`, sin ZIP/npm global/release.
+  LOCAL.md todavía no existe en ese checkout; integración documental pendiente.
+- Exportación limpia de HEAD a temporal del sistema (no clon remoto comprobado),
+  Node 22.20.0 y rutas con espacios; sin instalación de dependencias/datos reales.
+- Verificación independiente FAIL bloqueante del backup anterior: el recorrido
+  normal deja WAL/SHM tras dashboard readonly y el guard impedía respaldar.
+  El probe previo copió antes de readonly; no demostraba el orden de la guía.
+- Corrección sólo documental: `node:sqlite backup()` async con fuente existente
+  readonly, destino reservado nuevo, Promise esperada y cierre en finally.
+  Backup y restore usan snapshots, no copia del archivo principal ni borrado WAL.
+- 31 checks en PowerShell: plan sin SQLite, arrays import/reimport 2/0 nuevos y
+  2 duplicados; report global 2/48 tokens, sesión 1/29; dashboard HTTP y cierre
+  dejan sidecars presentes antes de backup; restore nuevo, snapshots readonly
+  idénticos y hashes de fuente/base original conservados. GET/POST de selección
+  frescos, recarga cacheada, HTTP 200 y puertos cerrados. Fuente de backup ausente
+  no crea fuente/destino; destino existente falla sin sobrescribirlo.
+- Reverificación independiente PASS en el orden normal, sin alterar la receta:
+  un registro/15 tokens, reimportación 0 nuevos/1 duplicado; snapshots completos
+  original/backup/restored iguales, WAL/SHM presentes, HTTP 200 y puertos cerrados.
+  Destino existente intacto, fuente ausente sin creación y corrupción real con
+  fallo async sanitizado; handles cerrados y hashes originales preservados.
+- Ayuda/demo sin DB y errores de importación se comprobaron en el probe previo.
+  Suite previa en exportación 149/149, no repetida por este fix documental;
+  warnings SQLite/MockTimers y file symlink EPERM (junctions aprobados).
+  Sin visual/teclado ni Ctrl+C físico: cierre por terminación de proceso Windows.
+  TDD N/A: docs; FAIL funcional previo → PASS corregido no es RED de una feature.
+- Rollback de esta unidad: sólo diff LOCAL.md/README.md/ROADMAP.md; preservar
+  código, fuentes y datos. Revisión, integración y cierre de L5 quedan pendientes.
+
+### L4-B — evidencia ampliada entregada PR #55
+
+Entrega: main `834a1be`, commit `7d81bc0`. Las notas siguientes conservan la
+verificación histórica previa a la entrega, no una nueva lectura de datos.
+Base de esa verificación: main `e7b1dbe`, PR #54 integrado, commit documental `86c228e`.
 Captura: 2026-10-09 19:08:47 UTC. Verificador independiente: 82 comprobaciones
 aprobadas. Sin cambios de código ni defectos detectados; TDD RED no aplica.
 
