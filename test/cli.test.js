@@ -6,6 +6,10 @@ import {
   writeFileSync,
   readFileSync,
   existsSync,
+  readdirSync,
+  statSync,
+  truncateSync,
+  symlinkSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -51,6 +55,294 @@ const message = (id) => ({
     },
   },
 });
+async function selectionFixture() {
+  const f = fixture();
+  const tasksDir = join(f.dir, "tasks");
+  const sessionsDir = join(f.dir, "sessions");
+  mkdirSync(tasksDir);
+  mkdirSync(sessionsDir);
+  const session = (name, id = name) => f.file(`sessions/${name}`, [header(id)]);
+  const root = session("root.jsonl", "root");
+  const record = (name, task) => f.file(`tasks/${name}.json`, [{ task }]);
+  // Task envelopes are JSON, whereas sessions are JSONL.
+  const task = (name, fields) => {
+    const path = record(name, fields);
+    writeFileSync(
+      path,
+      JSON.stringify({ task: fields, thread: "PRIVATE_SENTINEL" }),
+    );
+    return path;
+  };
+  const { selectSessionSources } = await import("../src/session-selection.js");
+  const options = { root, tasksDir, sessionsDirs: [sessionsDir] };
+  const select = (overrides = {}) =>
+    selectSessionSources({ ...options, ...overrides });
+  const rejects = (overrides = {}) =>
+    assert.throws(() => select(overrides), {
+      message: "Session selection failed.",
+    });
+  const link = (name, sessionPath, parentSessionId = "root") =>
+    task(name, { id: name, sessionPath, parentSessionId, agent: "synthetic" });
+  return {
+    ...f,
+    tasksDir,
+    sessionsDir,
+    root,
+    session,
+    task,
+    link,
+    select,
+    rejects,
+  };
+}
+
+test("session selection BFS, continuations, literal IDs and detached recipe", async () => {
+  const f = await selectionFixture();
+  const a = f.session("a.jsonl", " a ");
+  const b = f.session("b.jsonl", "b");
+  const grandchild = f.session("grandchild.jsonl", "grandchild");
+  const rows = [
+    f.task("00", { id: "root-task", sessionPath: "../sessions/root.jsonl" }),
+    // Grandchild sorts before its parent: selection must still be breadth-first.
+    f.link("01", grandchild, " a "),
+    f.link("02", a),
+    f.link("03", a),
+    f.link("04", b),
+  ];
+  f.link("foreign", "outside/missing", "foreign");
+  mkdirSync(join(f.tasksDir, "nested"));
+  writeFileSync(join(f.tasksDir, "nested", "ignored.json"), "invalid");
+  writeFileSync(join(f.tasksDir, "ignored.txt"), "invalid");
+  const sentinel = join(f.dir, "sentinel.sqlite");
+  writeFileSync(sentinel, "unchanged");
+  const before = readdirSync(f.dir);
+  const result = f.select();
+  assert.deepEqual(result.sources, {
+    sessions: [f.root, a, b, grandchild],
+    tasks: rows,
+  });
+  assert.deepEqual(result.importArgs, [
+    "--session",
+    f.root,
+    "--session",
+    a,
+    "--session",
+    b,
+    "--session",
+    grandchild,
+    ...rows.flatMap((path) => ["--task", path]),
+  ]);
+  assert.deepEqual(result.coverage, {
+    taskRecordsScanned: 6,
+    linkedTasksFound: 5,
+    sessionsFound: 4,
+    linkedSessionsMissing: 0,
+    missingReferencedTasks: null,
+    importedSessions: 0,
+    importedTasks: 0,
+    referenceCoverage: "not-inspected",
+    complete: false,
+  });
+  result.sources.sessions.length = 0;
+  assert.equal(f.select().sources.sessions.length, 4);
+  assert.deepEqual(readdirSync(f.dir), before);
+  assert.equal(readFileSync(sentinel, "utf8"), "unchanged");
+  assert.deepEqual(readdirSync(f.home), []);
+  assert.equal(existsSync(join(f.dir, "db")), false);
+});
+
+test("session selection platform path identity preserves canonical output", async (t) => {
+  const f = await selectionFixture();
+  const rootTask = f.task("root", {
+    id: "root-task",
+    sessionPath: f.root.toUpperCase(),
+  });
+  if (process.platform !== "win32") {
+    assert.equal(f.select().coverage.linkedTasksFound, 0);
+    f.task("root", { id: "root-task", sessionPath: f.root });
+    assert.equal(f.select().coverage.linkedTasksFound, 1);
+    t.diagnostic("POSIX: lexical path identity remains case-sensitive");
+    return;
+  }
+  assert.deepEqual(f.select().sources.tasks, [rootTask]);
+  const child = f.session("child.jsonl", "Child");
+  const first = f.link("child", child.toUpperCase());
+  // Same task ID and locator, with different casing, is not a conflict.
+  const alias = f.task("continuation", {
+    id: "child",
+    sessionPath: child,
+    parentSessionId: "root",
+    agent: "synthetic",
+  });
+  const continuation = f.task("locator-only", {
+    id: "CHILD",
+    sessionPath: child.toUpperCase(),
+    agent: "different",
+  });
+  const missing = join(f.sessionsDir, "missing.jsonl");
+  f.link("missing-lower", missing);
+  f.link("missing-upper", missing.toUpperCase());
+  f.link("foreign", "outside/missing", "ROOT");
+  const result = f.select();
+  assert.deepEqual(result.sources.sessions, [f.root, child]);
+  assert.equal(result.coverage.linkedTasksFound, 6);
+  assert.equal(result.coverage.linkedSessionsMissing, 1);
+  for (const path of [rootTask, first, alias, continuation])
+    assert.ok(result.sources.tasks.includes(path));
+  t.diagnostic(
+    "Windows: mixed-case roots, continuations and missing locators checked",
+  );
+});
+
+test("session selection absent children and unknown task denominator", async () => {
+  const f = await selectionFixture();
+  assert.equal(f.select().coverage.missingReferencedTasks, null);
+  assert.equal(f.select().coverage.linkedTasksFound, 0);
+  for (const id of ["one", "two"]) f.link(id, "../sessions/missing");
+  const result = f.select();
+  assert.equal(result.coverage.linkedSessionsMissing, 1);
+  assert.equal(result.coverage.sessionsFound, 1);
+  assert.equal(result.coverage.complete, false);
+});
+
+test("session selection admission, headers and relevant conflicts", async () => {
+  const f = await selectionFixture();
+  for (const options of [
+    { root: "" },
+    { tasksDir: null },
+    { sessionsDirs: [] },
+    { sessionsDirs: [3] },
+    { extra: true },
+  ])
+    f.rejects(options);
+  for (const value of [
+    null,
+    {},
+    { type: "session", version: 1, id: "x" },
+    header(""),
+    header("x".repeat(513)),
+    header(7),
+  ]) {
+    writeFileSync(f.root, JSON.stringify(value) + "\n");
+    f.rejects();
+  }
+  writeFileSync(f.root, JSON.stringify(header("x".repeat(512))) + "\n");
+  assert.equal(f.select().coverage.sessionsFound, 1);
+  writeFileSync(f.root, JSON.stringify(header("root", { version: 2 })) + "\n");
+  assert.equal(f.select().coverage.sessionsFound, 1);
+  for (const fields of [
+    { id: 1 },
+    { sessionPath: 1 },
+    { parentSessionId: 1 },
+    { agent: {} },
+  ]) {
+    f.task("bad", {
+      id: "bad",
+      parentSessionId: "root",
+      sessionPath: f.root,
+      ...fields,
+    });
+    f.rejects();
+  }
+  f.task("bad", { id: "same", sessionPath: f.root, agent: "a" });
+  f.task("duplicate", { id: "same", sessionPath: f.root, agent: "b" });
+  f.rejects();
+  f.task("duplicate", {
+    id: "same",
+    sessionPath: "outside/missing",
+    agent: "a",
+  });
+  f.rejects();
+  f.task("duplicate", { id: "same", sessionPath: f.root, agent: "a" });
+  assert.equal(f.select().coverage.linkedTasksFound, 2);
+  const collision = f.session("collision.jsonl", "root");
+  f.link("collision", collision);
+  f.rejects();
+  writeFileSync(collision, "not-json\n");
+  f.rejects();
+});
+
+test("session selection lexical scope and symlink ancestors", async (t) => {
+  const f = await selectionFixture();
+  for (const path of [
+    "../../outside/missing",
+    "../sessions-sibling/missing",
+    f.dir,
+  ]) {
+    f.link("escape", path);
+    f.rejects();
+  }
+  f.link("escape", "../../outside", "foreign");
+  assert.equal(f.select().coverage.linkedTasksFound, 0);
+  const alias = join(f.sessionsDir, "alias");
+  try {
+    symlinkSync(f.dir, alias, "junction");
+  } catch (error) {
+    if (!["EPERM", "EACCES", "ENOTSUP"].includes(error.code)) throw error;
+    t.diagnostic(`Symlink checks unavailable: ${error.code}`);
+    return;
+  }
+  f.rejects({ sessionsDirs: [alias] });
+  f.rejects({ tasksDir: join(alias, "tasks") });
+  f.rejects({ root: join(alias, "sessions", "root.jsonl") });
+  f.link("escape", join(alias, "missing"));
+  f.rejects();
+  f.link("escape", f.root);
+  try {
+    symlinkSync(f.root, join(f.tasksDir, "symlink.json"), "file");
+  } catch (error) {
+    if (!["EPERM", "EACCES", "ENOTSUP"].includes(error.code)) throw error;
+    t.diagnostic(
+      `File symlink check unavailable; junction checks passed: ${error.code}`,
+    );
+    return;
+  }
+  f.rejects();
+});
+
+test("session selection exact limits and overflow with sparse sessions", async () => {
+  const f = await selectionFixture();
+  const MiB = 1024 * 1024;
+  const task = f.task("sized", { id: "sized", sessionPath: f.root });
+  const content = readFileSync(task, "utf8");
+  writeFileSync(task, content + " ".repeat(MiB - Buffer.byteLength(content)));
+  assert.equal(statSync(task).size, MiB);
+  f.select();
+  writeFileSync(
+    task,
+    content + " ".repeat(MiB + 1 - Buffer.byteLength(content)),
+  );
+  f.rejects();
+  writeFileSync(task, content);
+  for (let i = 0; i < 999; i++)
+    f.task(`limit-${i}`, { id: `t${i}`, sessionPath: f.root });
+  assert.equal(f.select().coverage.taskRecordsScanned, 1000);
+  f.task("overflow", { id: "overflow", sessionPath: f.root });
+  f.rejects();
+  const g = await selectionFixture();
+  for (let i = 0; i < 99; i++) {
+    const path = g.session(`child-${i}`, `child-${i}`);
+    g.link(`child-${i}`, path);
+  }
+  assert.equal(g.select().coverage.sessionsFound, 100);
+  g.link("overflow", g.session("overflow"));
+  g.rejects();
+  const h = await selectionFixture();
+  truncateSync(h.root, 64 * MiB);
+  h.select();
+  truncateSync(h.root, 64 * MiB + 1);
+  h.rejects();
+  truncateSync(h.root, 64 * MiB);
+  for (let i = 0; i < 3; i++) {
+    const path = h.session(`large-${i}`);
+    truncateSync(path, 64 * MiB);
+    h.link(`large-${i}`, path);
+  }
+  assert.equal(h.select().coverage.sessionsFound, 4);
+  h.link("total-overflow", h.session("extra"));
+  h.rejects();
+});
+
 function json(result) {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(
