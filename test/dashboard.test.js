@@ -44,8 +44,6 @@ test("session filter fresh joint reports, admission and atomic failures", async 
           throw new Error("PRIVATE_STORAGE_FAILURE");
         });
       for (const selector of [
-        { projectId: "Private_Project-1" },
-        { projectId: "x".repeat(64) },
         { projectId: " x" },
         { projectId: null },
         { projectId: "x", session: "a" },
@@ -58,7 +56,7 @@ test("session filter fresh joint reports, admission and atomic failures", async 
       assert.equal(
         storageCalls,
         0,
-        "HTTP projects remain inactive before storage",
+        "invalid HTTP selectors reject before storage",
       );
       t.mock.restoreAll();
       assert.equal((await request(port)).body, startup.body);
@@ -173,6 +171,207 @@ test("session filter fresh joint reports, admission and atomic failures", async 
       );
       assert.equal((await request(port)).body, startup.body);
       if (allowManualPrices) assert.equal((await postPrice(port)).status, 200);
+    } finally {
+      t.mock.restoreAll();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+});
+
+test("session filter project HTTP joint scope literal freshness and privacy", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  const literal = "Private_Project-1";
+  const writer = seeded(path);
+  for (const session of ["a", "c", "d", "e", "f"])
+    writer.db
+      .prepare("INSERT INTO project_mappings VALUES (?,?)")
+      .run(session, literal);
+  writer.db
+    .prepare("INSERT INTO project_mappings VALUES (?,?)")
+    .run("b", "Other");
+  writer.close();
+  const expected = (selector, allowManualPrices) => {
+    const reader = ledgerModule.openReadonlyLedger(path);
+    try {
+      const snapshot = reader.dashboardReport({
+        currency: "EUR",
+        ...selector,
+      });
+      return renderDashboard(
+        projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
+        {
+          selected: true,
+          projectSelected: selector.projectId !== undefined,
+          sessionSelected: selector.session !== undefined,
+          allowManualPrices,
+        },
+      );
+    } finally {
+      reader.close();
+    }
+  };
+  for (const allowManualPrices of [false, true]) {
+    const server = await dashboard.startDashboard({
+      db: path,
+      currency: "EUR",
+      session: "b",
+      allowManualPrices,
+    });
+    try {
+      const port = server.address().port;
+      assert.equal(server.address().address, "127.0.0.1");
+      const startup = await request(port);
+      const before = readFileSync(path);
+      for (const selector of [
+        { projectId: literal },
+        { projectId: literal.toLowerCase() },
+        { projectId: "absent" },
+        { projectId: "x".repeat(64) },
+        { projectId: "_-0" },
+        {},
+        { session: "b" },
+        { projectId: literal },
+      ]) {
+        const html = expected(selector, allowManualPrices);
+        let closes = 0;
+        const close = DatabaseSync.prototype.close;
+        t.mock.method(DatabaseSync.prototype, "close", function () {
+          closes++;
+          return close.call(this);
+        });
+        const end = http.ServerResponse.prototype.end;
+        t.mock.method(http.ServerResponse.prototype, "end", function (...args) {
+          assert.equal(closes, 1, "readonly closed before HTTP reply");
+          return end.apply(this, args);
+        });
+        const response = await postPrice(port, selector, {
+          path: "/session-filter",
+        });
+        t.mock.restoreAll();
+        assert.equal(response.status, 200);
+        assert.equal(response.body, html);
+        for (const key of [
+          "content-type",
+          "cache-control",
+          "x-content-type-options",
+          "referrer-policy",
+          "content-security-policy",
+        ])
+          assert.equal(response.headers[key], startup.headers[key]);
+        assert.ok(!response.body.includes(literal));
+        assert.ok(!response.body.includes(path));
+        assert.ok(!response.body.includes("PRIVATE_ID"));
+        if (selector.projectId === literal) {
+          assert.match(html, /Proyecto seleccionado/);
+          assert.ok(html.includes("9007199254740991"));
+          assert.ok(html.includes("9007199254.740991000000"));
+          assert.ok(html.includes("0.000000000000"));
+          assert.ok(html.includes("missingPrices"));
+          assert.ok(html.includes("Desconocido (null)"));
+          assert.match(html, /<caption>Evolución diaria — UTC<\/caption>/);
+          assert.match(html, /<details><summary>&lt;demo&gt;<\/summary>/);
+        } else if (selector.projectId !== undefined) {
+          assert.match(html, /Proyecto seleccionado/);
+          assert.ok(html.includes("Sin filas"));
+          assert.ok(!html.includes("<details>"));
+        }
+        assert.equal((await request(port)).body, startup.body);
+      }
+      assert.deepEqual(
+        readFileSync(path),
+        before,
+        "filters never write the base",
+      );
+      let storageCalls = 0;
+      for (const method of ["prepare", "exec", "close"])
+        t.mock.method(DatabaseSync.prototype, method, () => {
+          storageCalls++;
+          throw new Error(literal + path);
+        });
+      for (const options of [
+        { headers: { Origin: "null" } },
+        { headers: { Host: "localhost:" + port } },
+        { headers: { "Sec-Fetch-Site": "cross-site" } },
+        { headers: { "Content-Type": "text/plain" } },
+        { headers: { "Content-Encoding": "gzip" } },
+        {
+          body: JSON.stringify({ projectId: literal }) + " ".repeat(8192),
+        },
+        { body: '{"projectId":"x","__proto__":{}}' },
+        { body: JSON.stringify({ session: "b", projectId: literal }) },
+      ])
+        await assert.rejects(
+          postPrice(
+            port,
+            { projectId: literal },
+            {
+              path: "/session-filter",
+              ...options,
+            },
+          ),
+          { code: "ECONNRESET" },
+        );
+      assert.equal(storageCalls, 0);
+      t.mock.restoreAll();
+      for (const mode of ["read", "close"]) {
+        let closes = 0;
+        const close = DatabaseSync.prototype.close;
+        t.mock.method(DatabaseSync.prototype, "close", function () {
+          closes++;
+          close.call(this);
+          if (mode === "close") throw new Error(literal + path);
+        });
+        if (mode === "read")
+          t.mock.method(DatabaseSync.prototype, "prepare", () => {
+            throw new Error(literal + path);
+          });
+        const failed = await postPrice(
+          port,
+          { projectId: literal },
+          {
+            path: "/session-filter",
+          },
+        );
+        assert.equal(failed.status, 500);
+        assert.equal(failed.body, "Session filter operation failed");
+        assert.equal(closes, 1);
+        t.mock.restoreAll();
+        assert.equal((await request(port)).body, startup.body);
+      }
+      const later = openLedger(path);
+      later.db.exec(
+        "UPDATE tasks SET agent='fresh-project-agent' WHERE id='d'",
+      );
+      later.close();
+      if (allowManualPrices)
+        for (const category of categories)
+          assert.equal(
+            (
+              await postPrice(port, {
+                ...priceValue,
+                model: "unpriced",
+                category,
+              })
+            ).status,
+            200,
+          );
+      const fresh = await postPrice(
+        port,
+        { projectId: literal },
+        {
+          path: "/session-filter",
+        },
+      );
+      assert.equal(
+        fresh.body,
+        expected({ projectId: literal }, allowManualPrices),
+      );
+      assert.ok(fresh.body.includes("fresh-project-agent"));
+      assert.equal(fresh.body.includes("missingPrices"), !allowManualPrices);
+      assert.equal((await request(port)).body, startup.body);
     } finally {
       t.mock.restoreAll();
       await new Promise((resolve) => server.close(resolve));
@@ -1710,7 +1909,11 @@ test("dashboard project startup API CLI and replacement scope", async (t) => {
           assert.ok(html.includes("0.000000000000"));
           assert.ok(html.includes("Desconocido (null)"));
           // Existing submissions replace, never intersect with, startup project.
-          for (const selector of [{ session: "b" }, {}]) {
+          for (const selector of [
+            { session: "b" },
+            {},
+            { projectId: "Other" },
+          ]) {
             const response = await postPrice(port, selector, {
               path: "/session-filter",
             });
@@ -1720,7 +1923,10 @@ test("dashboard project startup API CLI and replacement scope", async (t) => {
               response.headers["content-security-policy"],
               page.headers["content-security-policy"],
             );
-            assert.ok(!response.body.includes("Proyecto seleccionado"));
+            assert.equal(
+              response.body.includes("Proyecto seleccionado"),
+              selector.projectId !== undefined,
+            );
           }
           const later = openLedger(path);
           later.db.exec(

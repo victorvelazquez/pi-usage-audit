@@ -4,11 +4,11 @@
 
 ## Dónde estamos hoy
 
-**Selector dashboard de arranque entregado en PR #45; siguiente objetivo: primera versión local útil y comprobada.**
+**L1 entregado en PR #47; L2-A HTTP candidato probado, no revisado ni entregado. L2 no está completo.**
 
-- **Última tarea terminada:** selector proyecto API/CLI PR #45 (`9cc6f71`, ajuste `de53b6a`), integrado en main `5f03277`; entregas anteriores conservadas.
-- **En curso:** L1 autorizado, candidato probado; revisión y entrega pendientes del padre.
-- **Siguiente tarea:** cerrar L1 antes de autorizar L2, conexión del filtro al dashboard.
+- **Última tarea terminada:** L1 admisión privada proyecto PR #47, integrado en main `ada499e`, commit `c71ac11`; selector de arranque PR #45 y entregas anteriores conservadas.
+- **En curso:** L2-A autorizado: conectar HTTP al compuesto readonly existente con pruebas sintéticas; candidato probado, revisión y entrega pendientes del padre.
+- **Siguiente tarea:** cerrar revisión/entrega de L2-A; L2-B UI/browser/teclado pendiente, con autorización separada.
 - **Decisiones pendientes:** rutas/sesiones reales autorizadas para L3 y mecanismo de distribución para L5; este plan no autoriza acceso a datos reales ni publicación.
 
 ## Qué ya podés hacer
@@ -40,8 +40,8 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 
 | ID | Tarea | Criterio para cerrarla | Estado |
 | --- | --- | --- | --- |
-| L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | En curso; candidato probado, no entregado |
-| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Pendiente de L1 |
+| L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
+| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | L2-A HTTP candidato probado, no revisado/entregado; L2-B UI/browser/teclado pendiente |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Pendiente de L2 y autorización |
 | L4 | Resolver bloqueadores de utilidad y atribución | Clasificar hallazgos de L3; cerrar pérdida/duplicación, atribución engañosa o fallos que impidan el recorrido, con regresiones sintéticas. Si no hay bloqueadores, registrar evidencia y cerrar sin código. | Pendiente de L3; tamaño condicionado a hallazgos |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
@@ -115,7 +115,35 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
 
-## L1 — admisión interna de proyecto, candidato probado no entregado
+## L2-A — conexión HTTP privada, candidato probado no revisado ni entregado
+
+- Base limpia `ada499e`; L1 entregado PR #47 (`c71ac11`). Handler existente
+  acepta proyecto validado antes de storage y delega al compuesto readonly.
+  Misma proyección pública/SSR y alcance de ranking/costos/evolución/detalle;
+  sin clasificación duplicada ni postfiltro. Desconocido vacío, literal case-sensitive.
+- Cada envío reemplaza alcance; GET conserva snapshot de arranque. Cierre antes
+  de respuesta; invalidación sin storage y fallo 500 sin IDs/rutas. Global/sesión,
+  precios/demo y barreras Host/Origin/cuerpo/CSP conservados.
+- Pruebas HTTP loopback con SQLite sintético: equivalencia conjunta, valores
+  grandes/cero/null, detalle/evolución, frescura, no escritura, barreras y errores.
+  No UI nueva ni validación browser/teclado: L2-B pendiente, L2 no completo.
+- RED/GREEN: `node --test --test-name-pattern="session filter project HTTP" test/dashboard.test.js`:
+  RED 0/1, proyecto válido cerrado con `ECONNRESET`; GREEN 1/1.
+- Regresión: `node --test --test-name-pattern="session filter|price HTTP|dashboard project" test/dashboard.test.js`
+  18/18; `node --test test/dashboard.test.js` 39/39; `npm test` 140/140.
+  `node --check src/dashboard.js`, `node --check test/dashboard.test.js` y
+  `git diff --check`: OK. Warnings experimentales SQLite/MockTimers únicamente.
+- Diagnósticos automáticos de edición tests/docs limpios; sin runner LSP primario
+  independiente disponible al escritor ni build definido. Evidencia sintética,
+  no aprobación nativa. Forecast 260–340 líneas; revisión/entrega del padre.
+- Rollback: retirar sólo diff L2-A en `src/dashboard.js`, `test/dashboard.test.js`,
+  `README.md` y `ROADMAP.md` respecto a `ada499e`; preservar L1, bases e historia.
+  Sin esquema/deps/captura, datos reales, commit ni entrega. Techo duro 400 líneas.
+
+## L1 — admisión interna de proyecto, entregado PR #47
+
+Integrado en main `ada499e`, commit `c71ac11`. Evidencia histórica del candidato;
+la barrera HTTP descrita abajo corresponde a L1, no al candidato L2-A actual.
 
 - Parser privado: `{}` global, `{session}` literal existente o `{projectId}`
   ASCII literal 1–64; extras/tipos inválidos y ambos selectores se rechazan.
