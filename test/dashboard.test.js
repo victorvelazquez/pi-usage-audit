@@ -37,6 +37,31 @@ test("session filter fresh joint reports, admission and atomic failures", async 
       const port = server.address().port;
       const startup = await request(port);
       assert.ok(startup.body.includes('id="session-filter-form"'));
+      let storageCalls = 0;
+      for (const method of ["prepare", "exec", "close"])
+        t.mock.method(DatabaseSync.prototype, method, () => {
+          storageCalls++;
+          throw new Error("PRIVATE_STORAGE_FAILURE");
+        });
+      for (const selector of [
+        { projectId: "Private_Project-1" },
+        { projectId: "x".repeat(64) },
+        { projectId: " x" },
+        { projectId: null },
+        { projectId: "x", session: "a" },
+        { projectId: "x", extra: "PRIVATE_ID" },
+      ])
+        await assert.rejects(
+          postPrice(port, selector, { path: "/session-filter" }),
+          { code: "ECONNRESET" },
+        );
+      assert.equal(
+        storageCalls,
+        0,
+        "HTTP projects remain inactive before storage",
+      );
+      t.mock.restoreAll();
+      assert.equal((await request(port)).body, startup.body);
       for (const session of [
         undefined,
         literal,
@@ -334,6 +359,83 @@ test("session filter HTTP accepts global and literal UTF16 selectors", async () 
       session,
     });
   }
+});
+
+test("session filter project parser accepts literal ASCII before storage", async (t) => {
+  let storageCalls = 0;
+  for (const method of ["prepare", "exec", "close"])
+    t.mock.method(DatabaseSync.prototype, method, () => {
+      storageCalls++;
+      throw new Error("PRIVATE_STORAGE_FAILURE");
+    });
+  for (const projectId of [
+    "x",
+    "X",
+    "Repo_1",
+    "repo_1",
+    "_-0",
+    "x".repeat(64),
+  ]) {
+    const req = sessionRequest();
+    const result = dashboard.parseSessionFilterRequest(req, priceOrigin);
+    req.end(JSON.stringify({ projectId }));
+    assert.deepEqual(await result, { projectId });
+    for (const event of ["data", "end", "aborted", "error", "close"])
+      assert.equal(req.listenerCount(event), 0);
+  }
+  assert.deepEqual(await parseSessionBody("{}"), {});
+  assert.deepEqual(await parseSessionBody('{"session":" 私😀 "}'), {
+    session: " 私😀 ",
+  });
+  assert.equal(storageCalls, 0);
+});
+
+test("session filter project parser rejects types extras and mixed selectors", async (t) => {
+  let storageCalls = 0;
+  for (const method of ["prepare", "exec", "close"])
+    t.mock.method(DatabaseSync.prototype, method, () => {
+      storageCalls++;
+      throw new Error("PRIVATE_STORAGE_FAILURE");
+    });
+  const invalid = [
+    ...[
+      "",
+      "x".repeat(65),
+      " x",
+      "x ",
+      "x\n",
+      "a/b",
+      "a.b",
+      "é",
+      "😀",
+      "x\u0000",
+      null,
+      1,
+      true,
+      [],
+      {},
+    ].map((projectId) => ({ projectId })),
+    { projectId: "x", session: "a" },
+    { session: "a", projectId: "x" },
+    { projectId: "x", session: null },
+    { projectId: "x", extra: "PRIVATE_ID" },
+    { projectId: "x", constructor: {} },
+    { projectId: "x", toString: null },
+    { project: "x" },
+  ];
+  const bodies = invalid.map((value) => JSON.stringify(value));
+  bodies.push('{"projectId":"x","__proto__":{"polluted":true}}');
+  for (const body of bodies) {
+    const req = sessionRequest();
+    const result = dashboard.parseSessionFilterRequest(req, priceOrigin);
+    req.end(body);
+    await assert.rejects(result, sessionError(400));
+    assert.ok(req.destroyed);
+    for (const event of ["data", "end", "aborted", "error", "close"])
+      assert.equal(req.listenerCount(event), 0);
+  }
+  assert.equal(storageCalls, 0);
+  assert.equal(Object.prototype.polluted, undefined);
 });
 
 test("session filter HTTP rejects shapes and hostile own keys without echo", async () => {

@@ -104,13 +104,15 @@ API omission/`undefined` preserves global scope; unknown projects render empty.
 SSR says “Proyecto seleccionado”, never the literal ID or private path.
 The existing session/global form **replaces** project scope, never intersects it;
 reload restores the static startup project snapshot. No interactive project
-control, payload, route or shared selector state is added. Manual prices remain
-explicit opt-in and database-wide; CSP and readonly-close-before-listen unchanged.
+control, active HTTP project payload, route or shared selector state is added.
+Manual prices remain explicit opt-in and database-wide; CSP and
+readonly-close-before-listen unchanged.
 
 ### Interactive session filtering — unit B delivered PR #36
 
-Internal `parseSessionFilterRequest` admits POST `/session-filter` before storage: JSON `{}` selects global scope; the sole own `session` key must
-contain literal nonempty text of ≤512 UTF-16 units. Extra keys are rejected.
+The delivered HTTP handler admits POST `/session-filter` before storage:
+JSON `{}` selects global scope; the sole own `session` key must contain literal
+nonempty text of ≤512 UTF-16 units. Extra keys are rejected.
 Admission shares the manual-price reader: exact loopback Host and mandatory
 Origin, no duplicate headers, same-origin Fetch-site when present, JSON only,
 8192-byte limit, fatal UTF-8, absolute 5-second deadline and cleanup. Rejections
@@ -126,6 +128,24 @@ region before one DOM replacement. Selector and manual forms stay outside that r
 preserving their inputs/handlers/feedback. Failure keeps the previous report intact.
 Selected CSP permits only exact script hashes and same-origin connections; demo keeps
 script/connect none. Only synthetic validation is authorized; real sessions remain pending.
+
+### Private project admission — L1 tested candidate, not delivered
+
+Internal `parseSessionFilterRequest` additionally accepts JSON
+`{ "projectId": "Repo_1" }` and returns `{ projectId: "Repo_1" }` without storage.
+This exported test seam is not a public API. Exactly one own selector is allowed:
+`session` or `projectId`, never both; `{}` remains global. Project IDs reuse the
+startup validator: literal case-sensitive ASCII `[A-Za-z0-9_-]{1,64}`, without
+trimming, normalization or inference. Empty/invalid types, extra keys and mixed
+selectors reject with sanitized `SessionFilterRequestError` status 400.
+The shared transport/body limits above apply unchanged; rejection destroys the
+request, so the status is not a promised HTTP response.
+
+**HTTP project selection remains inactive:** the existing handler explicitly
+rejects even valid project selectors before loading/opening storage. Session/global
+submissions, startup project scope, demo, prices, HTML and CSP stay unchanged.
+No project form or browser behavior is added; connecting it belongs to L2.
+Only synthetic parser and HTTP barrier tests are used; no real data is authorized.
 
 ### Opt-in manual tariff form (delivered PR #28)
 
