@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**L4 entregado en PR #55; L5 en curso: guía local candidata con distribución por repositorio en commit fijo, aprobada por el usuario. No es publicación ni cierre de L5.**
+**L5 entregado en PR #56; L6 en curso: clon remoto, suite y recorrido readonly aprobados. Ctrl+C y el formulario opt-in en el recorrido visual final siguen pendientes; sin release.**
 
-- **Última tarea terminada:** L4-B PR #55 integrado en main `834a1be47585c150d8068aa75308718b530c45cb`, commit `7d81bc0`. 82 comprobaciones; seis agentes, 47/47 tareas retenidas, cuatro raíces, 46 sesiones, 902 registros y 48.461.109 tokens. Raíces desconocidas, costos ausentes y cobertura histórica incompleta siguen explícitos; A1/A2 y L3 conservados.
-- **En curso:** L5, [guía local](LOCAL.md) candidata: Git + Node ≥22.20, commit fijo de aplicación PR #55, demo, importación explícita, base fuera del repo y recuperación segura. La guía aún no está en ese commit; entrega/integración documental pendientes.
+- **Última tarea terminada:** guía L5 PR #56 integrada en main `d10dd9e`, commit `40757f9`: [LOCAL.md](LOCAL.md), repositorio fijo, Node ≥22.20 y snapshots SQLite seguros. La guía está en esa versión documental; la base de aplicación fijada `834a1be` no la incluye. Evidencia y límites de L4 conservados.
+- **En curso:** L6 con datos sintéticos aislados: clon remoto nuevo, suite 149/149, 73 comprobaciones API/HTTP y siete CLI/snapshot; Edge visible con filtros/detalle por teclado. Ctrl+C no demostrado: cerrar la ventana o terminar procesos no sustituye comprobar retorno al prompt y puerto cerrado.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** comprobar y entregar L5; después L6, recorrido final y decisión humana de entrega. Sin captura continua ni recuperación de tareas eliminadas.
+- **Siguiente tarea:** completar parada Ctrl+C controlada y formulario opt-in visual, cerrar evidencia/revisiones y pedir decisión humana de entrega. No publicar una release por avanzar tareas; sin captura continua ni recuperación histórica.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -45,8 +45,8 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
 | L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | Entregado: A1/A2 PR #51/#52; B PR #55 (`834a1be`, `7d81bc0`), 82 comprobaciones, seis agentes y 47/47 tareas retenidas; raíces unknown, costos ausentes e historial incompleto |
-| L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | En curso: repositorio en commit fijo aprobado; LOCAL.md candidata, recorrido sintético/HTTP y suite aprobados; entrega/integración y recorrido visual final pendientes |
-| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Pendiente de L5 |
+| L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Guía entregada PR #56 (`d10dd9e`, `40757f9`): repositorio fijo y recuperación consistente comprobados; Ctrl+C y recorrido visual final pertenecen a L6 |
+| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | En curso: clon remoto, suite 149/149 y visual readonly aprobados; Ctrl+C y formulario opt-in visual pendientes, no entregado |
 
 **Criterio de salida:** importar sesiones seleccionadas sin duplicar consumo, identificar agentes/modelos que consumen más, consultar estimaciones con tarifas explícitas, usar filtros global/sesión/proyecto, reconocer cobertura incierta y arrancar localmente siguiendo la guía. No inferir calidad por tokens ni presentar estimaciones como facturación real.
 
@@ -84,7 +84,45 @@ El historial de pruebas y revisiones se conserva abajo, separado del seguimiento
 
 Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
 
-### L5 — guía local candidata, no entregada
+### L6 — evidencia parcial, no cierre ni entrega
+
+Base comprobada: main `d10dd9eba62ad99aba75b6d7a229693816ae8f1a`, PR #56 integrado.
+Validación pasiva del producto existente; TDD RED no aplica. Sólo datos sintéticos
+fuera del repositorio, sin historiales personales ni cambios en la base real.
+
+- Clon de red nuevo del repositorio, no archivo/cache local. Checkout fijo de
+  guía `d10dd9e` y de aplicación `834a1be`; src/test/package idénticos antes de
+  ejecutar Node. Guía conservada aparte. Git 2.51.0.windows.2, Node 22.20.0;
+  sin instalación de dependencias. Suite final 149/149, cero fallos/omitidos;
+  sintaxis de cinco JS aprobada, LSP primario no disponible para el verificador.
+- 73 aserciones API/HTTP y siete CLI/snapshot: plan con arrays PowerShell,
+  tres importados, reimportación cero nuevos/tres duplicados; global 87 tokens,
+  sesión 29 y proyecto explícito 68. Backup/restore con WAL/SHM presentes igual
+  al origen, destino existente intacto y fuente ausente sin archivos nuevos.
+  Demo CLI en cwd vacío no crea datos. Procesos propios cerrados y puertos libres
+  mediante terminación Windows: esto no demuestra Ctrl+C.
+- Edge visible, perfil temporal aislado y CDP: Tab/flechas/Enter seleccionan
+  sesión/proyecto sin intersección; reportes 29/68, vacío cero y error inválido
+  conserva vista previa. Recarga vuelve a global 87; modelos 48/39, agentes
+  Beta 39/Alpha 29/unknown 19 y evolución 19/29/39. Espacio abre detalles;
+  Tab y flecha derecha desplazan tabla ancha. Detalle Beta 39 y costos nulos
+  `missingPrices` legibles; reporte sin IDs/rutas privadas. Capturas locales,
+  no publicadas. No equivale a probar un teclado físico.
+- Pendiente Ctrl+C: input nativo de Orca no tuvo efecto verificado. El usuario
+  aclaró que cerró la primera terminal; en el segundo intento reportó retorno
+  al prompt, pero Node y HTTP seguían activos y faltaba registro de retorno.
+  No se da por aprobado ni se afirma defecto de aplicación sin comprobar señal.
+  Limpieza sólo de procesos propios, puertos confirmados cerrados por terminación.
+- Formulario opt-in cubierto por HTTP/API y evidencia histórica, no ejecutado
+  visualmente en este recorrido final. También faltan decisión humana y entrega.
+  File symlink EPERM no ejecutado; junctions aprobados, warnings Git por fixtures
+  cíclicas esperados. No Windows/macOS/Linux equivalentes ni historial completo
+  afirmados. Rollback sólo de este diff en `ROADMAP.md`; preservar código/datos.
+
+### L5 — guía entregada PR #56
+
+Main `d10dd9e`, commit `40757f9`. Las notas siguientes conservan la evidencia
+anterior a su entrega; sus estados de candidata/integración pendiente son históricos.
 
 - Distribución humana aprobada: repositorio en commit fijo de aplicación
   `834a1be47585c150d8068aa75308718b530c45cb`, sin ZIP/npm global/release.
