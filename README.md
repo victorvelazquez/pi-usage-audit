@@ -23,8 +23,10 @@ Cost project filtering API is delivered in PR #42 (main `7a9a582`, commit
 `d71721c`). Evolution project filtering API is delivered in PR #43 (main
 `f546be9`, commit `547cda6`). Composite readonly project reporting is delivered
 in PR #44 (main `655a15e`, commit `d46fb5c`). Startup dashboard project selection
-is the current candidate, not reviewed or delivered.
-Real-session validation remains pending;
+is delivered in PR #45. Private project admission L1 is delivered in PR #47
+(main `ada499e`, commit `c71ac11`). L2-A connects the existing private HTTP
+filter to project reports; it is a tested candidate, not reviewed or delivered.
+Project UI/browser/keyboard work (L2-B) and real-session validation remain pending;
 review and delivery remain parent-owned.
 
 ## Synthetic dashboard demo
@@ -89,7 +91,7 @@ user-provided metadata: do not store secrets in them. Validation uses synthetic
 bases only; real-session validation remains pending. The opt-in form's synthetic
 actual-browser verification completed in Edge 154 before PR #28 delivery.
 
-### Startup project scope — candidate, not reviewed or delivered
+### Startup project scope — delivered PR #45
 
 ```sh
 node src/dashboard.js --db /explicit/existing.sqlite --currency EUR --project Repo_1
@@ -103,8 +105,9 @@ also rejects duplicate/missing flags, `--` values and equals syntax.
 API omission/`undefined` preserves global scope; unknown projects render empty.
 SSR says “Proyecto seleccionado”, never the literal ID or private path.
 The existing session/global form **replaces** project scope, never intersects it;
-reload restores the static startup project snapshot. No interactive project
-control, active HTTP project payload, route or shared selector state is added.
+reload restores the static startup project snapshot. The private HTTP project
+payload is described below; there is no interactive project control, new route
+or shared selector state.
 Manual prices remain explicit opt-in and database-wide; CSP and
 readonly-close-before-listen unchanged.
 
@@ -129,7 +132,7 @@ preserving their inputs/handlers/feedback. Failure keeps the previous report int
 Selected CSP permits only exact script hashes and same-origin connections; demo keeps
 script/connect none. Only synthetic validation is authorized; real sessions remain pending.
 
-### Private project admission — L1 tested candidate, not delivered
+### Private project HTTP filtering — L2-A tested candidate, not delivered
 
 Internal `parseSessionFilterRequest` additionally accepts JSON
 `{ "projectId": "Repo_1" }` and returns `{ projectId: "Repo_1" }` without storage.
@@ -141,11 +144,20 @@ selectors reject with sanitized `SessionFilterRequestError` status 400.
 The shared transport/body limits above apply unchanged; rejection destroys the
 request, so the status is not a promised HTTP response.
 
-**HTTP project selection remains inactive:** the existing handler explicitly
-rejects even valid project selectors before loading/opening storage. Session/global
-submissions, startup project scope, demo, prices, HTML and CSP stay unchanged.
-No project form or browser behavior is added; connecting it belongs to L2.
-Only synthetic parser and HTTP barrier tests are used; no real data is authorized.
+L1 parser admission was delivered in PR #47. L2-A connects admitted project
+payloads to the existing POST `/session-filter` handler in both selected readonly
+and tariff-opt-in modes. Each request opens readonly and delegates
+`{currency,projectId}` to the existing joint report, then uses the same public
+projection, ranking/cost/evolution/detail rendering and closes before reply.
+The scope label says “Proyecto seleccionado”, without ID/path; unknown IDs
+succeed with empty views. Every submission replaces, never intersects, startup
+or previous scope. GET/refresh retains the static startup snapshot.
+Invalid admission never opens storage; operational failures return generic 500
+`Session filter operation failed`, without IDs/paths. Existing body/transport
+barriers, global/session behavior, prices, demo and CSP remain unchanged.
+No project form or new browser behavior is added. L2-B UI/browser/keyboard work
+is pending; L2 is not complete. Evidence is synthetic HTTP loopback only,
+not review/delivery or authorization to access real data.
 
 ### Opt-in manual tariff form (delivered PR #28)
 
@@ -207,8 +219,8 @@ locator explicitly mapped to the ID; every locator counts, including unmapped
 aliases. No classification duplication or result post-filtering is introduced.
 Unknown/unmapped IDs or an absent optional mapping table return the three existing
 empty shapes with explicit cost currency, without repair. Global/session reports
-are unchanged. Startup dashboard project selection is the bounded candidate above;
-interactive project filtering remains out of scope.
+are unchanged. Startup dashboard project selection is delivered PR #45;
+private HTTP project filtering is the bounded L2-A candidate above, without new UI.
 Detached results, exact arithmetic and readonly boundaries remain unchanged:
 `openLedger` intentionally does not expose `dashboardReport`. Invalid requests
 fail before SQL (`Invalid dashboard report`); operational failures reject the
