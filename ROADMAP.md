@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**L4-A entregado; L4-B tiene una muestra real verificada, pero parcial: faltan agentes y tareas retenidas en su ranking. Ampliación pendiente; L4 sigue abierto.**
+**L4-A entregado; L4-B ampliado y verificado: los seis agentes observados y 47/47 tareas retenidas vinculadas al proyecto en la captura. Evidencia pendiente de entrega; no es todo el historial.**
 
 - **Última tarea terminada:** L4-A2 PR #52, integrado en main `666fdad`, commit `939bd07`; revisión nativa aprobada con ack, sin correcciones. 149/149 pruebas y receta sintética idempotente; 310/400 líneas. A1 PR #51 y L3 PR #50 conservados.
-- **En curso:** ampliar cobertura de L4-B. La muestra anterior pasó 43 comprobaciones, pero sólo importó siete de 42 tareas actualmente retenidas del proyecto. Omite `gentle-ai-explore` y `gentle-ai-verify`; los otros cuatro agentes también tienen consumo fuera de esa muestra. Raíces sin atribución siguen como `unknown`.
+- **En curso:** cierre documental de L4-B ampliado: 82 comprobaciones aprobadas, cuatro raíces, 46 sesiones y 902 registros con 48.461.109 tokens exactos. Se incluyen explore/verify y todas las tareas vinculadas retenidas de la captura; raíces desconocidas y límites históricos siguen explícitos.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** validar un conjunto estable que incluya los seis agentes observados en metadatos retenidos, contrastar tokens y cobertura y después entregar evidencia. No equivale a recuperar todo el historial; L5 espera el cierre de L4.
+- **Siguiente tarea:** entregar e integrar esta evidencia antes de cerrar L4; después acordar distribución para L5. Cobertura retenida puntual comprobada, no recuperación de tareas eliminadas ni captura continua.
 - **Decisiones pendientes:** mecanismo de distribución para L5. Lectura adicional de hijos vinculados a la muestra autorizada explícitamente; sin otros proyectos, modificaciones de originales ni divulgación de conversaciones. No autoriza publicación.
 
 ## Qué ya podés hacer
@@ -32,7 +32,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Costos comparativos | Consultar estimaciones conjuntas agente/proveedor/modelo con tarifas y moneda explícitas | Entregado en PR #16; runtime entregado en PR #15 |
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
-| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B verificado en muestra real, evidencia pendiente de entrega |
+| Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B ampliado a seis agentes y 47/47 tareas retenidas de la captura, evidencia pendiente de entrega |
 | Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
 
 ## Plan de primera versión local
@@ -44,7 +44,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
 | L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
-| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | A1/A2 entregados PR #51/#52; B: 43 comprobaciones reales aprobadas, evidencia pendiente de entrega; L4 no cerrado |
+| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | A1/A2 entregados PR #51/#52; B ampliado: 82 comprobaciones reales aprobadas, seis agentes y 47/47 tareas retenidas de la captura; evidencia pendiente de entrega, L4 no cerrado |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Pendiente de L4 |
 | L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Pendiente de L5 |
 
@@ -84,7 +84,66 @@ El historial de pruebas y revisiones se conserva abajo, separado del seguimiento
 
 Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No necesitás leerlas para seguir el avance diario.
 
-### L4-B — contraste de cobertura: ranking parcial, ampliación pendiente
+### L4-B — evidencia ampliada verificada, entrega pendiente
+
+Base: main `e7b1dbe`, PR #54 integrado, commit documental `86c228e`.
+Captura: 2026-10-09 19:08:47 UTC. Verificador independiente: 82 comprobaciones
+aprobadas. Sin cambios de código ni defectos detectados; TDD RED no aplica.
+
+- Se examinaron 201 registros de tareas y 36 cabeceras del proyecto: 47/47 tareas
+  retenidas vinculadas fueron importadas, con estado metadata `completed`.
+  Cuatro raíces y 46 sesiones originales, 14.631.982 bytes; sin hijos faltantes
+  ni exclusiones por estado. Se excluyeron 154 registros ajenos o sin vínculo.
+- Manifiesto temporal privado con sólo `id`, `sessionPath`, `agent`,
+  `parentSessionId`: cada uno de los 47 registros contrastado con su original,
+  sin cambiar localizadores, copiar conversaciones ni recorrer globalmente hijos.
+  El CLI recibió ese directorio de metadatos explícito; no es una nueva función
+  de captura automática ni un descubrimiento global de la aplicación.
+
+| Agente | Tareas importadas | Registros propios | Tokens exactos |
+| --- | --- | --- | --- |
+| `unknown` | — | 369 | 31.277.286 |
+| `gentle-ai-worker` | 7 | 159 | 8.035.744 |
+| `gentle-ai-verify` | 8 | 134 | 6.091.254 |
+| `flow-pr` | 10 | 100 | 1.175.758 |
+| `gentle-ai-explore` | 3 | 37 | 903.179 |
+| `flow-commit` | 9 | 74 | 776.716 |
+| `flow-branch` | 10 | 29 | 201.172 |
+
+- Total: 902 registros, 48.461.109 tokens; lectura independiente BigInt,
+  normalización persistida, conteos, categorías y rankings idénticos al origen.
+  Input 2.127.500, output 279.977, cache read 46.053.632, cache write 0.
+  Sin registros copiados, ambiguos, incompletos, pendientes, malformados,
+  conflictivos ni excluidos en esta captura.
+- Modelos: 901 assistant, `openai-codex / gpt-6.1-sol`, 48.378.647 tokens;
+  una compaction, proveedor/modelo `null`, 82.462 tokens. No se toma un default.
+  Agentes y modelos representan los mismos registros: no se suman entre sí.
+  Raíces sin nombre de agente siguen como `unknown`.
+- Planes deterministas, arrays `importArgs` con `shell:false`. Reimportaciones:
+  cero inserciones, 31/739/77/55 duplicados por raíz; accounting/rankings estables.
+  CLI/API/snapshots readonly globales y por raíz coinciden. GET, POST de sesión
+  y recarga HTTP 200; orden, modelos y detalle conjunto contrastados con API.
+  Sin IDs/rutas privados reflejados, HTML retenido ni escrituras manuales.
+- Costos manuales nulos: siete grupos sin precios; compaction con identidad de
+  proveedor/modelo desconocida. Runtime moneda/total nulos por moneda no
+  registrada; 902 estimaciones con moneda desconocida. No es facturación.
+- Hashes SHA-256 de 46 sesiones y 47 tareas originales iguales antes de planificar
+  y al finalizar HTTP, 19:08:48.091–19:08:55.602 UTC. Entre dos capturas estables
+  aparecieron dos registros de verify y 218.849 tokens; sólo se informa la última,
+  sin mezclar snapshots ni afirmar cierre de sesiones o estabilidad futura.
+- Cobertura histórica sigue `complete:false`, `referenceCoverage:"not-inspected"`
+  y denominador de tareas eliminadas desconocido. 47/47 describe esta captura
+  retenida, no todo el consumo histórico ni todo agente configurado o existente.
+- Sintaxis CLI/selection/ledger/dashboard/dashboard-report y diff aprobados.
+  Suite previa 149/149, no repetida en esta continuación; browser no comprobado
+  aquí, HTTP sí. Base/manifiesto/evidencia permanecen fuera del repo en temporal.
+  Rollback: sólo este diff de `ROADMAP.md`; preservar producto, fuentes y datos.
+  Sin commit/push/entrega implícitos; L4 espera integración de la evidencia.
+
+### L4-B — contraste de cobertura parcial (histórico, ampliación resuelta)
+
+Estas notas conservan la captura previa de cobertura; las cifras nuevas están
+arriba. No describen el inventario retenido actual.
 
 El usuario señaló agentes ausentes. Se contrastaron 200 tareas retenidas y
 36 cabeceras del proyecto, excluyendo tareas ajenas o sin vínculo. Hay seis
