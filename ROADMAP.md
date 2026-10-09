@@ -7,9 +7,9 @@
 **L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Este nuevo registro documental es candidato local, aún sin commit ni integración.**
 
 - **Última tarea terminada:** aceptación humana de L6 para uso local del producto existente en main `41f1f1e`, Node 22.20; código de aplicación fijo `834a1be` y guía L5 `d10dd9e` conservados. Evidencia posterior integrada en PR #57/#58; no se cambian los pins de [LOCAL.md](LOCAL.md).
-- **En curso:** registro documental del cierre en `ROADMAP.md`, con lectura estructural completada; pendiente commit/integración con autorización separada. Producto aceptado no equivale a esta actualización documental entregada.
+- **En curso:** F2 captura automática opt-in de archivos explícitos: candidata local de código, pruebas y docs, no entregada ni integrada. El registro documental de L6 conserva su decisión y evidencia.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** entrega de este registro documental sólo con autorización separada, o priorización humana de F1–F4 como decisión de producto, sin iniciar implementación. No se solicitan más comprobaciones técnicas; no se autorizan release, captura continua, recuperación histórica ni nuevos datos.
+- **Siguiente tarea:** verificar/revisar la candidata F2 y decidir su entrega con autorización separada; sin release ni recuperación histórica/datos reales. Excepción `EXACTauthorize_f2_single_unit_800`: una unidad F2, hasta 800 líneas completas formateadas incluyendo pruebas/docs y 39 líneas documentales previas; no cambia el techo general.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -33,7 +33,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B entregado PR #55: seis agentes y 47/47 tareas retenidas de la captura, no historial completo |
-| Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | No iniciada; requiere autorización |
+| Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | F2 en curso: candidata opt-in explícita, no entregada |
 
 ## Plan de primera versión local
 
@@ -59,7 +59,7 @@ Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del p
 | ID | Objetivo futuro | Resultado buscado / condición para retomarlo |
 | --- | --- | --- |
 | F1 | Filtro y agrupación por tarea | Definir identidad de tarea y consultar su consumo sin inferencias ambiguas; acordar contrato y UI antes de implementar. |
-| F2 | Captura continua opt-in | Incorporar nuevas entradas sin importación manual, con deduplicación, parada y errores visibles; requiere autorización explícita. |
+| F2 | Captura continua opt-in | En curso, candidata autorizada: `watch` con archivos explícitos, baseline sin uso histórico, polling serial de 1000 ms, motor compartido/deduplicación, parada y fallos visibles. Sin descubrimiento, polling UI ni recuperación histórica; entrega pendiente. |
 | F3 | Ampliar cobertura de agentes e hijos | Priorizar formatos/casos no cubiertos observados en uso real, manteniendo consumo incierto separado y no aditivo. Los bloqueadores de la primera versión pertenecen a L4. |
 | F4 | Mejoras de comparación y navegación | Priorizar con experiencia de uso qué vistas ayudan a decidir; sin cambio automático de modelos ni equiparar costo con calidad. |
 

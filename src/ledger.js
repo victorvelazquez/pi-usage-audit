@@ -1702,6 +1702,15 @@ function createLedgerApi(db, secret) {
         .all()
         .map((row) => storedJson(row.report)),
     importFiles({ sessions = [], tasks = [], projectMappings = [] } = {}) {
+      // Preserve admission before source I/O in the explicit-file adapter.
+      validateProjectMappings(projectMappings);
+      return this.importSnapshots({
+        sessions: sessions.map((path) => ({ path, content: read(path) })),
+        tasks: tasks.map((path) => ({ path, content: read(path) })),
+        projectMappings,
+      });
+    },
+    importSnapshots({ sessions = [], tasks = [], projectMappings = [] } = {}) {
       const mappings = validateProjectMappings(projectMappings);
       const report = {
         malformed: 0,
@@ -1726,8 +1735,8 @@ function createLedgerApi(db, secret) {
             projectId,
           );
         }
-        for (const path of sessions) {
-          const lines = read(path).split("\n");
+        for (const { path, content } of sessions) {
+          const lines = content.split("\n");
           let session;
           for (const line of lines) {
             if (!line.trim()) continue;
@@ -1806,8 +1815,7 @@ function createLedgerApi(db, secret) {
           }
           if (!session) report.incomplete++;
         }
-        for (const path of tasks) {
-          const content = read(path);
+        for (const { path, content } of tasks) {
           let task;
           try {
             task = JSON.parse(content).task;

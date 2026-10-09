@@ -32,6 +32,39 @@ evidence is delivered through PR #55 (main `834a1be`, commit `7d81bc0`): six age
 47/47 retained tasks in one capture, not complete history; root attribution and
 cost currency/prices remain unknown or absent.
 
+## Opt-in capture of new usage (F2 candidate)
+
+```sh
+node src/cli.js watch --db /explicit/usage.sqlite --session /explicit/session.jsonl --task /explicit/task.json
+```
+
+`--db` and at least one `--session` are required; session/task flags repeat.
+Only these files are read: no directory/home discovery, parent traversal or
+opening a task's `sessionPath`. Start validates every source before SQLite opens.
+Complete historical usage is excluded; a partial startup tail is captured only
+when completed. Restart establishes a new baseline, not historical recovery.
+
+Polling waits 1000 ms **after** each serial cycle completes. Each cycle reads
+whole selected files and hashes prior bytes; memory/I/O scale with file size.
+Complete appended JSONL lines commit as one validated batch through the existing
+ledger engine, including deduplication, quarantine and conservative attribution.
+Incomplete UTF-8/JSON tails wait for newline; CRLF is supported. Task metadata
+may update attribution even without new usage. Idle cycles do not import/write.
+
+Ctrl+C/SIGTERM stops scheduling, drains the active cycle and closes storage.
+JSONL stdout emits `ready`, `imported`, `stopped` with the latest batch counters,
+not paths/IDs/content. Errors expose only a zero-based source index (sessions,
+then tasks) or a generic storage failure, stop capture and never retry.
+Missing/invalid sources, rewritten prefixes, truncation and commit failures stop
+with exit 1; invalid arguments exit 2, clean stop/help exit 0. Windows subprocess
+signal termination is not proof of physical Ctrl+C or graceful OS delivery.
+
+SQLite is local and may create WAL/SHM files; protect the selected database and
+metadata. No new files/roots or agents are discovered, no automatic UI refresh.
+**Consultar** explicitly reads a fresh joint dashboard report; reload restores
+its cached startup snapshot. Unknown lineage/agents remain uncertain/unknown.
+Prices are estimates, not billing; capture does not supply missing tariffs.
+
 ## Synthetic dashboard demo
 
 ```sh
