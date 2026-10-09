@@ -2,7 +2,8 @@
 
 Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution UI and agent detail.
 
-Project status and next steps: [roadmap and progress](ROADMAP.md).
+Start locally: [Spanish installation and use guide](LOCAL.md) (L5 candidate,
+fixed repository version; no npm installation). Project status: [roadmap](ROADMAP.md).
 Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API delivered
 in PR #24 (main `8cfb899`); semantic validation delivered in PR #26 (`7d37f7c`).
 Opt-in HTTP saving delivered in PR #27 (main `64c81bb`).
@@ -25,9 +26,11 @@ Cost project filtering API is delivered in PR #42 (main `7a9a582`, commit
 in PR #44 (main `655a15e`, commit `d46fb5c`). Startup dashboard project selection
 is delivered in PR #45. Private project admission L1 is delivered in PR #47
 (main `ada499e`, commit `c71ac11`). L2-A HTTP project reporting is delivered in
-PR #48 (main `b8da4ca`, commit `d3b4e65`). L2-B adds the project selector UI as a
-synthetically tested candidate, not reviewed or delivered. Actual browser/keyboard
-verification remains parent-owned and pending; real-session validation is pending.
+PR #48 (main `b8da4ca`, commit `d3b4e65`). L2-B project selector UI is delivered
+in PR #49, including browser/keyboard verification. L3/L4 selected real-data
+evidence is delivered through PR #55 (main `834a1be`, commit `7d81bc0`): six agents,
+47/47 retained tasks in one capture, not complete history; root attribution and
+cost currency/prices remain unknown or absent.
 
 ## Synthetic dashboard demo
 
@@ -88,7 +91,8 @@ not a tariff writer; the manual form still requires explicit opt-in.
 Opening never creates/initializes/repairs a base. SQLite readonly may use WAL/SHM;
 this is not a guarantee of zero physical filesystem effects. Labels remain
 user-provided metadata: do not store secrets in them. Validation uses synthetic
-bases only; real-session validation remains pending. The opt-in form's synthetic
+bases for that delivery; later scoped L3/L4 evidence is recorded in ROADMAP.md.
+The opt-in form's synthetic
 actual-browser verification completed in Edge 154 before PR #28 delivery.
 
 ### Startup project scope — delivered PR #45
@@ -106,7 +110,7 @@ API omission/`undefined` preserves global scope; unknown projects render empty.
 SSR says “Proyecto seleccionado”, never the literal ID or private path.
 The global/session/project form **replaces** scope, never intersects it;
 reload restores the static startup project snapshot. The private HTTP project
-payload and candidate UI are described below; no new route or shared state.
+payload and delivered UI are described below; no new route or shared state.
 Manual prices remain explicit opt-in and database-wide; CSP and
 readonly-close-before-listen unchanged.
 
@@ -120,7 +124,7 @@ Origin, no duplicate headers, same-origin Fetch-site when present, JSON only,
 8192-byte limit, fatal UTF-8, absolute 5-second deadline and cleanup. Rejections
 are sanitized, never echoing IDs. Manual-price behavior is unchanged.
 Selected readonly and opt-in pages enable a stateless selector: explicit global
-or literal session (empty invalid, whitespace valid); the L2-B candidate also
+or literal session (empty invalid, whitespace valid); delivered L2-B also
 adds literal project scope. Each admitted submission
 opens readonly, obtains one joint report, projects/renders and closes before reply.
 Later imports and tariffs affect that submission; there is no polling or server-wide
@@ -130,7 +134,7 @@ while pending and never retries. It validates HTML/status and a scriptfree repor
 region before one DOM replacement. Selector and manual forms stay outside that region,
 preserving their inputs/handlers/feedback. Failure keeps the previous report intact.
 Selected CSP permits only exact script hashes and same-origin connections; demo keeps
-script/connect none. Only synthetic validation is authorized; real sessions remain pending.
+script/connect none. This delivery used synthetic validation; later selected real evidence is in ROADMAP.md.
 
 ### Private project HTTP filtering — L2-A delivered PR #48
 
@@ -156,9 +160,9 @@ Invalid admission never opens storage; operational failures return generic 500
 `Session filter operation failed`, without IDs/paths. Existing body/transport
 barriers, global/session behavior, prices, demo and CSP remain unchanged.
 L2-A did not add a project form. Its evidence uses synthetic HTTP loopback,
-not real data. L2-B below adds the UI; L2 is not complete.
+not real data. L2-B below delivers the UI and completes L2.
 
-### Interactive project selector — L2-B tested candidate, not delivered
+### Interactive project selector — L2-B delivered PR #49
 
 Choose Global, Sesión literal or Proyecto literal, then Consultar. Only the chosen
 scope is sent: `{}`, `{session}` or `{projectId}`. Project ID accepts exactly
@@ -172,8 +176,8 @@ without retries. One validated report-region replacement leaves selector and
 manual-price forms intact; prices remain database-wide and explicit opt-in.
 Readonly includes this query form, demo remains scriptless. Exact static-script
 CSP hashing and startup snapshot/reload behavior are unchanged.
-Synthetic VM/SSR and HTTP regressions are tested; actual browser/keyboard
-verification is pending with the parent. No real-session validation is claimed.
+Synthetic VM/SSR, HTTP and browser/keyboard verification completed for PR #49.
+Later scoped L3/L4 real-session evidence is in ROADMAP.md, not a completeness claim.
 
 ### Opt-in manual tariff form (delivered PR #28)
 
@@ -277,7 +281,7 @@ try {
 
 Pass a database filename to `openLedger(filename)` to override storage. Keep it outside your repository. No directory discovery or parent-file auto-reading occurs. Relative import paths use the caller's working directory; relative `task.sessionPath` and header `parentSession` use their containing file's directory.
 
-## Planificar sesiones y tareas sin importar (L4-A2 candidato)
+## Planificar sesiones y tareas sin importar (L4-A2 entregado PR #52)
 
 ```sh
 node src/cli.js plan --root /selected/root.jsonl --tasks-dir /selected/tasks --sessions-dir /selected/sessions
@@ -324,9 +328,10 @@ if (imported.status !== 0) throw new Error('Import failed.');
 El plan mantiene `importedSessions`/`importedTasks` en cero, `complete: false`,
 `referenceCoverage: 'not-inspected'` y `missingReferencedTasks: null`: no conoce
 el denominador de tareas históricas. No recupera metadatos ausentes ni infiere
-agente raíz o modelos configurados. La receta/importación y reimportación sólo
-se comprobaron con fixtures sintéticos; validación conjunta real pendiente de
-L4-B. No hay autoimportación ni ejecución automática de recetas en `plan`.
+agente raíz o modelos configurados. La receta/importación y reimportación tienen
+regresiones sintéticas y evidencia real seleccionada L4-B entregada en PR #55;
+no prueban cobertura histórica completa. No hay autoimportación ni ejecución
+automática de recetas en `plan`.
 
 ## Declared project identity (API only; delivered in PR #37)
 
