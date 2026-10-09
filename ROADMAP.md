@@ -7,8 +7,8 @@
 **Selector dashboard de arranque entregado en PR #45; siguiente objetivo: primera versión local útil y comprobada.**
 
 - **Última tarea terminada:** selector proyecto API/CLI PR #45 (`9cc6f71`, ajuste `de53b6a`), integrado en main `5f03277`; entregas anteriores conservadas.
-- **En curso:** planificación del cierre local; no hay implementación nueva iniciada.
-- **Siguiente tarea:** L1, admisión interna del selector interactivo por proyecto.
+- **En curso:** L1 autorizado, candidato probado; revisión y entrega pendientes del padre.
+- **Siguiente tarea:** cerrar L1 antes de autorizar L2, conexión del filtro al dashboard.
 - **Decisiones pendientes:** rutas/sesiones reales autorizadas para L3 y mecanismo de distribución para L5; este plan no autoriza acceso a datos reales ni publicación.
 
 ## Qué ya podés hacer
@@ -40,7 +40,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 
 | ID | Tarea | Criterio para cerrarla | Estado |
 | --- | --- | --- | --- |
-| L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Próxima; alcance por confirmar antes de implementar |
+| L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | En curso; candidato probado, no entregado |
 | L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Pendiente de L1 |
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Pendiente de L2 y autorización |
 | L4 | Resolver bloqueadores de utilidad y atribución | Clasificar hallazgos de L3; cerrar pérdida/duplicación, atribución engañosa o fallos que impidan el recorrido, con regresiones sintéticas. Si no hay bloqueadores, registrar evidencia y cerrar sin código. | Pendiente de L3; tamaño condicionado a hallazgos |
@@ -114,6 +114,31 @@ Las secciones siguientes conservan las pruebas y decisiones de cada entrega. No 
 | 4. Análisis global | Parcial: tokens/runtime/costos/evolución API/UI y detalle PR #22 entregados | Ranking por agente/modelo, evolución, ejecuciones y costos con cobertura explícita |
 | 5. Contexto y filtros | Parcial: metadatos básicos y filtro runtime API PR #29/CLI PR #30 y costos API PR #31 y evolución API PR #32 y compuesto API PR #33 y selector de arranque PR #34 entregados; admisión interactiva A/B entregadas PR #35/#36; identidad API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque candidato | Proyecto estable entre worktrees, funcionalidad por tarea, sesión y relaciones padre/hijo |
 | 6. Dashboard localhost | Demo, API readonly, UI seleccionada, evolución, detalle y semántica PR #26 y opt-in/guardado PR #27 y formulario PR #28 entregados | Vista global primero, filtros y detalle después; formulario manual de precios |
+
+## L1 — admisión interna de proyecto, candidato probado no entregado
+
+- Parser privado: `{}` global, `{session}` literal existente o `{projectId}`
+  ASCII literal 1–64; extras/tipos inválidos y ambos selectores se rechazan.
+  Reutiliza validación de arranque, sin ledger/esquema/deps ni datos reales.
+- Barrera explícita del handler: incluso proyecto válido se rechaza antes de
+  cargar/abrir storage. HTTP/UI proyecto sigue pendiente de L2; demo/precios,
+  CSP, snapshots y global/sesión conservados. Browser N/A: sin HTTP/UI nuevo.
+- RED: `node --test --test-name-pattern="session filter project" test/dashboard.test.js`
+  1/2; proyecto válido rechazado. GREEN: mismo comando 2/2. Intento intermedio
+  1/2 por una aserción de PassThrough autoDestroy, corregida sólo en el test.
+- Regresión: `node --test --test-name-pattern="session filter|price HTTP|dashboard project" test/dashboard.test.js`
+  17/17; incluye barrera HTTP readonly/opt-in con cero llamadas storage y reset
+  de transporte, válidos/límites/literalidad, extras/exclusión y admisión previa.
+- Verificación: `node --test test/dashboard.test.js` 38/38; `npm test` 139/139.
+  `node --check src/dashboard.js`, `node --check test/dashboard.test.js` y
+  `git diff --check`: OK. Sólo warnings experimentales de SQLite/MockTimers.
+- Padre: suite reconfirmada 139/139 tras formato; LSP primario y diagnósticos
+  de sesión sin errores. ASSESS: medio, escritor grande, `under_budget`, sin
+  verificador separado requerido; candidato no revisado ni entregado.
+- Rollback: retirar sólo el diff L1 en `src/dashboard.js`,
+  `test/dashboard.test.js`, `README.md` y `ROADMAP.md`; conservar entregas,
+  bases y artefactos sintéticos. Techo duro 400 líneas incluidas pruebas/docs.
+- No entrega ni aprobación afirmada; L2–L6 no implementados por esta unidad.
 
 ## Selector dashboard de proyecto al arrancar — candidato no revisado ni entregado
 

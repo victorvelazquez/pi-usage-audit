@@ -148,6 +148,7 @@ export async function parseManualPriceRequest(req, expectedOrigin) {
 
 // POST admission only: no storage or ID echo.
 // Exported for synthetic tests; a selector is not a report or an HTTP response.
+// Private project admission does not enable project selection in the HTTP handler.
 export async function parseSessionFilterRequest(req, expectedOrigin) {
   const value = await parseJsonRequest(
     req,
@@ -164,6 +165,12 @@ export async function parseSessionFilterRequest(req, expectedOrigin) {
       validSession(value.session)
     )
       return { session: value.session };
+    if (
+      keys.length === 1 &&
+      keys[0] === "projectId" &&
+      validProject(value.projectId)
+    )
+      return { projectId: value.projectId };
   }
   req.destroy();
   throw new SessionFilterRequestError(400);
@@ -280,6 +287,12 @@ async function filterSession(req, res, origin, options) {
   let html;
   try {
     const selector = await parseSessionFilterRequest(req, origin);
+    // L1 is parser-only: keep the delivered HTTP contract global/session.
+    // Reject before loading/opening storage, using the same sanitized transport failure.
+    if (Object.hasOwn(selector, "projectId")) {
+      req.destroy();
+      throw new SessionFilterRequestError(400);
+    }
     const { openReadonlyLedger } = await import("./ledger.js");
     const reader = openReadonlyLedger(options.db);
     try {
