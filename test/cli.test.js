@@ -352,6 +352,162 @@ function json(result) {
   return JSON.parse(result.stdout);
 }
 
+function planRun(f, args, denySources = false) {
+  // In-process loader barrier also detects storage initialization without writes.
+  const script = `
+    import { registerHooks } from 'node:module';
+    registerHooks({ resolve(specifier, context, next) {
+      if (specifier === 'node:sqlite' || specifier.endsWith('/ledger.js') ||
+          (${denySources} && specifier.endsWith('/session-selection.js'))) {
+        process.stderr.write('STORAGE_OR_SOURCE_ACCESS');
+        throw new Error('STORAGE_OR_SOURCE_ACCESS');
+      }
+      return next(specifier, context);
+    }});
+    process.argv = [process.execPath, 'src/cli.js', ...${JSON.stringify(args)}];
+    await import('./src/cli.js');
+  `;
+  return spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", script],
+    {
+      encoding: "utf8",
+      timeout: 10000,
+      env: {
+        ...process.env,
+        HOME: f.home,
+        USERPROFILE: f.home,
+        NODE_OPTIONS: "",
+      },
+    },
+  );
+}
+function snapshot(dir) {
+  return readdirSync(dir, { recursive: true })
+    .sort()
+    .map((name) => {
+      const path = join(dir, name);
+      return [
+        name,
+        statSync(path).isFile() ? readFileSync(path).toString("hex") : null,
+      ];
+    });
+}
+const planArgs = (f) => [
+  "plan",
+  "--root",
+  f.root,
+  "--tasks-dir",
+  f.tasksDir,
+  "--sessions-dir",
+  f.sessionsDir,
+];
+
+test("CLI plan delegates deterministic sources without storage or source writes", async () => {
+  const f = await selectionFixture();
+  const second = join(f.dir, "second sessions");
+  mkdirSync(second);
+  const child = f.file("second sessions/child.jsonl", [header("child")]);
+  f.task("00-root", { id: "root-task", sessionPath: f.root });
+  f.link("01-child", child);
+  f.link("02-missing", join(f.sessionsDir, "missing.jsonl"));
+  f.link("03-foreign", "outside/missing", "foreign");
+  const before = snapshot(f.dir);
+  const args = [...planArgs(f), "--sessions-dir", second];
+  const expected = f.select({ sessionsDirs: [f.sessionsDir, second] });
+  const result = planRun(f, args);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(json(result), expected);
+  assert.deepEqual(json(f.run(...args)), expected);
+  assert.equal(expected.coverage.complete, false);
+  assert.equal(expected.coverage.linkedSessionsMissing, 1);
+  assert.deepEqual(snapshot(f.dir), before);
+});
+
+test("CLI plan admission and help precede sources and SQLite", async () => {
+  const f = await selectionFixture();
+  const before = snapshot(f.dir);
+  const base = planArgs(f);
+  const invalid = [
+    ["plan"],
+    base.slice(0, 3),
+    base.slice(0, 5),
+    ["plan", "--tasks-dir", f.tasksDir, "--sessions-dir", f.sessionsDir],
+    ["plan", "--root", f.root, "--sessions-dir", f.sessionsDir],
+  ];
+  for (const flag of ["--root", "--tasks-dir", "--sessions-dir"]) {
+    for (const value of [[], [""], ["--literal"]])
+      invalid.push([...base, flag, ...value]);
+    invalid.push([...base, `${flag}=PRIVATE_SENTINEL`]);
+  }
+  for (const flag of [
+    "--root",
+    "--tasks-dir",
+    "--db",
+    "--session",
+    "--task",
+    "--oops",
+  ])
+    invalid.push([...base, flag, "PRIVATE_SENTINEL"]);
+  invalid.push([...base, "--help", "--oops"]);
+  for (const args of invalid) {
+    const result = planRun(f, args, true);
+    assert.equal(result.status, 2, JSON.stringify(args));
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, "Invalid arguments. Use --help.\n");
+  }
+  for (const args of [["--help"], ["plan", "--help"], [...base, "--help"]]) {
+    const result = planRun(f, args, true);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, "");
+    assert.match(result.stdout, /plan --root.*--tasks-dir.*--sessions-dir/);
+  }
+  for (const command of ["import", "report", "costs"])
+    assert.equal(planRun(f, [command, "--root", f.root], true).status, 2);
+  assert.deepEqual(snapshot(f.dir), before);
+});
+
+test("CLI plan sanitizes selection failures and recipe supports manual idempotent import", async () => {
+  const f = await selectionFixture();
+  const child = f.file("sessions/child.jsonl", [
+    header("child"),
+    message("one"),
+  ]);
+  f.link("child", child);
+  writeFileSync(
+    f.root,
+    [header("root"), message("one")].map(JSON.stringify).join("\n") + "\n",
+  );
+  const before = snapshot(f.dir);
+  for (const args of [
+    [...planArgs(f), "--sessions-dir", join(f.dir, "PRIVATE_SENTINEL-missing")],
+    [
+      "plan",
+      "--root",
+      join(f.dir, "PRIVATE_SENTINEL"),
+      "--tasks-dir",
+      f.tasksDir,
+      "--sessions-dir",
+      f.sessionsDir,
+    ],
+  ]) {
+    const failed = planRun(f, args);
+    assert.equal(failed.status, 1);
+    assert.equal(failed.stdout, "");
+    assert.equal(failed.stderr, "Session selection failed.\n");
+  }
+  assert.deepEqual(snapshot(f.dir), before);
+  const plan = json(planRun(f, planArgs(f)));
+  assert.deepEqual(snapshot(f.dir), before);
+  // Only this explicit existing import command executes the returned argument array.
+  const first = json(f.run("import", "--db", f.db, ...plan.importArgs));
+  assert.equal(first.report.inserted, 2);
+  const again = json(f.run("import", "--db", f.db, ...plan.importArgs));
+  assert.equal(again.report.inserted, 0);
+  assert.equal(again.report.duplicates, 2);
+  assert.deepEqual(again.ranking, first.ranking);
+});
+
 test("CLI costs explicit currency, existing storage and API equivalence", () => {
   const f = fixture();
   for (const args of [
