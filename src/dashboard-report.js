@@ -143,14 +143,15 @@ export function renderDashboard(
     selected = false,
     sessionSelected = false,
     projectSelected = false,
+    taskSelected = false,
     allowManualPrices = false,
   } = {},
 ) {
-  const scope = projectSelected
-    ? "Proyecto seleccionado"
-    : sessionSelected
-      ? "Sesión seleccionada"
-      : "Alcance global";
+  let scope = "Alcance global";
+  if (sessionSelected) scope = "Sesión seleccionada";
+  if (projectSelected) scope = "Proyecto seleccionado";
+  if (taskSelected)
+    scope = "Sesiones vinculadas a la tarea; no consumo exclusivo";
   const editable = selected && allowManualPrices === true;
   const coverage = demo.coverage;
   const evolution = demo.evolution;
@@ -179,7 +180,7 @@ td { font-variant-numeric: tabular-nums; }
 <p>${escape(description)}</p>
 ${selected ? sessionFilterForm : ""}
 <div id="dashboard-report">
-${selected ? `<p data-dashboard-scope>${scope}. Recargar restaura el snapshot de arranque.${projectSelected ? " Consultar sesión o global reemplaza este alcance; no combina filtros." : ""}</p>` : ""}
+${selected ? `<p data-dashboard-scope>${scope}. Recargar restaura el snapshot de arranque.${projectSelected || taskSelected ? " Cada consulta reemplaza este alcance; no combina filtros." : ""}${taskSelected ? " Consultas de tareas que comparten sesión se solapan y no deben sumarse. Tarea desconocida o sin fuentes importadas: alcance vacío. Vínculo según metadatos actuales del snapshot, no recuperación histórica." : ""}</p>` : ""}
 <p>Agentes, modelos y costos describen las mismas entradas: vistas no aditivas.
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
 <p>Entradas propias confirmadas: ${escape(coverage.includedEntries)}.

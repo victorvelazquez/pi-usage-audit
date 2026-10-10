@@ -11,6 +11,33 @@ const text = (value) =>
   typeof value === "string" && value.length > 0 && value.length <= 512
     ? value
     : null;
+const validSelection = (value, currency = false) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const selectors = ["session", "projectId", "taskId"];
+  const keys = Reflect.ownKeys(value);
+  if (
+    keys.some(
+      (key) => !selectors.includes(key) && !(currency && key === "currency"),
+    ) ||
+    selectors.filter((key) => Object.hasOwn(value, key)).length > 1
+  )
+    return false;
+  if (Object.hasOwn(value, "session") && !text(value.session)) return false;
+  if (Object.hasOwn(value, "taskId") && !text(value.taskId)) return false;
+  if (
+    Object.hasOwn(value, "projectId") &&
+    (typeof value.projectId !== "string" ||
+      value.projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !== value.projectId)
+  )
+    return false;
+  return (
+    !currency ||
+    (Object.hasOwn(value, "currency") &&
+      typeof value.currency === "string" &&
+      value.currency.length === 3 &&
+      /^[A-Z]{3}$/.test(value.currency))
+  );
+};
 const number = (value) =>
   typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
@@ -650,6 +677,22 @@ function createLedgerApi(db, secret) {
     }
     return selected;
   };
+  // Current task metadata selects session context, not exclusive ownership.
+  // Call after snapshot() so external ancestors still determine certainty.
+  const taskSessions = (taskId) =>
+    new Set(
+      db
+        .prepare(`SELECT s.session FROM sources s JOIN tasks t ON t.path=s.path
+      WHERE t.id=?`)
+        .all(taskId)
+        .map((row) => row.session),
+    );
+  const selectedSessions = (value) => {
+    if (Object.hasOwn(value, "taskId")) return taskSessions(value.taskId);
+    if (Object.hasOwn(value, "projectId"))
+      return mappedProjectSessions(value.projectId);
+    return null;
+  };
   const api = {
     db,
     close: () => db.close(),
@@ -697,31 +740,11 @@ function createLedgerApi(db, secret) {
       }
     },
     dashboardReport: (value) => {
-      if (
-        !value ||
-        typeof value !== "object" ||
-        Array.isArray(value) ||
-        !Object.hasOwn(value, "currency") ||
-        Reflect.ownKeys(value).some(
-          (key) => !["currency", "session", "projectId"].includes(key),
-        ) ||
-        (Object.hasOwn(value, "session") &&
-          Object.hasOwn(value, "projectId")) ||
-        (Object.hasOwn(value, "session") && !text(value.session)) ||
-        (Object.hasOwn(value, "projectId") &&
-          (typeof value.projectId !== "string" ||
-            value.projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !==
-              value.projectId)) ||
-        typeof value.currency !== "string" ||
-        value.currency.length !== 3 ||
-        !/^[A-Z]{3}$/.test(value.currency)
-      )
+      if (!validSelection(value, true))
         throw new Error("Invalid dashboard report");
-      const selection = Object.hasOwn(value, "session")
-        ? { session: value.session }
-        : Object.hasOwn(value, "projectId")
-          ? { projectId: value.projectId }
-          : {};
+      const selection = {};
+      for (const key of ["session", "projectId", "taskId"])
+        if (Object.hasOwn(value, key)) selection[key] = value[key];
       const request = { currency: value.currency, ...selection };
       try {
         return readTransaction(() => {
@@ -741,23 +764,8 @@ function createLedgerApi(db, secret) {
       }
     },
     tokenEvolution: (value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value))
-        throw new Error("Invalid token evolution");
-      const keys = Reflect.ownKeys(value);
-      if (
-        keys.length > 1 ||
-        (keys.length === 1 && !["session", "projectId"].includes(keys[0]))
-      )
-        throw new Error("Invalid token evolution");
-      const session = keys[0] === "session" ? value.session : null;
-      const projectId = keys[0] === "projectId" ? value.projectId : null;
-      if (
-        (keys[0] === "session" && !text(session)) ||
-        (keys[0] === "projectId" &&
-          (typeof projectId !== "string" ||
-            projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !== projectId))
-      )
-        throw new Error("Invalid token evolution");
+      if (!validSelection(value)) throw new Error("Invalid token evolution");
+      const session = Object.hasOwn(value, "session") ? value.session : null;
       try {
         return reportTransaction(() => {
           const buckets = new Map();
@@ -770,10 +778,9 @@ function createLedgerApi(db, secret) {
           };
           let includedEntries = 0;
           let excludedEntries = 0;
-          // Classify complete lineage before selecting project or session rows.
+          // Classify complete lineage before selecting context rows.
           const classified = snapshot();
-          const projectSessions =
-            projectId === null ? null : mappedProjectSessions(projectId);
+          const projectSessions = selectedSessions(value);
           for (const row of classified) {
             if (session !== null && row.session !== session) continue;
             if (projectSessions !== null && !projectSessions.has(row.session))
@@ -836,31 +843,9 @@ function createLedgerApi(db, secret) {
       }
     },
     costReport: (value) => {
-      if (
-        !value ||
-        typeof value !== "object" ||
-        Array.isArray(value) ||
-        !Object.hasOwn(value, "currency") ||
-        Reflect.ownKeys(value).some(
-          (key) => !["currency", "session", "projectId"].includes(key),
-        ) ||
-        (Object.hasOwn(value, "session") &&
-          Object.hasOwn(value, "projectId")) ||
-        (Object.hasOwn(value, "session") && !text(value.session)) ||
-        (Object.hasOwn(value, "projectId") &&
-          (typeof value.projectId !== "string" ||
-            value.projectId.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] !==
-              value.projectId)) ||
-        typeof value.currency !== "string" ||
-        value.currency.length !== 3 ||
-        !/^[A-Z]{3}$/.test(value.currency)
-      )
-        throw new Error("Invalid cost report");
+      if (!validSelection(value, true)) throw new Error("Invalid cost report");
       const currency = value.currency;
       const session = Object.hasOwn(value, "session") ? value.session : null;
-      const projectId = Object.hasOwn(value, "projectId")
-        ? value.projectId
-        : null;
       try {
         return reportTransaction(() => {
           const groups = new Map();
@@ -871,8 +856,7 @@ function createLedgerApi(db, secret) {
             excludedByCertainty: {},
           };
           const classified = snapshot();
-          const projectSessions =
-            projectId === null ? null : mappedProjectSessions(projectId);
+          const projectSessions = selectedSessions(value);
           for (const row of classified) {
             // Retain complete lineage evidence before selecting project/session rows.
             if (session !== null && row.session !== session) continue;
@@ -1431,26 +1415,8 @@ function createLedgerApi(db, secret) {
       }
     },
     runtimeReport: (value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) {
-        throw new Error("Invalid runtime report");
-      }
-      const keys = Reflect.ownKeys(value);
-      if (
-        keys.length > 1 ||
-        (keys.length === 1 && !["session", "projectId"].includes(keys[0]))
-      ) {
-        throw new Error("Invalid runtime report");
-      }
-      const session = keys[0] === "session" ? value.session : null;
-      const projectId = keys[0] === "projectId" ? value.projectId : null;
-      if (
-        (keys[0] === "session" && !text(session)) ||
-        (keys[0] === "projectId" &&
-          (typeof projectId !== "string" ||
-            !/^[A-Za-z0-9_-]{1,64}$/.test(projectId)))
-      ) {
-        throw new Error("Invalid runtime report");
-      }
+      if (!validSelection(value)) throw new Error("Invalid runtime report");
+      const session = Object.hasOwn(value, "session") ? value.session : null;
       try {
         return reportTransaction(() => {
           const categories = [
@@ -1474,10 +1440,9 @@ function createLedgerApi(db, secret) {
             if (b === null) return 1;
             return Buffer.compare(Buffer.from(a), Buffer.from(b));
           };
-          // Classify the full ledger before selecting project or session rows.
+          // Classify the full ledger before selecting context rows.
           const classified = snapshot();
-          const projectSessions =
-            projectId === null ? null : mappedProjectSessions(projectId);
+          const projectSessions = selectedSessions(value);
           for (const row of classified) {
             if (session !== null && row.session !== session) continue;
             if (projectSessions !== null && !projectSessions.has(row.session))

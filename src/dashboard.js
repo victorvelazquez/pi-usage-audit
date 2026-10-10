@@ -170,6 +170,8 @@ export async function parseSessionFilterRequest(req, expectedOrigin) {
       validProject(value.projectId)
     )
       return { projectId: value.projectId };
+    if (keys.length === 1 && keys[0] === "taskId" && validSession(value.taskId))
+      return { taskId: value.taskId };
   }
   req.destroy();
   throw new SessionFilterRequestError(400);
@@ -207,6 +209,7 @@ export async function startDashboard({
   currency,
   session,
   projectId,
+  taskId,
   port = 0,
   allowManualPrices = false,
 }) {
@@ -214,7 +217,9 @@ export async function startDashboard({
     if (
       (session !== undefined && !validSession(session)) ||
       (projectId !== undefined && !validProject(projectId)) ||
-      (session !== undefined && projectId !== undefined) ||
+      (taskId !== undefined && !validSession(taskId)) ||
+      [session, projectId, taskId].filter((value) => value !== undefined)
+        .length > 1 ||
       typeof allowManualPrices !== "boolean" ||
       typeof db !== "string" ||
       !db ||
@@ -229,6 +234,7 @@ export async function startDashboard({
         currency,
         ...(session === undefined ? {} : { session }),
         ...(projectId === undefined ? {} : { projectId }),
+        ...(taskId === undefined ? {} : { taskId }),
       });
       html = renderDashboard(
         projectDemo(snapshot.runtime, snapshot.costs, snapshot.evolution),
@@ -236,6 +242,7 @@ export async function startDashboard({
           selected: true,
           sessionSelected: session !== undefined,
           projectSelected: projectId !== undefined,
+          taskSelected: taskId !== undefined,
           allowManualPrices,
         },
       );
@@ -299,6 +306,7 @@ async function filterSession(req, res, origin, options) {
           selected: true,
           sessionSelected: selector.session !== undefined,
           projectSelected: selector.projectId !== undefined,
+          taskSelected: selector.taskId !== undefined,
           allowManualPrices: options.allowManualPrices,
         },
       );
@@ -388,6 +396,7 @@ function parse(args) {
         "--currency",
         "--session",
         "--project",
+        "--task-id",
         "--allow-manual-prices",
       ].includes(flag)
     )
@@ -406,13 +415,21 @@ function parse(args) {
         !value ||
         value.startsWith("--") ||
         (flag === "--session" && !validSession(value)) ||
-        (flag === "--project" && !validProject(value))
+        (flag === "--project" && !validProject(value)) ||
+        (flag === "--task-id" && !validSession(value))
       )
         throw new Error();
-      options[flag === "--project" ? "projectId" : flag.slice(2)] = value;
+      const key =
+        { "--project": "projectId", "--task-id": "taskId" }[flag] ??
+        flag.slice(2);
+      options[key] = value;
     }
   }
-  if (seen.has("--session") && seen.has("--project")) throw new Error();
+  if (
+    ["--session", "--project", "--task-id"].filter((flag) => seen.has(flag))
+      .length > 1
+  )
+    throw new Error();
   options.demo = seen.has("--demo");
   if (options.demo) {
     if (
@@ -420,6 +437,7 @@ function parse(args) {
       seen.has("--currency") ||
       seen.has("--session") ||
       seen.has("--project") ||
+      seen.has("--task-id") ||
       options.allowManualPrices
     )
       throw new Error();
@@ -439,7 +457,7 @@ async function main() {
   }
   if (options === null) {
     console.log(
-      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N] [--session ID | --project ID] [--allow-manual-prices]\n       node src/dashboard.js --help",
+      "Usage: node src/dashboard.js --demo [--port N]\n       node src/dashboard.js --db FILE --currency CODE [--port N] [--session ID | --project ID | --task-id ID] [--allow-manual-prices]\n       node src/dashboard.js --help",
     );
     return;
   }

@@ -7,6 +7,7 @@ export const sessionFilterScript = `
   const mode = form.elements.namedItem("mode");
   const session = form.elements.namedItem("session");
   const project = form.elements.namedItem("projectId");
+  const task = form.elements.namedItem("taskId");
   let pending = false;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -26,13 +27,19 @@ export const sessionFilterScript = `
         return;
       }
       selector = { projectId: project.value };
+    } else if (mode.value === "task") {
+      if (!task.value.length || task.value.length > 512) {
+        feedback.textContent = "Ingrese una tarea literal de 1–512 unidades UTF-16.";
+        return;
+      }
+      selector = { taskId: task.value };
     } else {
-      feedback.textContent = "Seleccione global, sesión o proyecto.";
+      feedback.textContent = "Seleccione global, sesión, proyecto o tarea.";
       return;
     }
     pending = true;
     const disable = (value) => {
-      for (const control of [button, mode, session, project]) control.disabled = value;
+      for (const control of [button, mode, session, project, task]) control.disabled = value;
     };
     disable(true);
     feedback.textContent = "Consultando…";
@@ -70,11 +77,15 @@ Sin polling. Recargar restaura el snapshot y alcance de arranque; no cambia otra
 <p><label for="session-mode">Alcance</label>
 <select id="session-mode" name="mode"><option value="global">Global</option>
 <option value="session">Sesión literal</option>
-<option value="project">Proyecto literal</option></select></p>
+<option value="project">Proyecto literal</option>
+<option value="task">Sesiones vinculadas a tarea</option></select></p>
 <p><label for="session-id">ID de sesión (literal, sin normalización)</label>
 <input id="session-id" name="session" type="text" maxlength="512" autocomplete="off"></p>
 <p><label for="project-id">ID de proyecto (literal ASCII: letras, números, _ o -, sin normalización)</label>
 <input id="project-id" name="projectId" type="text" maxlength="64" autocomplete="off"></p>
+<p><label for="task-id">ID de tarea (literal, sin normalización)</label>
+<input id="task-id" name="taskId" type="text" maxlength="512" autocomplete="off"></p>
+<p>Sesiones vinculadas a la tarea; no consumo exclusivo. Consultas de tareas que comparten sesión se solapan y no deben sumarse.</p>
 <button id="session-filter-submit" type="submit">Consultar</button>
 <p id="session-filter-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
 </form></section><script>${sessionFilterScript}</script>`;
