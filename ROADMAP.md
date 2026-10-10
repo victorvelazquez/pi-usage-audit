@@ -6,10 +6,10 @@
 
 **L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Registro integrado en PR #59, main `c2bb7cb`; captura F2 `1c06` conservada como ancestro.**
 
-- **Última tarea terminada:** F3 diagnósticos de atribución integrado en PR #61, main `93649c6`, commit `b02e506`. F1/F2 y aceptación humana L6 conservadas; sin release. No cierra cobertura de agentes/hijos.
-- **En curso:** F4 comparación/navegación candidata, no entregada: cinco encabezados de tokens ordenables en modelos de base seleccionada; enlaces nativos agentes/modelos/detalle también en demo sin scripts.
+- **Última tarea terminada:** F4 orden de tokens/navegación integrado en PR #62, main `446977a`, commit `8731e63`. F1/F2/F3 y aceptación humana L6 conservadas; sin release. F3 no cierra cobertura de agentes/hijos ni formatos pendientes.
+- **En curso:** `next_explicit_cost_comparison` candidata: comparación compacta conjunta agente/proveedor/modelo, costo manual, cobertura y razones; moneda explícita, sin abrir detalles ni duplicar sus columnas de tokens.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** verificar browser/teclado y revisar F4 antes de decidir entrega. Autorización `f4_token_sort_navigation_400`: unidad cohesiva hasta 400 líneas completas formateadas incluidas pruebas/docs; sin datos reales, API nueva, cambios de modelos ni release.
+- **Siguiente tarea:** revisar y verificar browser/teclado de la comparación explícita antes de decidir entrega. Una unidad cohesiva hasta 400 líneas completas formateadas incluidas pruebas/docs, sin heredar excepciones; sin datos reales, API nueva, cambios de modelos ni release.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -61,7 +61,7 @@ Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del p
 | F1 | Contexto de sesiones vinculadas a tarea | Integrado PR #60, main `a07ea53`: ID literal, vínculo por metadatos actuales, snapshot conjunto y alcance vacío si falta vínculo. Consultas solapadas no aditivas. Propiedad exclusiva sigue como diseño futuro separado. |
 | F2 | Captura continua opt-in | Entregada PR #59, main `c2bb7cb`: `watch` explícito, baseline sin uso histórico, polling serial de 1000 ms y deduplicación. Sin descubrimiento, polling UI ni recuperación histórica; límites de precios y Ctrl+C físico conservados. |
 | F3 | Ampliar cobertura de agentes e hijos | Diagnósticos integrados PR #61, main `93649c6`: no-task, missing-agent, conflicting-agents y task-consensus; sólo entradas propias seleccionadas, metadatos actuales, sin inferir roles. API/CLI y tabla dashboard comparten snapshot; vacío explícito, Consultar reemplaza sin polling. No hay formato no soportado observado ni cierre de cobertura; ampliaciones futuras requieren evidencia/autorización. |
-| F4 | Mejoras de comparación y navegación | Candidata no entregada: input/output/cacheRead/cacheWrite/totalTokens asc/desc exactos, desempate por identidad, foco y aria-sort; Consultar restablece ranking inicial, error conserva vista, recarga vuelve al snapshot de arranque. Navegación por anclas fijas; demo sin scripts ni controles de orden. Sin persistencia, polling, costos nuevos ni equiparar consumo con calidad. |
+| F4 | Mejoras de comparación y navegación | Orden de tokens y navegación integrados PR #62, main `446977a`, commit `8731e63`: asc/desc exactos, desempate por identidad, foco y aria-sort; Consultar restablece ranking, error conserva vista y recarga restaura arranque. Comparación manual explícita candidata: seis columnas conjuntas y ancla fija, demo sin scripts, snapshot conjunto en todos los alcances. Sin orden monetario, subtotal/total global, conversión, polling ni inferencias de calidad. |
 
 Un servicio remoto/multiusuario queda fuera del enfoque actual: necesitaría una decisión de producto y un plan propio, no una extensión implícita del servidor local.
 

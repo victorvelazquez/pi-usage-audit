@@ -596,12 +596,36 @@ Rollback only that unit's diff in `src/dashboard-report.js`, `src/dashboard.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
 `ROADMAP.md`; preserve delivered API A, prior work, bases and test artifacts.
 
+### Compact explicit manual-cost comparison (candidate)
+
+One top-level, captioned table compares agent/provider/model groups without
+opening disclosures: agent, provider, model, manual group cost, coverage and
+reasons. The caption names the explicitly selected currency. The fixed
+`#comparison-costs` navigation link works without scripts in demo too.
+Rows retain public snapshot identity order and exact fixed-12 amounts; quoted
+literal identities distinguish null labels. Known zero is not incomplete null.
+Coverage/reason formatting is shared with the retained native group details.
+
+Selected readonly and opt-in modes use the existing joint snapshot at startup
+and on explicit Consultar, including session/project/task scopes and empty rows.
+Failed queries keep the prior report; reload restores startup. Saving a price
+alone does not refresh costs: Consultar is required. No monetary sorting,
+subtotals/global totals, conversion, rates, private IDs or pricing-version rows.
+Agent/model views and overlapping task sessions remain nonadditive; runtime is
+separate. No quality inference, polling or automatic model changes.
+
+F4 token sorting/navigation is integrated in PR #62, main `446977a`, commit
+`8731e63`. This additional comparison remains a candidate pending review and
+headed browser/keyboard verification, not a delivery or release claim.
+
 ### Agent → provider/model detail (delivered PR #22)
 
 Delivered on `main` `73a1d63`, commit `5535d91`. The verification notes below
 are historical; they do not review the current HTTP admission candidate.
 
-Native `details`/`summary` replaces the flat manual-cost table in both modes.
+Native `details`/`summary` replaced the earlier full flat manual-cost table in
+both modes. The compact comparison candidate below does not duplicate its
+entries, sessions or token columns.
 Each agent opens nested native provider/model disclosures, each with a captioned
 single-group table: four exact token categories, total tokens, entries, distinct
 group sessions, manual cost, coverage and reasons. Summaries are keyboard-selectable
