@@ -107,8 +107,39 @@ function table(
     .join("");
   return `<section${id ? ` id="${id}"` : ""}><h2>${escape(title)}</h2><div class="scroll"><table><caption>${escape(title)}</caption><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${rows.length ? "" : "<p>Sin filas</p>"}</section>`;
 }
+function identityLabel(value) {
+  return value === null ? value : `"${value}"`;
+}
+function coverageLabel(group) {
+  return `${group.coverage.complete ? "complete" : "incomplete"}; completeQuotes: ${group.coverage.completeQuotes}; incompleteEntries: ${group.coverage.incompleteEntries}`;
+}
+function reasonsLabel(group) {
+  return group.reasons.join("; ");
+}
+function costComparison(demo) {
+  return table(
+    `Comparación de costos manuales — ${demo.currency}`,
+    [
+      "Agente",
+      "Proveedor",
+      "Modelo",
+      "Costo manual del grupo",
+      "Cobertura",
+      "Razones",
+    ],
+    demo.costs.map((group) => [
+      identityLabel(group.agent),
+      identityLabel(group.provider),
+      identityLabel(group.model),
+      group.total,
+      coverageLabel(group),
+      reasonsLabel(group),
+    ]),
+    { id: "comparison-costs" },
+  );
+}
 function groupDetails(group, currency) {
-  const identity = (value) => escape(value === null ? value : `"${value}"`);
+  const identity = (value) => escape(identityLabel(value));
   return `<details><summary>Proveedor: ${identity(group.provider)} — Modelo: ${identity(group.model)}</summary>${table(
     `Consumo del grupo y costo manual — ${currency}`,
     [
@@ -129,8 +160,8 @@ function groupDetails(group, currency) {
         group.sessions,
         ...tokenKeys.map((key) => group.tokens[key]),
         group.total,
-        `${group.coverage.complete ? "complete" : "incomplete"}; completeQuotes: ${group.coverage.completeQuotes}; incompleteEntries: ${group.coverage.incompleteEntries}`,
-        group.reasons.join("; "),
+        coverageLabel(group),
+        reasonsLabel(group),
       ],
     ],
   )}</details>`;
@@ -206,7 +237,7 @@ td { font-variant-numeric: tabular-nums; }
 <p>${escape(description)}</p>
 ${selected ? sessionFilterForm : ""}
 <div id="dashboard-report">
-<nav aria-label="Comparaciones"><a href="#comparison-agents">Agentes</a> · <a href="#comparison-models">Modelos</a> · <a href="#comparison-detail">Detalle por agente</a></nav>
+<nav aria-label="Comparaciones"><a href="#comparison-agents">Agentes</a> · <a href="#comparison-models">Modelos</a> · <a href="#comparison-costs">Costos manuales</a> · <a href="#comparison-detail">Detalle por agente</a></nav>
 ${selected ? `<p data-dashboard-scope>${scope}. Recargar restaura el snapshot de arranque.${projectSelected || taskSelected ? " Cada consulta reemplaza este alcance; no combina filtros." : ""}${taskSelected ? " Consultas de tareas que comparten sesión se solapan y no deben sumarse. Tarea desconocida o sin fuentes importadas: alcance vacío. Vínculo según metadatos actuales del snapshot, no recuperación histórica." : ""}</p>` : ""}
 <p>Agentes, modelos y costos describen las mismas entradas: vistas no aditivas.
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
@@ -274,6 +305,7 @@ task-consensus: un agente no nulo compartido por todas las tareas.
 La suma coincide con entradas propias confirmadas; no se suma a rankings ni exclusiones.
 Vacío: cuatro ceros. Metadatos actuales; no demuestra roles ni cobertura histórica.
 El agente literal unknown puede tener consenso; no se reclasifica el ranking.</p>
+${costComparison(demo)}
 ${agentDetails(demo)}
 <p>Moneda explícita: ${escape(demo.currency)}. Grupos por identidad dentro de cada agente, no por dinero.
 Total null significa incompleto: no hay subtotal ni total global. Cero explícito es conocido.

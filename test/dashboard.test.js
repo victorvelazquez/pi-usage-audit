@@ -1274,6 +1274,213 @@ function seeded(path = ":memory:") {
   return ledger;
 }
 
+function explicitCostSection(html) {
+  const section = html.match(
+    /<section id="comparison-costs">[\s\S]*?<\/section>/,
+  );
+  assert.ok(section, "top-level explicit cost comparison section exists");
+  const prefix = html.slice(0, section.index);
+  assert.equal(
+    (prefix.match(/<details>/g) ?? []).length,
+    (prefix.match(/<\/details>/g) ?? []).length,
+    "comparison is outside disclosures",
+  );
+  assert.ok(html.includes('href="#comparison-costs"'));
+  assert.ok(!/<script|<form|<input|<button|<details/.test(section[0]));
+  return section[0];
+}
+function assertExplicitCosts(html, demo) {
+  const section = explicitCostSection(html);
+  const text = (value) =>
+    String(value === null ? "Desconocido (null)" : value).replace(
+      /[&<>"']/g,
+      (char) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[char],
+    );
+  const identity = (value) => (value === null ? value : `"${value}"`);
+  assert.match(
+    section,
+    /<caption>Comparación de costos manuales — EUR<\/caption>/,
+  );
+  assert.deepEqual(
+    [...section.matchAll(/<th scope="col">(.*?)<\/th>/g)].map((m) => m[1]),
+    [
+      "Agente",
+      "Proveedor",
+      "Modelo",
+      "Costo manual del grupo",
+      "Cobertura",
+      "Razones",
+    ],
+  );
+  assert.deepEqual(
+    [...section.matchAll(/<tr>(.*?)<\/tr>/g)]
+      .slice(1)
+      .map((row) =>
+        [...row[1].matchAll(/<td>(.*?)<\/td>/g)].map((cell) => cell[1]),
+      ),
+    demo.costs.map((g) =>
+      [
+        identity(g.agent),
+        identity(g.provider),
+        identity(g.model),
+        g.total,
+        `${g.coverage.complete ? "complete" : "incomplete"}; completeQuotes: ${g.coverage.completeQuotes}; incompleteEntries: ${g.coverage.incompleteEntries}`,
+        g.reasons.join("; "),
+      ].map(text),
+    ),
+  );
+  assert.ok(
+    !/PRIVATE|synthetic\.sqlite|ratePerMillion|effectiveFrom|pricingVersion|data-token-sort/.test(
+      section,
+    ),
+  );
+  if (!demo.costs.length) assert.match(section, /<tbody><\/tbody>.*Sin filas/s);
+  return section;
+}
+
+test("explicit cost comparison exact public matrix, identity and detached rendering", () => {
+  const ledger = seeded();
+  try {
+    ledger.db.exec(`INSERT INTO entries SELECT session, 'OTHER_PRIVATE_ID',
+      json_set(data, '$.model', 'priced'), evidence, conflict FROM entries WHERE session='d';
+      UPDATE entries SET data=json_set(data, '$.provider', 'Desconocido (null)',
+        '$.model', 'Desconocido (null)') WHERE session='d' AND entry='PRIVATE_ID'`);
+    const snapshot = {
+      runtime: ledger.runtimeReport({}),
+      costs: ledger.costReport({ currency: "EUR" }),
+      evolution: ledger.tokenEvolution({}),
+    };
+    const before = structuredClone(snapshot);
+    const demo = projectDemo(
+      snapshot.runtime,
+      snapshot.costs,
+      snapshot.evolution,
+    );
+    assert.equal(demo.costs.filter((g) => g.model === "priced").length, 2);
+    assert.ok(demo.costs.some((g) => g.total === "18014398509.481982000000"));
+    assert.ok(demo.costs.some((g) => g.total === "0.000000000000"));
+    assert.ok(demo.costs.some((g) => g.total === null && g.reasons.length));
+    for (const options of [
+      {},
+      { selected: true },
+      { selected: true, allowManualPrices: true },
+    ])
+      assertExplicitCosts(renderDashboard(demo, options), demo);
+    const section = explicitCostSection(renderDashboard(demo));
+    assert.ok(section.includes("&quot;Desconocido (null)&quot;"));
+    assert.ok(section.includes("<td>Desconocido (null)</td>"));
+    demo.costs[0].agent = `<script>&"'`;
+    demo.costs[0].provider = `<provider>&"'`;
+    demo.costs[0].model = `<model>&"'`;
+    demo.costs[0].reasons.push(`<reason>&"'`);
+    assertExplicitCosts(renderDashboard(demo), demo);
+    assert.deepEqual(snapshot, before);
+    assert.ok(!/<script|<form/.test(renderDashboard(demo)));
+  } finally {
+    ledger.close();
+  }
+  const empty = openLedger(":memory:");
+  try {
+    const demo = projection(empty);
+    assertExplicitCosts(renderDashboard(demo), demo);
+  } finally {
+    empty.close();
+  }
+});
+
+test("explicit cost comparison HTTP joint scopes, fresh, failed and startup snapshots", async (t) => {
+  const path = join(
+    mkdtempSync("test/.runtime-dashboard-"),
+    "synthetic.sqlite",
+  );
+  const writer = seeded(path);
+  writer.db.exec(
+    "INSERT INTO project_mappings VALUES ('a','Synthetic_Project')",
+  );
+  writer.close();
+  const expected = (selector = {}) => {
+    const reader = ledgerModule.openReadonlyLedger(path);
+    try {
+      const s = reader.dashboardReport({ currency: "EUR", ...selector });
+      return projectDemo(s.runtime, s.costs, s.evolution);
+    } finally {
+      reader.close();
+    }
+  };
+  for (const allowManualPrices of [false, true]) {
+    const server = await dashboard.startDashboard({
+      db: path,
+      currency: "EUR",
+      allowManualPrices,
+    });
+    try {
+      const port = server.address().port;
+      const startup = await request(port);
+      const initial = assertExplicitCosts(startup.body, expected());
+      for (const selector of [
+        {},
+        { session: "a" },
+        { projectId: "Synthetic_Project" },
+        { taskId: "a" },
+        { taskId: "absent" },
+        { session: "absent" },
+      ]) {
+        const response = await postPrice(port, selector, {
+          path: "/session-filter",
+        });
+        assert.equal(response.status, 200);
+        assertExplicitCosts(response.body, expected(selector));
+      }
+      t.mock.method(DatabaseSync.prototype, "prepare", () => {
+        throw new Error(path);
+      });
+      const failed = await postPrice(port, {}, { path: "/session-filter" });
+      assert.equal(failed.status, 500);
+      assert.equal(failed.body, "Session filter operation failed");
+      t.mock.restoreAll();
+      assert.equal(explicitCostSection((await request(port)).body), initial);
+      const later = openLedger(path);
+      try {
+        for (const category of categories)
+          later.addManualPrice({
+            ...priceValue,
+            model: "unpriced",
+            category,
+            effectiveFrom: allowManualPrices
+              ? "2025-01-01T00:00:00.000Z"
+              : priceValue.effectiveFrom,
+            ratePerMillion: allowManualPrices ? "4" : "3",
+          });
+      } finally {
+        later.close();
+      }
+      assert.equal(explicitCostSection((await request(port)).body), initial);
+      if (allowManualPrices) {
+        assert.equal((await postPrice(port)).status, 200);
+        assert.equal(
+          explicitCostSection((await request(port)).body),
+          initial,
+          "price save does not refresh startup",
+        );
+      }
+      const fresh = await postPrice(port, {}, { path: "/session-filter" });
+      assert.equal(fresh.status, 200);
+      assert.notEqual(assertExplicitCosts(fresh.body, expected()), initial);
+      assert.equal(explicitCostSection((await request(port)).body), initial);
+    } finally {
+      t.mock.restoreAll();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+});
+
 test("fixture equals projection of immutable synthetic API reports", () => {
   const ledger = seeded();
   try {
