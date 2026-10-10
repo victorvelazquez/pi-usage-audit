@@ -6,10 +6,10 @@
 
 **L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Registro integrado en PR #59, main `c2bb7cb`; captura F2 `1c06` conservada como ancestro.**
 
-- **Última tarea terminada:** F2 captura opt-in entregada en PR #59, main `c2bb7cb`. Aceptación humana L6, evidencia PR #57/#58 y pins de [LOCAL.md](LOCAL.md) conservados; sin release.
-- **En curso:** F1 contexto de sesiones vinculadas a tarea: candidata API/CLI/UI/pruebas/docs, no entregada. No promete consumo exclusivo; tareas que comparten sesión se solapan y no deben sumarse.
+- **Última tarea terminada:** F1 contexto de sesiones vinculadas a tarea integrado en PR #60, main `a07ea53`. F2 PR #59 y aceptación humana L6 conservadas; sin release. Consultas de tareas compartidas se solapan, no consumo exclusivo.
+- **En curso:** F3 diagnósticos de atribución: candidata API/CLI/dashboard/pruebas/docs sintéticas, no entregada. Cuatro razones para entradas propias seleccionadas; no amplía formatos ni cierra cobertura de agentes/hijos.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** verificar/revisar la candidata F1 y decidir entrega separadamente. Autorización `EXACTf1_session_context_single_unit_850`: una unidad de contexto, hasta 850 líneas completas formateadas incluidas pruebas/docs; no extiende la excepción F2 ni autoriza datos reales, release o propiedad exclusiva.
+- **Siguiente tarea:** verificar visualmente/revisar la candidata F3 y decidir entrega separadamente. Autorización `f3_attribution_diagnostics_400`: unidad cohesiva hasta 400 líneas completas formateadas incluidas pruebas/docs; sin datos reales, nuevos formatos, descubrimiento ni release.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -58,9 +58,9 @@ Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del p
 
 | ID | Objetivo futuro | Resultado buscado / condición para retomarlo |
 | --- | --- | --- |
-| F1 | Contexto de sesiones vinculadas a tarea | Candidata implementada, no entregada: ID literal, vínculo por metadatos actuales, snapshot conjunto y alcance vacío si falta vínculo. Consultas solapadas no aditivas. Propiedad y agrupación de consumo exclusivo siguen como diseño futuro separado. |
+| F1 | Contexto de sesiones vinculadas a tarea | Integrado PR #60, main `a07ea53`: ID literal, vínculo por metadatos actuales, snapshot conjunto y alcance vacío si falta vínculo. Consultas solapadas no aditivas. Propiedad exclusiva sigue como diseño futuro separado. |
 | F2 | Captura continua opt-in | Entregada PR #59, main `c2bb7cb`: `watch` explícito, baseline sin uso histórico, polling serial de 1000 ms y deduplicación. Sin descubrimiento, polling UI ni recuperación histórica; límites de precios y Ctrl+C físico conservados. |
-| F3 | Ampliar cobertura de agentes e hijos | Priorizar formatos/casos no cubiertos observados en uso real, manteniendo consumo incierto separado y no aditivo. Los bloqueadores de la primera versión pertenecen a L4. |
+| F3 | Ampliar cobertura de agentes e hijos | Diagnósticos candidatos: no-task, missing-agent, conflicting-agents y task-consensus; sólo entradas propias seleccionadas, metadatos actuales, sin inferir roles. API/CLI y tabla dashboard comparten snapshot; vacío explícito, Consultar reemplaza sin polling. No hay formato no soportado observado ni cierre de cobertura; ampliaciones futuras requieren evidencia/autorización. |
 | F4 | Mejoras de comparación y navegación | Priorizar con experiencia de uso qué vistas ayudan a decidir; sin cambio automático de modelos ni equiparar costo con calidad. |
 
 Un servicio remoto/multiusuario queda fuera del enfoque actual: necesitaría una decisión de producto y un plan propio, no una extensión implícita del servidor local.

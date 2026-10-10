@@ -32,7 +32,7 @@ evidence is delivered through PR #55 (main `834a1be`, commit `7d81bc0`): six age
 47/47 retained tasks in one capture, not complete history; root attribution and
 cost currency/prices remain unknown or absent.
 
-## Task-linked session context (F1 candidate, not delivered)
+## Task-linked session context (F1 delivered PR #60, main `a07ea53`)
 
 ```sh
 node src/cli.js report --db /synthetic/usage.sqlite --task-id 'task-example'
@@ -56,6 +56,24 @@ sessions overlap; never add their query totals.** No exclusive task grouping.
 Global/session/project/task queries replace scope; reload restores startup HTML.
 Labels/feedback do not reflect task IDs or paths; user-typed inputs remain local.
 Estimates are not invoices or evidence of quality. Browser verification is separate.
+
+## Attribution diagnostics (F3 candidate, not delivered)
+
+`runtimeReport(selection).attributionCoverage` adds four entry counts, also exposed
+by CLI `report` and `dashboardReport(...).runtime.attributionCoverage`:
+`no-task`, `missing-agent`, `conflicting-agents`, and `task-consensus`.
+They reuse accounting's task-evidence rules below, count only selected confirmed-own
+entries, and sum to `coverage.includedEntries`. Continuations never multiply counts.
+Existing rankings, exclusions and runtime monetary coverage remain unchanged.
+Literal agent `unknown` can have task consensus; diagnostics do not change that
+legacy sentinel or prove orchestrator/subagent roles, child origin or full history.
+
+The dashboard projects only these counts, with explanations and four explicit zeros
+for empty scope. **Consultar** replaces the whole report with a fresh joint snapshot
+for global/session/project/task; no polling, refresh or startup-cache change.
+Current imported metadata determines evidence; no IDs/paths are added to summaries.
+This synthetic diagnostics candidate adds no formats or schema and does not close
+F3 format/child coverage. Review, browser verification and delivery remain separate.
 
 ## Opt-in capture of new usage (F2 delivered PR #59, main `c2bb7cb`)
 
@@ -594,7 +612,7 @@ exactly one own `session` key, a nonempty string of at most 512 UTF-16 code unit
 Matching is literal, with no trim or case folding. Extra own keys, including
 symbols/nonenumerable keys, and invalid values fail before SQL:
 `Invalid runtime report`. A nonenumerable own session key is accepted.
-The result is `{ provenance: 'imported-own-runtime-report', agents, models, runtime, coverage }`.
+The result is `{ provenance: 'imported-own-runtime-report', agents, models, runtime, coverage, attributionCoverage }` (diagnostics candidate above).
 
 Classification uses the complete imported lineage snapshot **before** filtering.
 Parent evidence outside the selected session remains available; no parents are
