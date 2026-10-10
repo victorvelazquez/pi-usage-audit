@@ -2522,6 +2522,229 @@ test("CLI help and invalid requests are sanitized before startup", () => {
   }
 });
 
+test("model token sorting and static navigation", async () => {
+  const { comparisonNavigationScript } = await import(
+    "../src/comparison-navigation.js"
+  );
+  const demo = fixture();
+  const values = ["9007199254740993", "9007199254740992", "0", "2", "2"];
+  demo.models = values.map((value, index) => ({
+    provider: index === 4 ? null : '<unsafe"provider>',
+    model: index === 4 ? null : `model-${index}`,
+    entries: 1,
+    sessions: 1,
+    tokens: Object.fromEntries(
+      [...categories, "totalTokens"].map((key) => [key, value]),
+    ),
+  }));
+  const before = structuredClone(demo);
+  for (const selected of [false, true]) {
+    const html = renderDashboard(demo, { selected });
+    for (const id of [
+      "comparison-agents",
+      "comparison-models",
+      "comparison-detail",
+    ]) {
+      assert.ok(html.includes(`href="#${id}"`));
+      assert.equal((html.match(new RegExp(`id="${id}"`, "g")) ?? []).length, 1);
+    }
+    assert.equal(
+      (html.match(/data-token-sort=/g) ?? []).length,
+      selected ? 5 : 0,
+    );
+    assert.equal(html.includes(comparisonNavigationScript), selected);
+    assert.ok(!html.includes('<unsafe"provider>'));
+    assert.ok(!html.includes("PRIVATE_ID"));
+    if (selected) {
+      const region = html
+        .split('<div id="dashboard-report">')[1]
+        .split(`</div>\n<script>${comparisonNavigationScript}</script>`)[0];
+      assert.ok(!/<script|<form/.test(region));
+      assert.match(
+        region,
+        /aria-sort="descending"><button type="button" data-token-sort="4">totalTokens/,
+      );
+      assert.match(region, /data-identity-order="0"/);
+    }
+  }
+  assert.deepEqual(
+    demo,
+    before,
+    "rendering leaves the public projection detached",
+  );
+  let click;
+  const makeTable = () => {
+    const headers = values.map((_, index) => ({
+      state: index === 4 ? "descending" : "none",
+      getAttribute() {
+        return this.state;
+      },
+      setAttribute(name, value) {
+        assert.equal(name, "aria-sort");
+        this.state = value;
+      },
+    }));
+    const buttons = headers.map((header, index) => ({
+      dataset: { tokenSort: String(index) },
+      closest: (selector) => (selector === "th" ? header : table),
+    }));
+    const rows = values.map((_, index) => ({
+      dataset: { identityOrder: String(index === 4 ? 0 : index + 1) },
+      cells: [
+        {},
+        {},
+        {},
+        {},
+        ...values.map((_, column) => ({
+          textContent: values[(index + column) % values.length],
+        })),
+      ],
+      index,
+    }));
+    const body = {
+      rows: [...rows],
+      append(...ordered) {
+        this.rows = ordered;
+      },
+    };
+    const table = {
+      tBodies: [body],
+      querySelectorAll: () => buttons,
+    };
+    return { buttons, headers, body };
+  };
+  runInNewContext(comparisonNavigationScript, {
+    document: {
+      addEventListener: (name, handler) => {
+        assert.equal(name, "click", "native buttons handle Tab/Enter/Space");
+        click = handler;
+      },
+    },
+  });
+  let current = makeTable();
+  const activate = (index) =>
+    click({ target: { closest: () => current.buttons[index] } });
+  click({ target: { closest: () => null } });
+  for (let index = 0; index < 5; index++) {
+    current = makeTable();
+    activate(index);
+    const descending = [
+      [0, 1, 4, 3, 2],
+      [4, 0, 2, 3, 1],
+      [3, 4, 1, 2, 0],
+      [2, 3, 0, 1, 4],
+      [1, 2, 4, 0, 3],
+    ];
+    const ascending = [
+      [2, 4, 3, 1, 0],
+      [1, 2, 3, 0, 4],
+      [0, 1, 2, 4, 3],
+      [4, 0, 1, 3, 2],
+      [3, 4, 0, 2, 1],
+    ];
+    assert.deepEqual(
+      current.body.rows.map((row) => row.index),
+      index === 4 ? ascending[index] : descending[index],
+    );
+    activate(index);
+    assert.deepEqual(
+      current.body.rows.map((row) => row.index),
+      index === 4 ? descending[index] : ascending[index],
+    );
+    const direction = index === 4 ? "descending" : "ascending";
+    assert.ok(
+      current.headers.every(
+        (header, i) => header.state === (i === index ? direction : "none"),
+      ),
+    );
+    assert.equal(current.buttons[index].closest("th"), current.headers[index]);
+  }
+  const { sessionFilterScript } = await import("../src/session-filter-form.js");
+  const fields = Object.fromEntries(
+    ["mode", "session", "projectId", "taskId"].map((key) => [
+      key,
+      { value: "" },
+    ]),
+  );
+  let submit;
+  let status = 200;
+  const form = {
+    elements: { namedItem: (key) => fields[key] },
+    addEventListener: (_, handler) => {
+      submit = handler;
+    },
+  };
+  const region = {
+    replaceWith() {
+      current = makeTable();
+    },
+  };
+  runInNewContext(sessionFilterScript, {
+    document: {
+      getElementById: (id) =>
+        ({
+          "session-filter-form": form,
+          "session-filter-submit": {},
+          "session-filter-feedback": {},
+          "dashboard-report": region,
+        })[id],
+    },
+    DOMParser: class {
+      parseFromString() {
+        return {
+          querySelectorAll: () => [
+            {
+              querySelector: (selector) =>
+                selector === "[data-dashboard-scope]" ? {} : null,
+            },
+          ],
+        };
+      }
+    },
+    fetch: async () => ({
+      status,
+      headers: { get: () => "text/html" },
+      text: async () => "synthetic report",
+    }),
+  });
+  current = makeTable();
+  activate(0);
+  const old = current;
+  status = 500;
+  fields.mode.value = "global";
+  await submit({ preventDefault() {} });
+  assert.equal(
+    current,
+    old,
+    "failed query retains sorted DOM and header state",
+  );
+  assert.equal(current.headers[0].state, "descending");
+  status = 200;
+  for (const mode of ["global", "session", "project", "task"]) {
+    fields.mode.value = mode;
+    fields.session.value =
+      fields.projectId.value =
+      fields.taskId.value =
+        "synthetic";
+    await submit({ preventDefault() {} });
+    assert.notEqual(current, old);
+    assert.equal(current.headers[4].state, "descending");
+    assert.equal(current.headers[0].state, "none");
+  }
+  activate(4);
+  assert.deepEqual(
+    current.body.rows.map((row) => row.index),
+    [3, 4, 0, 2, 1],
+  );
+  assert.deepEqual(
+    old.body.rows.map((row) => row.index),
+    [0, 1, 4, 3, 2],
+  );
+  current.body.rows = [];
+  activate(4);
+  assert.deepEqual(current.body.rows, []);
+});
+
 test("manual form gating and exact script CSP", async () => {
   const path = join(
     mkdtempSync("test/.runtime-dashboard-"),
@@ -2541,7 +2764,7 @@ test("manual form gating and exact script CSP", async () => {
     try {
       const page = await request(server.address().port);
       const scripts = [...page.body.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-      assert.equal(scripts.length, mode === "demo" ? 0 : mode === true ? 2 : 1);
+      assert.equal(scripts.length, mode === "demo" ? 0 : mode === true ? 3 : 2);
       assert.equal(
         (page.body.match(/<form\b/g) ?? []).length,
         mode === "demo" ? 0 : mode === true ? 2 : 1,
@@ -2553,6 +2776,12 @@ test("manual form gating and exact script CSP", async () => {
       if (mode === "demo") {
         assert.ok(!page.body.includes('name="projectId"'));
       } else {
+        const { comparisonNavigationScript } = await import(
+          "../src/comparison-navigation.js"
+        );
+        assert.ok(
+          scripts.some(([, script]) => script === comparisonNavigationScript),
+        );
         assert.ok(scripts.some(([, script]) => script === sessionFilterScript));
         assert.match(
           page.body,
@@ -2571,13 +2800,14 @@ test("manual form gating and exact script CSP", async () => {
         assert.ok(!/pattern=|required|tabindex=|on\w+=/.test(projectInput));
         assert.ok(!sessionFilterScript.includes("innerHTML"));
       }
+      assert.equal((csp.match(/'sha256-/g) ?? []).length, scripts.length);
       for (const [, script] of scripts) {
         const hash = createHash("sha256").update(script).digest("base64");
         assert.ok(csp.includes(`'sha256-${hash}'`));
       }
       const region = page.body
         .split('<div id="dashboard-report">')[1]
-        .split('</div>\n<section aria-labelledby="manual-price-title">')[0];
+        .split("</div>\n<script>")[0];
       if (mode === true) {
         assert.ok(!region.includes("<form") && !region.includes("<script"));
         assert.ok(csp.includes("connect-src 'self'"));

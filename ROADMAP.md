@@ -6,10 +6,10 @@
 
 **L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Registro integrado en PR #59, main `c2bb7cb`; captura F2 `1c06` conservada como ancestro.**
 
-- **Última tarea terminada:** F1 contexto de sesiones vinculadas a tarea integrado en PR #60, main `a07ea53`. F2 PR #59 y aceptación humana L6 conservadas; sin release. Consultas de tareas compartidas se solapan, no consumo exclusivo.
-- **En curso:** F3 diagnósticos de atribución: candidata API/CLI/dashboard/pruebas/docs sintéticas, no entregada. Cuatro razones para entradas propias seleccionadas; no amplía formatos ni cierra cobertura de agentes/hijos.
+- **Última tarea terminada:** F3 diagnósticos de atribución integrado en PR #61, main `93649c6`, commit `b02e506`. F1/F2 y aceptación humana L6 conservadas; sin release. No cierra cobertura de agentes/hijos.
+- **En curso:** F4 comparación/navegación candidata, no entregada: cinco encabezados de tokens ordenables en modelos de base seleccionada; enlaces nativos agentes/modelos/detalle también en demo sin scripts.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** verificar visualmente/revisar la candidata F3 y decidir entrega separadamente. Autorización `f3_attribution_diagnostics_400`: unidad cohesiva hasta 400 líneas completas formateadas incluidas pruebas/docs; sin datos reales, nuevos formatos, descubrimiento ni release.
+- **Siguiente tarea:** verificar browser/teclado y revisar F4 antes de decidir entrega. Autorización `f4_token_sort_navigation_400`: unidad cohesiva hasta 400 líneas completas formateadas incluidas pruebas/docs; sin datos reales, API nueva, cambios de modelos ni release.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -60,8 +60,8 @@ Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del p
 | --- | --- | --- |
 | F1 | Contexto de sesiones vinculadas a tarea | Integrado PR #60, main `a07ea53`: ID literal, vínculo por metadatos actuales, snapshot conjunto y alcance vacío si falta vínculo. Consultas solapadas no aditivas. Propiedad exclusiva sigue como diseño futuro separado. |
 | F2 | Captura continua opt-in | Entregada PR #59, main `c2bb7cb`: `watch` explícito, baseline sin uso histórico, polling serial de 1000 ms y deduplicación. Sin descubrimiento, polling UI ni recuperación histórica; límites de precios y Ctrl+C físico conservados. |
-| F3 | Ampliar cobertura de agentes e hijos | Diagnósticos candidatos: no-task, missing-agent, conflicting-agents y task-consensus; sólo entradas propias seleccionadas, metadatos actuales, sin inferir roles. API/CLI y tabla dashboard comparten snapshot; vacío explícito, Consultar reemplaza sin polling. No hay formato no soportado observado ni cierre de cobertura; ampliaciones futuras requieren evidencia/autorización. |
-| F4 | Mejoras de comparación y navegación | Priorizar con experiencia de uso qué vistas ayudan a decidir; sin cambio automático de modelos ni equiparar costo con calidad. |
+| F3 | Ampliar cobertura de agentes e hijos | Diagnósticos integrados PR #61, main `93649c6`: no-task, missing-agent, conflicting-agents y task-consensus; sólo entradas propias seleccionadas, metadatos actuales, sin inferir roles. API/CLI y tabla dashboard comparten snapshot; vacío explícito, Consultar reemplaza sin polling. No hay formato no soportado observado ni cierre de cobertura; ampliaciones futuras requieren evidencia/autorización. |
+| F4 | Mejoras de comparación y navegación | Candidata no entregada: input/output/cacheRead/cacheWrite/totalTokens asc/desc exactos, desempate por identidad, foco y aria-sort; Consultar restablece ranking inicial, error conserva vista, recarga vuelve al snapshot de arranque. Navegación por anclas fijas; demo sin scripts ni controles de orden. Sin persistencia, polling, costos nuevos ni equiparar consumo con calidad. |
 
 Un servicio remoto/multiusuario queda fuera del enfoque actual: necesitaría una decisión de producto y un plan propio, no una extensión implícita del servidor local.
 
