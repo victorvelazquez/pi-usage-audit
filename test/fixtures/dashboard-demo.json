@@ -80,6 +80,12 @@
       "incomplete": 1
     }
   },
+  "attributionCoverage": {
+    "no-task": 0,
+    "missing-agent": 0,
+    "conflicting-agents": 0,
+    "task-consensus": 5
+  },
   "runtime": {
     "currency": null,
     "total": null,

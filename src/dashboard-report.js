@@ -31,6 +31,11 @@ export function projectDemo(report, costs, evolution) {
     agents: structuredClone(report.agents),
     models: structuredClone(report.models),
     coverage: structuredClone(report.coverage),
+    attributionCoverage: Object.fromEntries(
+      ["no-task", "missing-agent", "conflicting-agents", "task-consensus"].map(
+        (reason) => [reason, report.attributionCoverage[reason]],
+      ),
+    ),
     evolution: structuredClone(evolution),
     runtime: {
       currency: report.runtime.currency,
@@ -234,6 +239,17 @@ ${table(
   ]),
 )}
 <p>Atribución por consenso de tareas; unknown no prueba rol de orquestador o subagente.</p>
+${table(
+  "Atribución de entradas propias",
+  ["Evidencia de tareas", "Entradas"],
+  Object.entries(demo.attributionCoverage),
+)}
+<p>no-task: sin tarea vinculada; missing-agent: agente ausente;
+conflicting-agents: agentes distintos (prevalece sobre ausentes);
+task-consensus: un agente no nulo compartido por todas las tareas.
+La suma coincide con entradas propias confirmadas; no se suma a rankings ni exclusiones.
+Vacío: cuatro ceros. Metadatos actuales; no demuestra roles ni cobertura histórica.
+El agente literal unknown puede tener consenso; no se reclasifica el ranking.</p>
 ${agentDetails(demo)}
 <p>Moneda explícita: ${escape(demo.currency)}. Grupos por identidad dentro de cada agente, no por dinero.
 Total null significa incompleto: no hay subtotal ni total global. Cero explícito es conocido.

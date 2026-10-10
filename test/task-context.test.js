@@ -109,9 +109,18 @@ test("task context overlaps shared sessions once across all joint readers", () =
       );
       assert.deepEqual(f.writer.tokenEvolution({ taskId }), expected.evolution);
     }
+    assert.deepEqual(expected.runtime.attributionCoverage, {
+      "no-task": 0,
+      "missing-agent": 0,
+      "conflicting-agents": 0,
+      "task-consensus": 1,
+    });
     assert.equal(expected.evolution.buckets[0].totalTokens, "19");
     assert.equal(expected.costs.groups[0].total, null);
     const empty = joint(f.writer, { session: "missing" });
+    assert.ok(
+      Object.values(empty.runtime.attributionCoverage).every((n) => n === 0),
+    );
     assert.deepEqual(joint(f.writer, { taskId: "missing" }), empty);
     f.writer.importFiles({
       tasks: [f.task("dangling.json", "dangling", join(f.dir, "absent.jsonl"))],
@@ -176,11 +185,73 @@ test("task selection retains global ancestry and conservative source ambiguity",
       joint(f.writer, { taskId: "child-task" }),
       joint(f.writer, { session: "child" }),
     );
-    assert.equal(
-      f.writer.tokenEvolution({ taskId: "child-task" }).coverage
-        .includedEntries,
-      0,
-    );
+    const copied = f.writer.runtimeReport({ taskId: "child-task" });
+    assert.deepEqual(copied.coverage.excludedByCertainty, { copied: 1 });
+    assert.ok(Object.values(copied.attributionCoverage).every((n) => n === 0));
+    const mixed = f.file("mixed.jsonl", [
+      { type: "session", version: 3, id: "mixed", parentSession: f.a },
+      {
+        type: "message",
+        id: "unmatched",
+        message: {
+          role: "assistant",
+          usage: {
+            input: 1,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 1,
+          },
+        },
+      },
+    ]);
+    const nested = f.file("nested.jsonl", [
+      { type: "session", version: 3, id: "nested" },
+      {
+        type: "message",
+        id: "nested",
+        message: {
+          role: "toolResult",
+          usage: {
+            input: 1,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 1,
+          },
+        },
+      },
+    ]);
+    f.writer.importFiles({
+      sessions: [mixed, nested],
+      tasks: [
+        f.task("mixed.json", "mixed-task", mixed),
+        f.task("nested.json", "nested-task", nested),
+      ],
+      projectMappings: [mixed, nested].map((sessionPath) => ({
+        sessionPath,
+        projectId: "Mixed",
+      })),
+    });
+    for (const selection of [
+      { session: "mixed" },
+      { taskId: "mixed-task" },
+      { taskId: "nested-task" },
+      { projectId: "Mixed" },
+    ]) {
+      const report = f.writer.runtimeReport(selection);
+      assert.deepEqual(
+        report.coverage.excludedByCertainty,
+        selection.projectId
+          ? { "lineage-unresolved": 1, "nested-unknown": 1 }
+          : selection.taskId === "nested-task"
+            ? { "nested-unknown": 1 }
+            : { "lineage-unresolved": 1 },
+      );
+      assert.ok(
+        Object.values(report.attributionCoverage).every((n) => n === 0),
+      );
+    }
     const alias = f.session("alias.jsonl", "a");
     f.writer.importFiles({ sessions: [alias] });
     const result = f.writer.tokenEvolution({ taskId: literal });
@@ -300,6 +371,18 @@ test("task CLI report and admission, dashboard startup and HTTP snapshots", asyn
         });
         assert.deepEqual(await request(server), startup);
       }
+      f.file("ta.json", [
+        { task: { id: literal, sessionPath: f.a, agent: null } },
+      ]);
+      f.writer.importFiles({ tasks: [f.ta] });
+      const fresh = await request(server, { taskId: literal });
+      assert.match(fresh.body, /<td>missing-agent<\/td><td>1<\/td>/);
+      assert.match(fresh.body, /comparten sesión se solapan/);
+      assert.doesNotMatch(fresh.body, new RegExp(literal));
+      assert.ok(!fresh.body.includes(f.dir));
+      const empty = await request(server, { taskId: "missing" });
+      assert.match(empty.body, /<td>missing-agent<\/td><td>0<\/td>/);
+      assert.deepEqual(await request(server), startup);
       let calls = 0;
       for (const method of ["prepare", "exec", "close"])
         t.mock.method(DatabaseSync.prototype, method, () => {
@@ -520,6 +603,15 @@ test("task current metadata updates, reimport and reopen without fanout", () => 
       joint(ledger, { session: "a" }),
     );
     const before = joint(ledger, {});
+    assert.equal(before.runtime.attributionCoverage["task-consensus"], 2);
+    const detached = joint(ledger, { taskId: literal });
+    detached.runtime.attributionCoverage["task-consensus"] = 999;
+    assert.equal(
+      joint(ledger, { taskId: literal }).runtime.attributionCoverage[
+        "task-consensus"
+      ],
+      1,
+    );
     ledger.importFiles({ sessions: [f.a, f.b], tasks: [f.ta, f.tb] });
     assert.deepEqual(joint(ledger, {}), before);
     const reader = openReadonlyLedger(f.db);

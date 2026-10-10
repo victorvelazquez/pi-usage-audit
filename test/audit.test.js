@@ -5454,6 +5454,23 @@ test("accounting separates task evidence without fanout or changing legacy ranki
     ];
     ledger.importFiles({ tasks });
     const breakdown = ledger.accounting().breakdown;
+    const reasons = {
+      "no-task": 1,
+      "missing-agent": 1,
+      "conflicting-agents": 1,
+      "task-consensus": 1,
+    };
+    assert.deepEqual(ledger.runtimeReport({}).attributionCoverage, reasons);
+    for (const [i, reason] of Object.keys(reasons).entries()) {
+      const report = ledger.runtimeReport({
+        session: ["absent", "missing", "conflict", "consensus"][i],
+      });
+      assert.equal(report.attributionCoverage[reason], 1);
+      assert.equal(
+        Object.values(report.attributionCoverage).reduce((a, b) => a + b, 0),
+        report.coverage.includedEntries,
+      );
+    }
     assert.deepEqual(
       breakdown.map((r) => [r.attributionEvidence, r.entries]).sort(),
       [
@@ -5482,7 +5499,13 @@ test("accounting separates task evidence without fanout or changing legacy ranki
     ledger = openLedger(f.db);
     ledger.importFiles({ sessions: paths, tasks });
     assert.deepEqual(ledger.accounting().breakdown, breakdown);
-    ledger.importFiles({ tasks: [f.task("late", paths[0])] });
+    assert.deepEqual(ledger.runtimeReport({}).attributionCoverage, reasons);
+    ledger.importFiles({ tasks: [f.task("late", paths[0], "unknown")] });
+    assert.equal(
+      ledger.runtimeReport({}).attributionCoverage["task-consensus"],
+      2,
+    );
+    assert.equal(ledger.attribution("absent").agent, "unknown");
     assert.equal(
       ledger
         .accounting()
@@ -5493,6 +5516,10 @@ test("accounting separates task evidence without fanout or changing legacy ranki
     ledger.importFiles({
       tasks: [f.task("missing-continuation", paths[3], null)],
     });
+    assert.equal(
+      ledger.runtimeReport({}).attributionCoverage["missing-agent"],
+      2,
+    );
     assert.equal(
       ledger
         .accounting()

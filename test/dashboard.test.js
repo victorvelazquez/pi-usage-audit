@@ -1301,6 +1301,24 @@ test("fixture equals projection of immutable synthetic API reports", () => {
     );
     assert.ok(!html.includes("PRIVATE_ID"));
     assert.ok(!JSON.stringify(demo).includes("PRIVATE_ID"));
+    assert.deepEqual(demo.attributionCoverage, {
+      "no-task": 0,
+      "missing-agent": 0,
+      "conflicting-agents": 0,
+      "task-consensus": 5,
+    });
+    const report = ledger.runtimeReport({});
+    report.attributionCoverage.PRIVATE_ID = "PRIVATE_PATH";
+    const safe = projectDemo(
+      report,
+      ledger.costReport({ currency: "EUR" }),
+      ledger.tokenEvolution({}),
+    );
+    assert.deepEqual(safe.attributionCoverage, demo.attributionCoverage);
+    safe.attributionCoverage["task-consensus"] = 99;
+    assert.equal(report.attributionCoverage["task-consensus"], 5);
+    assert.match(html, /<caption>Atribución de entradas propias<\/caption>/);
+    assert.match(html, /no demuestra roles/);
     assert.ok(html.includes("&lt;demo&gt;"));
     assert.ok(!html.includes("<demo>"));
   } finally {
@@ -1319,6 +1337,8 @@ test("empty reports and escaping preserve unknown, zero and exact strings", () =
     assert.ok(renderDashboard(empty).includes("Sin filas"));
     assert.ok(!renderDashboard(empty).includes("<details>"));
     assert.equal(empty.runtime.total, null);
+    assert.ok(Object.values(empty.attributionCoverage).every((n) => n === 0));
+    assert.match(renderDashboard(empty), /<td>no-task<\/td><td>0<\/td>/);
     assert.deepEqual(empty.evolution.buckets, []);
     assert.match(renderDashboard(empty), /Sin fecha.*<td>0<\/td><td>0<\/td>/s);
     const demo = fixture();

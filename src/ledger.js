@@ -631,6 +631,26 @@ function createLedgerApi(db, secret) {
         : null,
     };
   };
+  // Shared task evidence, independent of the legacy unknown agent sentinel.
+  const attributionEvidence = () => {
+    const agents = new Map();
+    const tasks = db
+      .prepare(`SELECT s.session,t.agent FROM tasks t
+      JOIN sources s ON s.path=t.path`)
+      .all();
+    for (const task of tasks) {
+      if (!agents.has(task.session)) agents.set(task.session, new Set());
+      agents.get(task.session).add(task.agent);
+    }
+    return (session) => {
+      const values = agents.get(session);
+      if (!values) return "no-task";
+      const known = [...values].filter((value) => value !== null);
+      if (known.length > 1) return "conflicting-agents";
+      if (values.has(null)) return "missing-agent";
+      return "task-consensus";
+    };
+  };
   const attribution = (session) => {
     const rows = db
       .prepare(`SELECT t.* FROM tasks t JOIN sources s ON s.path=t.path
@@ -1431,6 +1451,13 @@ function createLedgerApi(db, secret) {
           const excluded = new Map();
           const observations = [];
           const identities = new Map();
+          const attributionCoverage = {
+            "no-task": 0,
+            "missing-agent": 0,
+            "conflicting-agents": 0,
+            "task-consensus": 0,
+          };
+          const evidence = attributionEvidence();
           let includedEntries = 0;
           let excludedEntries = 0;
           let missingEntries = 0;
@@ -1477,6 +1504,7 @@ function createLedgerApi(db, secret) {
               identities.set(row.session, attribution(row.session).agent);
             }
             const agent = identities.get(row.session);
+            attributionCoverage[evidence(row.session)]++;
             const key = JSON.stringify([row.provider, row.model]);
             if (!models.has(key)) {
               models.set(key, {
@@ -1534,6 +1562,7 @@ function createLedgerApi(db, secret) {
           );
           return {
             provenance: "imported-own-runtime-report",
+            attributionCoverage,
             agents: orderedAgents.map((group) => ({
               agent: group.agent,
               entries: group.entries,
@@ -1588,23 +1617,7 @@ function createLedgerApi(db, secret) {
           "reasoning",
           "cacheWrite1h",
         ];
-        const agents = new Map();
-        const tasks = db
-          .prepare(`SELECT s.session,t.agent FROM tasks t
-          JOIN sources s ON s.path=t.path`)
-          .all();
-        for (const task of tasks) {
-          if (!agents.has(task.session)) agents.set(task.session, new Set());
-          agents.get(task.session).add(task.agent);
-        }
-        const evidence = (session) => {
-          const values = agents.get(session);
-          if (!values) return "no-task";
-          const known = [...values].filter((value) => value !== null);
-          if (known.length > 1) return "conflicting-agents";
-          if (values.has(null)) return "missing-agent";
-          return "task-consensus";
-        };
+        const evidence = attributionEvidence();
         const groups = new Map();
         for (const row of rows) {
           const attributionEvidence = evidence(row.session);
