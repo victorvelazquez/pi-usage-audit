@@ -385,6 +385,7 @@ test("session filter client literal payload, pending and atomic DOM validation",
     mode: { value: "session" },
     session: { value: " 私😀 " },
     projectId: { value: "Private_Project-1" },
+    taskId: { value: "Private_Task-1" },
   };
   const button = {};
   const feedback = {};
@@ -2560,7 +2561,7 @@ test("manual form gating and exact script CSP", async () => {
       if (mode === true) {
         assert.ok(!region.includes("<form") && !region.includes("<script"));
         assert.ok(csp.includes("connect-src 'self'"));
-        assert.equal((page.body.match(/<label\b/g) ?? []).length, 9);
+        assert.equal((page.body.match(/<label\b/g) ?? []).length, 10);
         for (const key of Object.keys(priceValue))
           assert.ok(page.body.includes(`name="${key}"`));
         for (const category of ["input", "output", "cacheRead", "cacheWrite"])

@@ -1,7 +1,9 @@
 const help = `Usage: node src/cli.js import [--db path] --session path [--session path ...]
        node src/cli.js import [--db path] --task path [--task path ...]
        node src/cli.js watch --db path --session path [--session path ...] [--task path ...]
-       node src/cli.js report --db existing.sqlite [--session id] [--project id]
+       node src/cli.js report --db existing.sqlite [--session id]
+       node src/cli.js report --db existing.sqlite --project id
+       node src/cli.js report --db existing.sqlite --task-id ID
        node src/cli.js costs --db existing.sqlite --currency USD
        node src/cli.js plan --root session.jsonl --tasks-dir dir --sessions-dir dir [--sessions-dir dir ...]
 Plan requires one root, one tasks directory and at least one sessions directory.
@@ -11,7 +13,8 @@ Import sessions and tasks may be combined; file flags are repeatable.
 Only explicitly selected files are read.
 Report --session: one literal nonempty ID, at most 512 UTF-16 code units.
 Report --project: one literal case-sensitive ASCII ID [A-Za-z0-9_-], 1 to 64 characters.
-Report --session and --project are mutually exclusive.
+Report --task-id: literal task ID, 1–512 UTF-16 units; linked session context, not exclusive consumption.
+Report --session, --project and --task-id are mutually exclusive.
 Values starting with -- are rejected; --flag=value syntax is not supported.
 Default database: ~/.local/state/pi-usage-audit/usage.sqlite
 --help: show help without opening storage.
@@ -39,7 +42,7 @@ function parse(args) {
           : options.command === "costs"
             ? ["--db", "--currency"]
             : options.command === "report"
-              ? ["--db", "--session", "--project"]
+              ? ["--db", "--session", "--project", "--task-id"]
               : ["--db", "--session", "--task"]
       ).includes(flag)
     )
@@ -68,14 +71,25 @@ function parse(args) {
     } else if (options.command === "report" && flag === "--session") {
       if (
         options.session !== undefined ||
+        options.taskId !== undefined ||
         options.projectId !== undefined ||
         value.length > 512
       )
         throw new Error("arguments");
       options.session = value;
+    } else if (flag === "--task-id") {
+      if (
+        options.taskId !== undefined ||
+        options.session !== undefined ||
+        options.projectId !== undefined ||
+        value.length > 512
+      )
+        throw new Error("arguments");
+      options.taskId = value;
     } else if (flag === "--project") {
       if (
         options.projectId !== undefined ||
+        options.taskId !== undefined ||
         options.session !== undefined ||
         value.length > 64 ||
         /[^A-Za-z0-9_-]/.test(value)
@@ -147,17 +161,10 @@ else if (options?.command === "plan") {
     const { openLedger } = await import("./ledger.js");
     ledger = openLedger(options.db);
     if (options.command === "report") {
-      console.log(
-        JSON.stringify(
-          ledger.runtimeReport(
-            options.projectId === undefined
-              ? options.session === undefined
-                ? {}
-                : { session: options.session }
-              : { projectId: options.projectId },
-          ),
-        ),
-      );
+      const selection = {};
+      for (const key of ["session", "projectId", "taskId"])
+        if (options[key] !== undefined) selection[key] = options[key];
+      console.log(JSON.stringify(ledger.runtimeReport(selection)));
     } else if (options.command === "costs") {
       console.log(
         JSON.stringify(ledger.costReport({ currency: options.currency })),

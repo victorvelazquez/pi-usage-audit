@@ -32,7 +32,32 @@ evidence is delivered through PR #55 (main `834a1be`, commit `7d81bc0`): six age
 47/47 retained tasks in one capture, not complete history; root attribution and
 cost currency/prices remain unknown or absent.
 
-## Opt-in capture of new usage (F2 candidate)
+## Task-linked session context (F1 candidate, not delivered)
+
+```sh
+node src/cli.js report --db /synthetic/usage.sqlite --task-id 'task-example'
+node src/dashboard.js --db /synthetic/usage.sqlite --currency EUR --task-id 'task-example'
+```
+
+Import the selected task metadata and session files first. In the dashboard,
+choose **Sesiones vinculadas a tarea**, enter the literal task ID, then Consultar.
+API `runtimeReport`, `costReport`, `tokenEvolution` and readonly `dashboardReport`
+accept `taskId`, mutually exclusive with `session` and `projectId`; currency remains
+required for costs/joint reports. CLI `costs` remains currency-only.
+
+IDs are nonempty literal text, ≤512 UTF-16 units, with no trimming/normalization.
+Each query selects sessions through current imported `tasks.path = sources.path`
+metadata within its snapshot, after global lineage classification. Unknown tasks
+or missing imported sources yield empty scope, not global fallback. Ambiguous
+sources and uncertain lineage stay excluded; unknown agents and missing prices
+stay unknown/null. No historical mapping recovery or task discovery is performed.
+**This is linked-session context, not exclusive task consumption. Tasks sharing
+sessions overlap; never add their query totals.** No exclusive task grouping.
+Global/session/project/task queries replace scope; reload restores startup HTML.
+Labels/feedback do not reflect task IDs or paths; user-typed inputs remain local.
+Estimates are not invoices or evidence of quality. Browser verification is separate.
+
+## Opt-in capture of new usage (F2 delivered PR #59, main `c2bb7cb`)
 
 ```sh
 node src/cli.js watch --db /explicit/usage.sqlite --session /explicit/session.jsonl --task /explicit/task.json

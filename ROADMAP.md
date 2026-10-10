@@ -4,12 +4,12 @@
 
 ## Dónde estamos hoy
 
-**L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Este nuevo registro documental es candidato local, aún sin commit ni integración.**
+**L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Registro integrado en PR #59, main `c2bb7cb`; captura F2 `1c06` conservada como ancestro.**
 
-- **Última tarea terminada:** aceptación humana de L6 para uso local del producto existente en main `41f1f1e`, Node 22.20; código de aplicación fijo `834a1be` y guía L5 `d10dd9e` conservados. Evidencia posterior integrada en PR #57/#58; no se cambian los pins de [LOCAL.md](LOCAL.md).
-- **En curso:** F2 captura automática opt-in de archivos explícitos: candidata local de código, pruebas y docs, no entregada ni integrada. El registro documental de L6 conserva su decisión y evidencia.
+- **Última tarea terminada:** F2 captura opt-in entregada en PR #59, main `c2bb7cb`. Aceptación humana L6, evidencia PR #57/#58 y pins de [LOCAL.md](LOCAL.md) conservados; sin release.
+- **En curso:** F1 contexto de sesiones vinculadas a tarea: candidata API/CLI/UI/pruebas/docs, no entregada. No promete consumo exclusivo; tareas que comparten sesión se solapan y no deben sumarse.
 - **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** verificar/revisar la candidata F2 y decidir su entrega con autorización separada; sin release ni recuperación histórica/datos reales. Excepción `EXACTauthorize_f2_single_unit_800`: una unidad F2, hasta 800 líneas completas formateadas incluyendo pruebas/docs y 39 líneas documentales previas; no cambia el techo general.
+- **Siguiente tarea:** verificar/revisar la candidata F1 y decidir entrega separadamente. Autorización `EXACTf1_session_context_single_unit_850`: una unidad de contexto, hasta 850 líneas completas formateadas incluidas pruebas/docs; no extiende la excepción F2 ni autoriza datos reales, release o propiedad exclusiva.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -33,7 +33,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | Dashboard local y precios | Abrir una pantalla con ranking, evolución, detalle y formulario de tarifas | Demo PR #17, API readonly PR #18 y UI seleccionada PR #19 entregados; evolución API PR #20/UI PR #21 entregadas; detalle PR #22 entregado; guardado atómico PR #23 entregado; apertura RW PR #24 entregada; admisión HTTP interna PR #25 y semántica PR #26 entregadas; opt-in/guardado PR #27 y formulario PR #28 entregados |
 | Contexto y filtros | Filtrar por proyecto, tarea y sesión; agrupar worktrees del mismo repositorio | Metadatos básicos; filtro runtime API por sesión entregado PR #29; CLI entregado PR #30; costos API PR #31 y evolución API PR #32 entregados; compuesto API PR #33 entregado; selector dashboard al arrancar entregado PR #34; admisión interactiva A entregada PR #35, B entregada PR #36; identidad declarada API entregada PR #37; filtro runtime por proyecto API PR #39/CLI PR #40 entregados; refactor PR #41 integrado; costos API proyecto PR #42 y evolución API proyecto PR #43 entregados; compuesto readonly API proyecto PR #44 entregado; selector dashboard de arranque PR #45 entregado |
 | Cobertura y validación real | Comprobar el recorrido con sesiones seleccionadas y mejorar identificación de agentes/hijos | L3 entregado PR #50; L4-A1/A2 entregados PR #51/#52; L4-B entregado PR #55: seis agentes y 47/47 tareas retenidas de la captura, no historial completo |
-| Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | F2 en curso: candidata opt-in explícita, no entregada |
+| Captura continua | Incorporar consumo nuevo sin importar cada archivo manualmente | F2 entregada PR #59, main `c2bb7cb`; opt-in explícita, no recuperación histórica |
 
 ## Plan de primera versión local
 
@@ -46,7 +46,7 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 | L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
 | L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | Entregado: A1/A2 PR #51/#52; B PR #55 (`834a1be`, `7d81bc0`), 82 comprobaciones, seis agentes y 47/47 tareas retenidas; raíces unknown, costos ausentes e historial incompleto |
 | L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Guía entregada PR #56 (`d10dd9e`, `40757f9`): repositorio fijo y recuperación consistente comprobados; Ctrl+C y recorrido visual final pertenecen a L6 |
-| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Aceptado/cerrado para uso local por decisión humana con límite visual documentado aceptado; evidencia PR #57/#58 integrada. Retorno visual al prompt no confirmado, no completado artificialmente; sin release. Este registro de cierre aún no está integrado |
+| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Aceptado/cerrado para uso local por decisión humana con límite visual documentado aceptado; evidencia PR #57/#58 integrada. Retorno visual al prompt no confirmado, no completado artificialmente; sin release. Registro de cierre integrado PR #59 |
 
 **Criterio de salida:** importar sesiones seleccionadas sin duplicar consumo, identificar agentes/modelos que consumen más, consultar estimaciones con tarifas explícitas, usar filtros global/sesión/proyecto, reconocer cobertura incierta y arrancar localmente siguiendo la guía. No inferir calidad por tokens ni presentar estimaciones como facturación real.
 
@@ -58,8 +58,8 @@ Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del p
 
 | ID | Objetivo futuro | Resultado buscado / condición para retomarlo |
 | --- | --- | --- |
-| F1 | Filtro y agrupación por tarea | Definir identidad de tarea y consultar su consumo sin inferencias ambiguas; acordar contrato y UI antes de implementar. |
-| F2 | Captura continua opt-in | En curso, candidata autorizada: `watch` con archivos explícitos, baseline sin uso histórico, polling serial de 1000 ms, motor compartido/deduplicación, parada y fallos visibles. Sin descubrimiento, polling UI ni recuperación histórica; entrega pendiente. |
+| F1 | Contexto de sesiones vinculadas a tarea | Candidata implementada, no entregada: ID literal, vínculo por metadatos actuales, snapshot conjunto y alcance vacío si falta vínculo. Consultas solapadas no aditivas. Propiedad y agrupación de consumo exclusivo siguen como diseño futuro separado. |
+| F2 | Captura continua opt-in | Entregada PR #59, main `c2bb7cb`: `watch` explícito, baseline sin uso histórico, polling serial de 1000 ms y deduplicación. Sin descubrimiento, polling UI ni recuperación histórica; límites de precios y Ctrl+C físico conservados. |
 | F3 | Ampliar cobertura de agentes e hijos | Priorizar formatos/casos no cubiertos observados en uso real, manteniendo consumo incierto separado y no aditivo. Los bloqueadores de la primera versión pertenecen a L4. |
 | F4 | Mejoras de comparación y navegación | Priorizar con experiencia de uso qué vistas ayudan a decidir; sin cambio automático de modelos ni equiparar costo con calidad. |
 
