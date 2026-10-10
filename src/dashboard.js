@@ -5,6 +5,11 @@ import { pathToFileURL } from "node:url";
 import { projectDemo, renderDashboard } from "./dashboard-report.js";
 import { manualPriceScript } from "./manual-price-form.js";
 import { sessionFilterScript } from "./session-filter-form.js";
+import { comparisonNavigationScript } from "./comparison-navigation.js";
+
+const comparisonScriptHash = createHash("sha256")
+  .update(comparisonNavigationScript)
+  .digest("base64");
 
 const sessionScriptHash = createHash("sha256")
   .update(sessionFilterScript)
@@ -339,7 +344,7 @@ async function serve(html, port, options) {
       `default-src 'none'; ${
         options === undefined
           ? "script-src 'none'; connect-src 'none'"
-          : `script-src 'sha256-${sessionScriptHash}'${
+          : `script-src 'sha256-${sessionScriptHash}' 'sha256-${comparisonScriptHash}'${
               options.allowManualPrices ? ` 'sha256-${manualScriptHash}'` : ""
             }; connect-src 'self'`
       }; frame-src 'none'; frame-ancestors 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`,

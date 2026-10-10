@@ -57,7 +57,28 @@ Global/session/project/task queries replace scope; reload restores startup HTML.
 Labels/feedback do not reflect task IDs or paths; user-typed inputs remain local.
 Estimates are not invoices or evidence of quality. Browser verification is separate.
 
-## Attribution diagnostics (F3 candidate, not delivered)
+## Comparison and navigation (F4 candidate, not delivered)
+
+Use **Agentes**, **Modelos** and **Detalle por agente** to jump within the report.
+These native links also work in the scriptless demo; anchors contain fixed public
+names, never session/task/project IDs, paths or user labels.
+
+Selected-database pages (readonly or tariff opt-in) let you sort models by
+**input**, **output**, **cacheRead**, **cacheWrite** or **totalTokens**.
+Activate a header button with click or Tab then Enter/Space. First activation
+selects descending order; activating the same header toggles ascending/descending.
+The initial totalTokens header is already descending. `aria-sort` marks the
+active column; focus stays on its button. Counters compare as exact integers,
+with deterministic provider/model identity ties (null first), not costs or quality.
+
+Sorting only reorders the current model rows: no query, writes or saved preference.
+**Consultar** replaces the report and resets its initial total-token ranking;
+a failed query retains the previous rows and order. Reload restores cached startup
+HTML. The demo keeps its fixed ranking and exposes no sorting controls.
+Agent details, manual prices, exclusions and nonadditive/task-overlap semantics
+are unchanged. Browser/keyboard verification and candidate delivery remain separate.
+
+## Attribution diagnostics (F3 integrated PR #61, main `93649c6`)
 
 `runtimeReport(selection).attributionCoverage` adds four entry counts, also exposed
 by CLI `report` and `dashboardReport(...).runtime.attributionCoverage`:
@@ -72,8 +93,8 @@ The dashboard projects only these counts, with explanations and four explicit ze
 for empty scope. **Consultar** replaces the whole report with a fresh joint snapshot
 for global/session/project/task; no polling, refresh or startup-cache change.
 Current imported metadata determines evidence; no IDs/paths are added to summaries.
-This synthetic diagnostics candidate adds no formats or schema and does not close
-F3 format/child coverage. Review, browser verification and delivery remain separate.
+These integrated diagnostics add no formats or schema and do not close
+F3 format/child coverage; further expansion requires separate evidence and scope.
 
 ## Opt-in capture of new usage (F2 delivered PR #59, main `c2bb7cb`)
 

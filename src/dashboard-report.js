@@ -1,5 +1,6 @@
 import { manualPriceForm } from "./manual-price-form.js";
 import { sessionFilterForm } from "./session-filter-form.js";
+import { comparisonNavigationScript } from "./comparison-navigation.js";
 
 const tokenKeys = ["input", "output", "cacheRead", "cacheWrite", "totalTokens"];
 
@@ -85,17 +86,26 @@ function escape(value) {
       })[char],
   );
 }
-function table(title, headings, rows) {
+function table(
+  title,
+  headings,
+  rows,
+  { id = "", sortable = false, identityOrders = [] } = {},
+) {
   const header = headings
-    .map((key) => `<th scope="col">${escape(key)}</th>`)
+    .map((key, index) =>
+      sortable && index >= 4
+        ? `<th scope="col" aria-sort="${key === "totalTokens" ? "descending" : "none"}"><button type="button" data-token-sort="${index - 4}">${escape(key)}</button></th>`
+        : `<th scope="col">${escape(key)}</th>`,
+    )
     .join("");
   const body = rows
     .map(
-      (row) =>
-        `<tr>${row.map((value) => `<td>${escape(value)}</td>`).join("")}</tr>`,
+      (row, index) =>
+        `<tr${sortable ? ` data-identity-order="${identityOrders[index]}"` : ""}>${row.map((value) => `<td>${escape(value)}</td>`).join("")}</tr>`,
     )
     .join("");
-  return `<section><h2>${escape(title)}</h2><div class="scroll"><table><caption>${escape(title)}</caption><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${rows.length ? "" : "<p>Sin filas</p>"}</section>`;
+  return `<section${id ? ` id="${id}"` : ""}><h2>${escape(title)}</h2><div class="scroll"><table><caption>${escape(title)}</caption><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${rows.length ? "" : "<p>Sin filas</p>"}</section>`;
 }
 function groupDetails(group, currency) {
   const identity = (value) => escape(value === null ? value : `"${value}"`);
@@ -126,7 +136,7 @@ function groupDetails(group, currency) {
   )}</details>`;
 }
 function agentDetails(demo) {
-  return `<section><h2>Detalle de consumo por agente y proveedor/modelo</h2>
+  return `<section id="comparison-detail"><h2>Detalle de consumo por agente y proveedor/modelo</h2>
 <p>Sesiones distintas del grupo; no aditivas entre proveedores/modelos.
 Exclusiones sólo en las vistas globales; sin subtotal monetario por agente.</p>
 ${
@@ -158,6 +168,17 @@ export function renderDashboard(
   if (taskSelected)
     scope = "Sesiones vinculadas a la tarea; no consumo exclusivo";
   const editable = selected && allowManualPrices === true;
+  // Public identity rank matches ledger's UTF-8 ordering, including null first.
+  const binary = (a, b) => {
+    if (a === b) return 0;
+    if (a === null) return -1;
+    if (b === null) return 1;
+    return Buffer.compare(Buffer.from(a), Buffer.from(b));
+  };
+  const identities = [...demo.models].sort(
+    (a, b) => binary(a.provider, b.provider) || binary(a.model, b.model),
+  );
+  const identityOrders = demo.models.map((model) => identities.indexOf(model));
   const coverage = demo.coverage;
   const evolution = demo.evolution;
   const banner = selected
@@ -185,6 +206,7 @@ td { font-variant-numeric: tabular-nums; }
 <p>${escape(description)}</p>
 ${selected ? sessionFilterForm : ""}
 <div id="dashboard-report">
+<nav aria-label="Comparaciones"><a href="#comparison-agents">Agentes</a> · <a href="#comparison-models">Modelos</a> · <a href="#comparison-detail">Detalle por agente</a></nav>
 ${selected ? `<p data-dashboard-scope>${scope}. Recargar restaura el snapshot de arranque.${projectSelected || taskSelected ? " Cada consulta reemplaza este alcance; no combina filtros." : ""}${taskSelected ? " Consultas de tareas que comparten sesión se solapan y no deben sumarse. Tarea desconocida o sin fuentes importadas: alcance vacío. Vínculo según metadatos actuales del snapshot, no recuperación histórica." : ""}</p>` : ""}
 <p>Agentes, modelos y costos describen las mismas entradas: vistas no aditivas.
 Sesiones entre modelos no aditivas; reasoning y cacheWrite1h son subconjuntos excluidos de la suma.</p>
@@ -226,6 +248,7 @@ ${table(
   "Agentes — orden por tokens",
   ["Agente", "Entradas", "Sesiones", "Tokens exactos"],
   demo.agents.map((a) => [a.agent, a.entries, a.sessions, a.totalTokens]),
+  { id: "comparison-agents" },
 )}
 ${table(
   "Modelos — tokens exactos",
@@ -237,6 +260,7 @@ ${table(
     m.sessions,
     ...tokenKeys.map((key) => m.tokens[key]),
   ]),
+  { id: "comparison-models", sortable: selected, identityOrders },
 )}
 <p>Atribución por consenso de tareas; unknown no prueba rol de orquestador o subagente.</p>
 ${table(
@@ -264,6 +288,7 @@ ${table(
   demo.runtime.amounts.map((amount) => [amount]),
 )}
 </div>
+${selected ? `<script>${comparisonNavigationScript}</script>` : ""}
 ${editable ? manualPriceForm : ""}
 </main></html>`;
 }
