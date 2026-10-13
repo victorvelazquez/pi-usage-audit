@@ -7,9 +7,9 @@
 **L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Registro integrado en PR #59, main `c2bb7cb`; captura F2 `1c06` conservada como ancestro.**
 
 - **Última tarea terminada:** F4 orden de tokens/navegación integrado en PR #62, main `446977a`, commit `8731e63`. F1/F2/F3 y aceptación humana L6 conservadas; sin release. F3 no cierra cobertura de agentes/hijos ni formatos pendientes.
-- **En curso:** `next_explicit_cost_comparison` candidata: comparación compacta conjunta agente/proveedor/modelo, costo manual, cobertura y razones; moneda explícita, sin abrir detalles ni duplicar sus columnas de tokens.
-- **Excepción sólo A1:** techo autorizado de 550 líneas de diff completo formateado; no se traslada a A2 ni cambia el techo general de 400 incluidas pruebas/docs.
-- **Siguiente tarea:** revisar y verificar browser/teclado de la comparación explícita antes de decidir entrega. Una unidad cohesiva hasta 400 líneas completas formateadas incluidas pruebas/docs, sin heredar excepciones; sin datos reales, API nueva, cambios de modelos ni release.
+- **En curso:** panel localhost, primera unidad candidata: coordinador interno de actualización inicial/manual, intervalos 5/10/30 minutos y pausa, sin ciclos superpuestos. Aún no conectado al dashboard ni entregado.
+- **Comparación anterior:** PR #63 integrada en main `e1fad06`, commit `9c090f4`; esta unidad no vuelve a certificar su evidencia visual.
+- **Siguiente tarea:** conectar actualización a importación explícita existente e informe conjunto usando fuentes sintéticas; después admisión segura de controles/configuración, UI/estado, launcher Windows y mediciones con historiales grandes, en unidades separadas hasta 400 líneas completas incluidas pruebas/docs. Sin release ni acceso implícito a datos reales.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
@@ -64,6 +64,24 @@ Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del p
 | F4 | Mejoras de comparación y navegación | Orden de tokens y navegación integrados PR #62, main `446977a`, commit `8731e63`: asc/desc exactos, desempate por identidad, foco y aria-sort; Consultar restablece ranking, error conserva vista y recarga restaura arranque. Comparación manual explícita candidata: seis columnas conjuntas y ancla fija, demo sin scripts, snapshot conjunto en todos los alcances. Sin orden monetario, subtotal/total global, conversión, polling ni inferencias de calidad. |
 
 Un servicio remoto/multiusuario queda fuera del enfoque actual: necesitaría una decisión de producto y un plan propio, no una extensión implícita del servidor local.
+
+## Panel local integrado — alcance acordado, implementación por etapas
+
+- Acceso directo Windows para servidor localhost y navegador; SQLite separada del
+  código en `%LOCALAPPDATA%/pi-usage-audit/usage.sqlite`.
+- Carpetas autorizadas; actualizar al iniciar, manualmente y cada 5/10/30 minutos
+  o pausar (10 por defecto). Pausa conserva panel/datos; reanudar actualiza ahora.
+- Importación completa con deduplicación existente; medir antes de agregar un
+  inventario incremental. No confundir idempotencia con cobertura universal.
+- Estado visible de última actualización completa del informe y último consumo
+  encontrado; tarifas integradas y presentación intuitiva en etapas posteriores.
+
+Primera unidad: coordinador puro, sin filesystem/SQLite/HTTP/DOM. Una secuencia
+importar → preparar informe, publicación sólo al completar ambas etapas; fallo
+conserva informe/fecha anterior, cierre drena trabajo activo. Su prueba no demuestra
+actualización de pantalla, rendimiento con historiales grandes ni selección de
+fuentes reales. Rollback: retirar módulo, pruebas, entrada del script y sus notas.
+El resto del producto mantiene su comportamiento actual; sin commit/push/release.
 
 ## Cómo seguir el avance
 
