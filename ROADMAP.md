@@ -6,11 +6,11 @@
 
 **L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Registro integrado en PR #59, main `c2bb7cb`; captura F2 `1c06` conservada como ancestro.**
 
-- **Última tarea terminada:** coordinador puro integrado en PR #64, main `647e05f`, commit `362ff3b`: inicio/manual, 5/10/30 minutos, pausa y drenaje; sin conexión UI. F1–F4 y aceptación local conservadas, sin release ni cierre de cobertura universal.
-- **En curso:** segunda unidad candidata del panel localhost: adaptador de archivos explícitos → importación completa existente → informe global conjunto, con pruebas sintéticas. Aún no conectado al dashboard ni entregado.
+- **Última tarea terminada:** adaptador explícito integrado en PR #65, main `b5f44a4`, commit `4076a01`: importación completa y snapshot global conjunto con cierres secuenciales; sin conexión UI. Coordinador PR #64, F1–F4 y aceptación local conservados; sin release.
+- **En curso:** tercera unidad candidata: selección interna de archivos directos en carpetas explícitamente autorizadas, sólo metadatos, sin recursión ni importación. Techo general de 400 líneas formateadas; no hereda excepción previa.
 - **Excepción sólo para esta segunda unidad:** decisión humana «Autorizar hasta 500 líneas sólo aquí» (`allow_500_this_unit`). Incluye adaptador, pruebas y documentación formateados; no modifica el techo general de 400 ni autoriza entrega. El formateador cambió el candidato de 343 a 475 líneas después de la revisión anterior: esa aprobación no cubre la nueva identidad, que requiere revisión fresca. Verificación independiente sin defectos funcionales: 12/12 focales y 11/11 probes post-formato, regresiones nativas idénticas a `647e05f`; no prueba UI, rendimiento ni datos reales.
 - **Comparación anterior:** PR #63 integrada en main `e1fad06`, commit `9c090f4`; esta unidad no vuelve a certificar su evidencia visual.
-- **Siguiente tarea:** admisión segura de carpetas/configuración y controles antes de conectar UI/estado; después launcher Windows y mediciones con historiales grandes. Unidades separadas hasta 400 líneas completas incluidas pruebas/docs, sin release ni acceso implícito a datos reales.
+- **Siguiente tarea:** conectar selección fresca de fuentes y configuración al ciclo de actualización con revalidación antes de importar; después controles seguros/UI/estado, launcher Windows y mediciones. Unidades hasta 400 líneas completas incluidas pruebas/docs, sin release ni acceso implícito a datos reales.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
