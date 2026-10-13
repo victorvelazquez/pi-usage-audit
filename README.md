@@ -54,6 +54,27 @@ No HTTP controls, UI polling, folder discovery, Windows launcher, persistent
 settings or real-data access are delivered by this foundation. The existing
 import and dashboard behavior is unchanged. Next stages are in [ROADMAP.md](ROADMAP.md).
 
+### Explicit-file ledger adapter (candidate, internal only)
+
+`createLedgerUpdateCoordinator` in `src/ledger-update-coordinator.js` connects
+that scheduler to full imports and one joint global report. Construction requires
+an explicit absolute `db`, uppercase three-letter `currency`, a nonempty array
+of absolute `sessions` paths, optional `tasks` paths and optional `mode`.
+Configuration is validated/copied before opening storage; construction is lazy.
+Each cycle opens the writer, imports and closes, then opens readonly, calls
+`dashboardReport({currency})` and closes before publishing
+`{dashboard, importReport}`. Report scope includes all existing ledger entries.
+
+Counters retain native malformed/incomplete/duplicate semantics: `ready` means
+pipeline completion, not complete source coverage. Full import accepts a complete
+JSON tail without a newline, unlike `watch`. Source-read failure does not import
+a partial batch, but may leave newly initialized storage. Import and report are
+separate transactions: an import may commit even when report/closure later fails;
+the coordinator retains the last published snapshot until successful refresh.
+Close failures are not proof the handle physically closed; integration must handle
+that operational failure. Raw internal reports need projection before HTTP/UI use.
+No selectors, folder discovery, new route, browser rendering or launcher are added.
+
 ## Task-linked session context (F1 delivered PR #60, main `a07ea53`)
 
 ```sh
