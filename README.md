@@ -75,6 +75,26 @@ Close failures are not proof the handle physically closed; integration must hand
 that operational failure. Raw internal reports need projection before HTTP/UI use.
 No selectors, folder discovery, new route, browser rendering or launcher are added.
 
+### Authorized-folder selection (candidate, internal only)
+
+`selectFolderSources({sessionsDirs,tasksDirs?})` in `src/folder-selection.js`
+accepts explicit fully qualified folders, never home defaults. It returns sorted,
+normalized `{sessions,tasks}` paths for direct regular `.jsonl`/`.json` entries;
+suffixes are case-sensitive. No content, headers, task locators, SQLite or nested
+folders are read. A repeated call sees new direct files; nothing is imported.
+Every folder/ancestor and matching entry is checked with `lstat`; matching links
+fail, ordinary matching directories are ignored. Windows device namespaces reject.
+
+Limits per call: 32 folder declarations before deduplication, 1000 combined unique
+source paths, 10000 examined directory entries. Streaming enumeration closes each
+handle; overflow/read/type errors fail with `Folder selection failed.`, not a
+truncated result. Empty folders return empty lists. Windows identity lowercases
+paths; hard links and every filesystem alias are not deduplicated. Checks are not
+race-free against concurrent replacements, nor proof of historical coverage.
+The filesystem parameter is an internal test seam. This snapshot is not lasting
+read authorization; future integration must revalidate before import. No folder
+settings, automatic rescanning, HTTP/UI or adapter wiring are delivered here.
+
 ## Task-linked session context (F1 delivered PR #60, main `a07ea53`)
 
 ```sh
