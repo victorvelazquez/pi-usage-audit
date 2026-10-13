@@ -32,6 +32,28 @@ evidence is delivered through PR #55 (main `834a1be`, commit `7d81bc0`): six age
 47/47 retained tasks in one capture, not complete history; root attribution and
 cost currency/prices remain unknown or absent.
 
+## Local control panel foundation (candidate, not connected to the dashboard)
+
+`src/update-coordinator.js` supplies an internal, dependency-injected scheduler:
+initial update, manual update, 5/10/30-minute intervals (default 10), and paused.
+It calls `importSources` followed by `refreshReport`; callbacks own admission,
+import and coherent report preparation. It reads no files and opens no storage.
+Overlapping requests share one active cycle, with no queued extra import.
+Timers start after completion; pause cancels scheduling, not active work.
+Resuming from pause updates immediately. Paused startup still updates once.
+`stop()` cancels timers and drains admitted work before resources may close.
+
+Only successful completion of both callbacks publishes `report` and the epoch-ms
+`lastCompletedAt`. Failure retains the previous report/time and exposes only
+`failed`, not raw errors. This is report preparation, **not proof of browser
+rendering or complete historical coverage**; future UI integration must bind its
+visible freshness indicator to the displayed report. `state()` returns a shallow
+snapshot; callers must treat the report as immutable. Repeated `start()` is inert.
+
+No HTTP controls, UI polling, folder discovery, Windows launcher, persistent
+settings or real-data access are delivered by this foundation. The existing
+import and dashboard behavior is unchanged. Next stages are in [ROADMAP.md](ROADMAP.md).
+
 ## Task-linked session context (F1 delivered PR #60, main `a07ea53`)
 
 ```sh
