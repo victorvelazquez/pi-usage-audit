@@ -55,9 +55,8 @@ function sorted(paths) {
   return [...paths.keys()].sort().map((identity) => paths.get(identity));
 }
 
-// Direct entries only: no home defaults, content reads, locators or recursion.
-// The filesystem argument is an internal deterministic-test seam, not user config.
-export function selectFolderSources(options, fs = { lstatSync, opendirSync }) {
+// Pure admission shared by selection and the lazy update adapter.
+export function validateFolderConfig(options) {
   try {
     if (
       !options ||
@@ -75,8 +74,19 @@ export function selectFolderSources(options, fs = { lstatSync, opendirSync }) {
         ? options.tasksDirs
         : [],
     );
+    if (sessionsDirs.length + tasksDirs.length > 32) failure();
+    return { sessionsDirs, tasksDirs };
+  } catch {
+    failure();
+  }
+}
+
+// Direct entries only: no home defaults, content reads, locators or recursion.
+// The filesystem argument is an internal deterministic-test seam, not user config.
+export function selectFolderSources(options, fs = { lstatSync, opendirSync }) {
+  try {
+    const { sessionsDirs, tasksDirs } = validateFolderConfig(options);
     if (
-      sessionsDirs.length + tasksDirs.length > 32 ||
       typeof fs.lstatSync !== "function" ||
       typeof fs.opendirSync !== "function"
     )

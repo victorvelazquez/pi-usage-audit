@@ -73,7 +73,7 @@ separate transactions: an import may commit even when report/closure later fails
 the coordinator retains the last published snapshot until successful refresh.
 Close failures are not proof the handle physically closed; integration must handle
 that operational failure. Raw internal reports need projection before HTTP/UI use.
-No selectors, folder discovery, new route, browser rendering or launcher are added.
+The fixed-file variant adds no selectors, new route, browser rendering or launcher.
 
 ### Authorized-folder selection (candidate, internal only)
 
@@ -92,8 +92,27 @@ truncated result. Empty folders return empty lists. Windows identity lowercases
 paths; hard links and every filesystem alias are not deduplicated. Checks are not
 race-free against concurrent replacements, nor proof of historical coverage.
 The filesystem parameter is an internal test seam. This snapshot is not lasting
-read authorization; future integration must revalidate before import. No folder
-settings, automatic rescanning, HTTP/UI or adapter wiring are delivered here.
+read authorization; import must revalidate it. Standalone selection does not
+schedule/import; the opt-in adapter variant below adds per-cycle rescanning.
+
+### Folder-driven update cycles (candidate, internal only)
+
+`createLedgerUpdateCoordinator({db,currency,sessionsDirs,tasksDirs?,mode?})`
+opts into folders instead of fixed `sessions`/`tasks`. Never mix variant keys,
+even with `undefined`. `validateFolderConfig` validates/copies normalized folder
+configuration without filesystem access; construction remains lazy.
+Each folder cycle performs a full metadata selection before opening the writer,
+then repeats selection after awaited opening, immediately before full import.
+The second selection supplies current files, not the first snapshot. Both scans
+retain the selector's links/caps/no-recursion rules; metadata work is doubled.
+First-scan failure opens no storage. Second-scan failure closes the writer and
+skips import/report but may leave initialized storage. Races after either scan
+remain possible; this is not an atomic filesystem snapshot or perpetual consent.
+Empty folders and tasks-only discovery are valid; global reports retain existing
+history when files disappear. Native import counters, deduplication and joint
+report behavior remain unchanged. Folder settings, HTTP/UI controls, launcher
+and real-data admission are still separate future work. Rollback: remove folder
+variant, shared validator extraction, new tests/script entry and these notes.
 
 ## Task-linked session context (F1 delivered PR #60, main `a07ea53`)
 

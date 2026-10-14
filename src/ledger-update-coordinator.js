@@ -1,6 +1,10 @@
 import { isAbsolute } from "node:path";
 import { openLedger, openReadonlyLedger } from "./ledger.js";
 import { createUpdateCoordinator } from "./update-coordinator.js";
+import {
+  selectFolderSources,
+  validateFolderConfig,
+} from "./folder-selection.js";
 
 function absoluteFile(value) {
   if (typeof value !== "string" || value.includes("\0") || !isAbsolute(value))
@@ -21,13 +25,21 @@ function sourceList(value, required = false) {
   return paths;
 }
 
-// Internal adapter for explicitly admitted files, not a directory discovery API.
+// Internal adapter; folder discovery is opt-in and limited to declared roots.
 export function createLedgerUpdateCoordinator(config, dependencies = {}) {
-  const keys = ["db", "currency", "sessions", "tasks", "mode"];
+  const folderMode =
+    config &&
+    (Object.hasOwn(config, "sessionsDirs") ||
+      Object.hasOwn(config, "tasksDirs"));
+  const sourceKeys = folderMode
+    ? ["sessionsDirs", "tasksDirs"]
+    : ["sessions", "tasks"];
+  const keys = ["db", "currency", "mode", ...sourceKeys];
   if (
     !config ||
     typeof config !== "object" ||
     Array.isArray(config) ||
+    (folderMode && !Object.hasOwn(config, "sessionsDirs")) ||
     Reflect.ownKeys(config).some((key) => !keys.includes(key))
   )
     throw new Error("Invalid ledger update configuration");
@@ -38,8 +50,21 @@ export function createLedgerUpdateCoordinator(config, dependencies = {}) {
     !/^[A-Z]{3}$/.test(currency)
   )
     throw new Error("Invalid ledger update configuration");
-  const sessions = sourceList(config.sessions, true);
-  const tasks = sourceList(config.tasks === undefined ? [] : config.tasks);
+  let folders = null;
+  let fixed = null;
+  if (folderMode) {
+    folders = validateFolderConfig({
+      sessionsDirs: config.sessionsDirs,
+      tasksDirs: Object.hasOwn(config, "tasksDirs")
+        ? config.tasksDirs
+        : undefined,
+    });
+  } else {
+    fixed = {
+      sessions: sourceList(config.sessions, true),
+      tasks: sourceList(config.tasks === undefined ? [] : config.tasks),
+    };
+  }
   const {
     openWriter = openLedger,
     openReader = openReadonlyLedger,
@@ -57,13 +82,18 @@ export function createLedgerUpdateCoordinator(config, dependencies = {}) {
     schedule,
     cancel,
     async importSources() {
-      // openLedger may initialize storage even when later source reading fails.
+      // First folder scan gates storage opening; no source content is read here.
+      if (folders) selectFolderSources(folders);
+      // Source reads/second scan can still fail after storage initialization.
       const writer = await openWriter(db);
       let result;
       try {
+        // Re-admit after awaited opening, using current membership, not old paths.
+        // This narrows staleness but does not eliminate filesystem races.
+        const sources = folders ? selectFolderSources(folders) : fixed;
         result = await writer.importFiles({
-          sessions: [...sessions],
-          tasks: [...tasks],
+          sessions: [...sources.sessions],
+          tasks: [...sources.tasks],
         });
       } finally {
         await writer.close();
