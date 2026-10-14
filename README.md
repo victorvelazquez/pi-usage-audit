@@ -114,6 +114,29 @@ report behavior remain unchanged. Folder settings, HTTP/UI controls, launcher
 and real-data admission are still separate future work. Rollback: remove folder
 variant, shared validator extraction, new tests/script entry and these notes.
 
+### Local settings admission and load (candidate, internal only)
+
+`validateLocalSettings(settings)` and `loadLocalSettings(filename)` in
+`src/local-settings.js` validate copied folder settings without importing data.
+The file must be explicitly chosen and fully qualified; no home defaults exist.
+UTF-8 JSON envelope: `{ "version": 1, "settings": { ... } }`.
+Required settings: `db`, `currency`, `sessionsDirs`; optional `tasksDirs` and
+`mode` default to `[]` and `10` only when omitted. Unknown keys and invalid
+values reject; paths normalize, currency is uppercase ISO-style, modes are
+5/10/30 or `"paused"`. Declared source folders and DB need not exist or be read.
+
+Load checks file/ancestor links and descriptor identity, closes the descriptor,
+and reads at most 65537 bytes to enforce the inclusive 64 KiB encoded cap.
+Missing/nonregular/oversized files, invalid UTF-8, BOM, JSON or schema fail with
+`Local settings unavailable.`, without raw paths/errors. Duplicate JSON keys use
+`JSON.parse` semantics. Metadata checks narrow races, not eliminate them; close
+failure is not proof of physical closure. DB/file collision checks are lexical,
+not exhaustive filesystem-alias detection. Settings contain private paths: keep
+this file outside source folders and the repository; it is not durable consent.
+No save API, real user configuration, defaults, startup, HTTP/UI or storage
+integration yet. Next slice: atomic save. Rollback: remove this module/test,
+its test-script entry and these notes; existing update behavior is unchanged.
+
 ## Task-linked session context (F1 delivered PR #60, main `a07ea53`)
 
 ```sh

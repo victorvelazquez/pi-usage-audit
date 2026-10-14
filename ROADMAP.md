@@ -6,11 +6,11 @@
 
 **L6 aceptado y cerrado para uso local por decisión humana, con el límite visual explícitamente aceptado: retorno al prompt no confirmado. Evidencia consolidada integrada en PR #58; sin release. Registro integrado en PR #59, main `c2bb7cb`; captura F2 `1c06` conservada como ancestro.**
 
-- **Última tarea terminada:** selector de carpetas integrado en PR #66, main `e9e8091`, commit `5708a1f`: metadatos de archivos directos, rechazo de enlaces y límites explícitos. Adaptador PR #65, coordinador PR #64 y aceptación local conservados; sin release ni conexión UI.
-- **En curso:** cuarta unidad candidata: variante de carpetas en el adaptador existente, configuración copiada/lazy, selección fresca y revalidación antes de cada importación completa. Sin configuración persistente/HTTP/UI; techo general de 400 líneas formateadas.
+- **Última tarea terminada:** ciclos de carpetas integrados en PR #67, main `ae5c594`, commit `09a59df`: variante exclusiva, configuración copiada/lazy y doble selección antes de importar. Selector PR #66, adaptador PR #65 y coordinador PR #64 conservados; sin release ni conexión UI.
+- **En curso:** admisión y carga de ajustes locales versionados desde archivo explícito, sin inspeccionar fuentes ni abrir SQLite. Guardado atómico separado para cubrir sus fallos sin superar 400 líneas completas por unidad.
 - **Excepción sólo para esta segunda unidad:** decisión humana «Autorizar hasta 500 líneas sólo aquí» (`allow_500_this_unit`). Incluye adaptador, pruebas y documentación formateados; no modifica el techo general de 400 ni autoriza entrega. El formateador cambió el candidato de 343 a 475 líneas después de la revisión anterior: esa aprobación no cubre la nueva identidad, que requiere revisión fresca. Verificación independiente sin defectos funcionales: 12/12 focales y 11/11 probes post-formato, regresiones nativas idénticas a `647e05f`; no prueba UI, rendimiento ni datos reales.
 - **Comparación anterior:** PR #63 integrada en main `e1fad06`, commit `9c090f4`; esta unidad no vuelve a certificar su evidencia visual.
-- **Siguiente tarea:** configuración local persistente y admisión segura de controles antes de conectar UI/estado; después launcher Windows y mediciones. Unidades hasta 400 líneas completas incluidas pruebas/docs, sin release ni acceso implícito a datos reales.
+- **Siguiente tarea:** guardado atómico de ajustes locales y admisión segura de controles antes de conectar UI/estado; después launcher Windows y mediciones. Unidades hasta 400 líneas completas incluidas pruebas/docs, sin release ni acceso implícito a datos reales.
 - **Distribución acordada:** repositorio local en commit fijo; no ZIP, paquete npm/global ni publicación de release. No actualizaciones implícitas. La decisión no autoriza leer nuevos historiales ni modificar datos originales.
 
 ## Qué ya podés hacer
