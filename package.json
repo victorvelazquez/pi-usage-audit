@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=22.20.0" },
-  "scripts": { "test": "node --test test/audit.test.js test/cli.test.js test/dashboard.test.js test/watch.test.js test/task-context.test.js test/update-coordinator.test.js test/ledger-update-coordinator.test.js test/folder-selection.test.js" }
+  "scripts": { "test": "node --test test/audit.test.js test/cli.test.js test/dashboard.test.js test/watch.test.js test/task-context.test.js test/update-coordinator.test.js test/ledger-update-coordinator.test.js test/folder-selection.test.js test/folder-update-coordinator.test.js" }
 }
