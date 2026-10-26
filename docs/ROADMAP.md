@@ -1,5 +1,9 @@
 # Avance del proyecto
 
+**Dónde está:** L6 aceptado y cerrado para uso local; F1–F4 integrados; captura continua F2 entregada (PR #59). Último integrado: ciclos de carpetas, PR #67.
+**Qué sigue:** admisión y carga de ajustes locales versionados desde archivo explícito (en curso), luego guardado atómico separado.
+**Qué lo bloquea:** nada bloquea; límite aceptado: retorno visual al prompt no confirmado.
+
 **Queremos lograr:** abrir una aplicación local y ver qué agentes y modelos consumen más tokens y costo estimado, para decidir qué modelos conviene comparar. No cambiaremos modelos automáticamente ni inferiremos calidad sólo por consumo.
 
 ## Dónde estamos hoy
@@ -40,14 +44,14 @@ Esta lista describe resultados del producto, no cantidad de PRs. El orden siguie
 
 **Prioridad acordada:** aplicación local útil, efectiva y funcional; no servicio público. Seguimos las tareas en este orden, una a una. Son seis hitos, no seis PRs garantizadas: los defectos encontrados pueden requerir unidades adicionales.
 
-| ID | Tarea | Criterio para cerrarla | Estado |
-| --- | --- | --- | --- |
-| L1 | Admitir selector interactivo por proyecto en el parser interno | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
-| L2 | Conectar filtro por proyecto al dashboard | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
-| L3 | Validar uso completo con sesiones reales seleccionadas | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
-| L4 | Resolver bloqueadores de utilidad y atribución | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | Entregado: A1/A2 PR #51/#52; B PR #55 (`834a1be`, `7d81bc0`), 82 comprobaciones, seis agentes y 47/47 tareas retenidas; raíces unknown, costos ausentes e historial incompleto |
-| L5 | Preparar instalación y uso local repetible | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Guía entregada PR #56 (`d10dd9e`, `40757f9`): repositorio fijo y recuperación consistente comprobados; Ctrl+C y recorrido visual final pertenecen a L6 |
-| L6 | Verificar y preparar la primera versión | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Aceptado/cerrado para uso local por decisión humana con límite visual documentado aceptado; evidencia PR #57/#58 integrada. Retorno visual al prompt no confirmado, no completado artificialmente; sin release. Registro de cierre integrado PR #59 |
+| ID | Entrega | Depende de | Estado | Resultado visible | Notas |
+| --- | --- | --- | --- | --- | --- |
+| L1 | Admitir selector interactivo por proyecto en el parser interno | — | Completada | Validar proyecto literal y exclusión con sesión antes de storage; conservar global/sesión y barreras de admisión; pruebas sintéticas de válidos, inválidos y límites. Sin conexión HTTP/UI nueva. | Entregado PR #47 (`ada499e`, `c71ac11`) |
+| L2 | Conectar filtro por proyecto al dashboard | L1 | Completada | Cambiar entre global, sesión y proyecto con alcance coherente en ranking/costos/evolución/detalle; errores y vacío claros, sin exponer IDs/rutas; pruebas HTTP y browser sintéticos, teclado y regresión de precios/demo. | Entregado: L2-A PR #48; L2-B PR #49 (`401f5f0`, `3b9e424`), revisión y browser/teclado cerrados |
+| L3 | Validar uso completo con sesiones reales seleccionadas | L2 | Completada | Autorizar primero rutas y datos; importar/reimportar, abrir dashboard y contrastar tokens, costos y filtros con evidencia de origen. Registrar discrepancias y límites sin divulgar datos privados. | Entregado PR #50 (`9b8cda2`, `b96481e`); evidencia histórica conservada |
+| L4 | Resolver bloqueadores de utilidad y atribución | L3 | Completada | Seleccionar raíz, tareas vinculadas e hijos dentro de directorios explícitos; incorporar metadatos disponibles sin inferencias ni denominador histórico fabricado, con regresiones sintéticas. | Entregado: A1/A2 PR #51/#52; B PR #55 (`834a1be`, `7d81bc0`), 82 comprobaciones, seis agentes y 47/47 tareas retenidas; raíces unknown, costos ausentes e historial incompleto |
+| L5 | Preparar instalación y uso local repetible | L4 | Completada | Acordar distribución; comprobar instalación, requisitos, arranque/parada, selección de base, resguardo de datos y recuperación básica siguiendo una guía sin conocimiento previo. | Guía entregada PR #56 (`d10dd9e`, `40757f9`): repositorio fijo y recuperación consistente comprobados; Ctrl+C y recorrido visual final pertenecen a L6 |
+| L6 | Verificar y preparar la primera versión | L5 | Completada | Suite completa, recorrido documentado y comprobación visual/teclado; límites y problemas pendientes explícitos; revisiones aplicables cerradas y decisión humana de entrega. Publicar sólo con autorización separada. | Aceptado/cerrado para uso local por decisión humana con límite visual documentado aceptado; evidencia PR #57/#58 integrada. Retorno visual al prompt no confirmado, no completado artificialmente; sin release. Registro de cierre integrado PR #59 |
 
 **Criterio de salida:** importar sesiones seleccionadas sin duplicar consumo, identificar agentes/modelos que consumen más, consultar estimaciones con tarifas explícitas, usar filtros global/sesión/proyecto, reconocer cobertura incierta y arrancar localmente siguiendo la guía. No inferir calidad por tokens ni presentar estimaciones como facturación real.
 
@@ -57,12 +61,12 @@ No se declara lista la versión sólo porque pasan pruebas sintéticas. L3 aport
 
 Este backlog conserva objetivos, no autoriza implementarlos ni los elimina del producto. La propuesta es posponerlos respecto a la primera versión; si L3 demuestra que alguno es indispensable, acordaremos el cambio antes de incorporarlo al plan.
 
-| ID | Objetivo futuro | Resultado buscado / condición para retomarlo |
-| --- | --- | --- |
-| F1 | Contexto de sesiones vinculadas a tarea | Integrado PR #60, main `a07ea53`: ID literal, vínculo por metadatos actuales, snapshot conjunto y alcance vacío si falta vínculo. Consultas solapadas no aditivas. Propiedad exclusiva sigue como diseño futuro separado. |
-| F2 | Captura continua opt-in | Entregada PR #59, main `c2bb7cb`: `watch` explícito, baseline sin uso histórico, polling serial de 1000 ms y deduplicación. Sin descubrimiento, polling UI ni recuperación histórica; límites de precios y Ctrl+C físico conservados. |
-| F3 | Ampliar cobertura de agentes e hijos | Diagnósticos integrados PR #61, main `93649c6`: no-task, missing-agent, conflicting-agents y task-consensus; sólo entradas propias seleccionadas, metadatos actuales, sin inferir roles. API/CLI y tabla dashboard comparten snapshot; vacío explícito, Consultar reemplaza sin polling. No hay formato no soportado observado ni cierre de cobertura; ampliaciones futuras requieren evidencia/autorización. |
-| F4 | Mejoras de comparación y navegación | Orden de tokens y navegación integrados PR #62, main `446977a`, commit `8731e63`: asc/desc exactos, desempate por identidad, foco y aria-sort; Consultar restablece ranking, error conserva vista y recarga restaura arranque. Comparación manual explícita candidata: seis columnas conjuntas y ancla fija, demo sin scripts, snapshot conjunto en todos los alcances. Sin orden monetario, subtotal/total global, conversión, polling ni inferencias de calidad. |
+| ID | Entrega | Depende de | Estado | Resultado visible | Notas |
+| --- | --- | --- | --- | --- | --- |
+| F1 | Contexto de sesiones vinculadas a tarea | — | Completada | | Integrado PR #60, main `a07ea53`: ID literal, vínculo por metadatos actuales, snapshot conjunto y alcance vacío si falta vínculo. Consultas solapadas no aditivas. Propiedad exclusiva sigue como diseño futuro separado. |
+| F2 | Captura continua opt-in | — | Completada | | Entregada PR #59, main `c2bb7cb`: `watch` explícito, baseline sin uso histórico, polling serial de 1000 ms y deduplicación. Sin descubrimiento, polling UI ni recuperación histórica; límites de precios y Ctrl+C físico conservados. |
+| F3 | Ampliar cobertura de agentes e hijos | — | Completada | | Diagnósticos integrados PR #61, main `93649c6`: no-task, missing-agent, conflicting-agents y task-consensus; sólo entradas propias seleccionadas, metadatos actuales, sin inferir roles. API/CLI y tabla dashboard comparten snapshot; vacío explícito, Consultar reemplaza sin polling. No hay formato no soportado observado ni cierre de cobertura; ampliaciones futuras requieren evidencia/autorización. |
+| F4 | Mejoras de comparación y navegación | — | Completada | | Orden de tokens y navegación integrados PR #62, main `446977a`, commit `8731e63`: asc/desc exactos, desempate por identidad, foco y aria-sort; Consultar restablece ranking, error conserva vista y recarga restaura arranque. Comparación manual explícita candidata: seis columnas conjuntas y ancla fija, demo sin scripts, snapshot conjunto en todos los alcances. Sin orden monetario, subtotal/total global, conversión, polling ni inferencias de calidad. |
 
 Un servicio remoto/multiusuario queda fuera del enfoque actual: necesitaría una decisión de producto y un plan propio, no una extensión implícita del servidor local.
 

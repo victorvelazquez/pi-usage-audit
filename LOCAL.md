@@ -276,4 +276,4 @@ base se comprobaron antes; suite previa 149/149, no repetida por esta correcció
 No demuestra un clon remoto nuevo ni uso de datos personales. El cierre del probe
 usó terminación del proceso en Windows, no pulsación física de Ctrl+C. HTTP no es
 comprobación visual/teclado. Entrega de L5 y recorrido visual final siguen
-pendientes. [ROADMAP.md](ROADMAP.md) conserva el estado y límites de L4/L6.
+pendientes. [ROADMAP.md](docs/ROADMAP.md) conserva el estado y límites de L4/L6.
