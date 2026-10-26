@@ -3,7 +3,7 @@
 Local, zero-dependency Pi usage ledger. Requires Node 22.20+ (`node:sqlite` is experimental). Explicit-file CLI and API; delivered localhost dashboard/evolution UI and agent detail.
 
 Start locally: [Spanish installation and use guide](LOCAL.md) (L5 candidate,
-fixed repository version; no npm installation). Project status: [roadmap](ROADMAP.md).
+fixed repository version; no npm installation). Project status: [roadmap](docs/ROADMAP.md).
 Atomic tariff saving delivered in PR #23 (`5fca78d`); existing-file RW API delivered
 in PR #24 (main `8cfb899`); semantic validation delivered in PR #26 (`7d37f7c`).
 Opt-in HTTP saving delivered in PR #27 (main `64c81bb`).
@@ -52,7 +52,7 @@ snapshot; callers must treat the report as immutable. Repeated `start()` is iner
 
 No HTTP controls, UI polling, folder discovery, Windows launcher, persistent
 settings or real-data access are delivered by this foundation. The existing
-import and dashboard behavior is unchanged. Next stages are in [ROADMAP.md](ROADMAP.md).
+import and dashboard behavior is unchanged. Next stages are in [ROADMAP.md](docs/ROADMAP.md).
 
 ### Explicit-file ledger adapter (candidate, internal only)
 
@@ -293,7 +293,7 @@ not a tariff writer; the manual form still requires explicit opt-in.
 Opening never creates/initializes/repairs a base. SQLite readonly may use WAL/SHM;
 this is not a guarantee of zero physical filesystem effects. Labels remain
 user-provided metadata: do not store secrets in them. Validation uses synthetic
-bases for that delivery; later scoped L3/L4 evidence is recorded in ROADMAP.md.
+bases for that delivery; later scoped L3/L4 evidence is recorded in docs/ROADMAP.md.
 The opt-in form's synthetic
 actual-browser verification completed in Edge 154 before PR #28 delivery.
 
@@ -336,7 +336,7 @@ while pending and never retries. It validates HTML/status and a scriptfree repor
 region before one DOM replacement. Selector and manual forms stay outside that region,
 preserving their inputs/handlers/feedback. Failure keeps the previous report intact.
 Selected CSP permits only exact script hashes and same-origin connections; demo keeps
-script/connect none. This delivery used synthetic validation; later selected real evidence is in ROADMAP.md.
+script/connect none. This delivery used synthetic validation; later selected real evidence is in docs/ROADMAP.md.
 
 ### Private project HTTP filtering — L2-A delivered PR #48
 
@@ -379,7 +379,7 @@ manual-price forms intact; prices remain database-wide and explicit opt-in.
 Readonly includes this query form, demo remains scriptless. Exact static-script
 CSP hashing and startup snapshot/reload behavior are unchanged.
 Synthetic VM/SSR, HTTP and browser/keyboard verification completed for PR #49.
-Later scoped L3/L4 real-session evidence is in ROADMAP.md, not a completeness claim.
+Later scoped L3/L4 real-session evidence is in docs/ROADMAP.md, not a completeness claim.
 
 ### Opt-in manual tariff form (delivered PR #28)
 
@@ -699,7 +699,7 @@ as fixture equivalence tests. Only synthetic CLI/HTTP validation; no real sessio
 or visual-browser validation. The following rollback surface is historical for B.
 Rollback only that unit's diff in `src/dashboard-report.js`, `src/dashboard.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
-`ROADMAP.md`; preserve delivered API A, prior work, bases and test artifacts.
+`docs/ROADMAP.md`; preserve delivered API A, prior work, bases and test artifacts.
 
 ### Compact explicit manual-cost comparison (candidate)
 
@@ -745,7 +745,7 @@ Synthetic structural/HTTP tests only; visual browser validation remains pending.
 Parent readback reported both JS LSP/lens checks clean before the nested adjustment.
 Historical rollback surface for this detail unit: `src/dashboard-report.js`,
 `test/fixtures/dashboard-demo.json`, `test/dashboard.test.js`, `README.md` and
-`ROADMAP.md`; preserve delivered evolution, databases and test artifacts.
+`docs/ROADMAP.md`; preserve delivered evolution, databases and test artifacts.
 
 ## Runtime report (API delivered PR #29; CLI delivered PR #30)
 
